@@ -1,4 +1,4 @@
-#include "utilities/titandb/blob_file_builder.h"
+#include "blob_file_builder.h"
 
 namespace rocksdb {
 namespace titandb {

@@ -1,4 +1,4 @@
-#include "utilities/titandb/blob_gc_job.h"
+#include "blob_gc_job.h"
 
 namespace rocksdb {
 namespace titandb {

@@ -3,8 +3,8 @@
 #include <memory>
 
 #include "db/column_family.h"
-#include "utilities/titandb/blob_format.h"
-#include "utilities/titandb/options.h"
+#include "blob_format.h"
+#include "titan/options.h"
 
 namespace rocksdb {
 namespace titandb {

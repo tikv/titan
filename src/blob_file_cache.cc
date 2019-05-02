@@ -1,7 +1,7 @@
-#include "utilities/titandb/blob_file_cache.h"
+#include "blob_file_cache.h"
 
 #include "util/filename.h"
-#include "utilities/titandb/util.h"
+#include "util.h"
 
 namespace rocksdb {
 namespace titandb {

@@ -1,4 +1,4 @@
-#include "utilities/titandb/blob_gc_picker.h"
+#include "blob_gc_picker.h"
 
 namespace rocksdb {
 namespace titandb {

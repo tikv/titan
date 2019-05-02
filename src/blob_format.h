@@ -4,7 +4,7 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "table/format.h"
-#include "utilities/titandb/util.h"
+#include "util.h"
 
 namespace rocksdb {
 namespace titandb {

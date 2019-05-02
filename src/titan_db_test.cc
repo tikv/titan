@@ -1,9 +1,9 @@
 #include <inttypes.h>
 #include <options/cf_options.h>
 
-#include "rocksdb/utilities/titandb/db.h"
-#include "utilities/titandb/db_impl.h"
-#include "utilities/titandb/titan_fault_injection_test_env.h"
+#include "titan/db.h"
+#include "db_impl.h"
+#include "titan_fault_injection_test_env.h"
 #include "util/filename.h"
 #include "util/random.h"
 #include "util/testharness.h"

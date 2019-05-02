@@ -1,9 +1,9 @@
 #pragma once
 
 #include "table/table_builder.h"
-#include "utilities/titandb/blob_file_builder.h"
-#include "utilities/titandb/blob_file_manager.h"
-#include "utilities/titandb/options.h"
+#include "blob_file_builder.h"
+#include "blob_file_manager.h"
+#include "titan/options.h"
 
 namespace rocksdb {
 namespace titandb {

@@ -7,9 +7,9 @@
 #include "rocksdb/status.h"
 #include "table/internal_iterator.h"
 #include "util/file_reader_writer.h"
-#include "utilities/titandb/blob_format.h"
-#include "utilities/titandb/options.h"
-#include "utilities/titandb/util.h"
+#include "blob_format.h"
+#include "titan/options.h"
+#include "util.h"
 
 namespace rocksdb {
 namespace titandb {

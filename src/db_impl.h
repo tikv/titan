@@ -2,9 +2,9 @@
 
 #include "db/db_impl.h"
 #include "util/repeatable_thread.h"
-#include "rocksdb/utilities/titandb/db.h"
-#include "utilities/titandb/blob_file_manager.h"
-#include "utilities/titandb/version_set.h"
+#include "titan/db.h"
+#include "blob_file_manager.h"
+#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {

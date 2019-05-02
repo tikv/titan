@@ -3,8 +3,8 @@
 #include "rocksdb/listener.h"
 #include "rocksdb/table_properties.h"
 #include "util/coding.h"
-#include "utilities/titandb/db_impl.h"
-#include "utilities/titandb/version_set.h"
+#include "db_impl.h"
+#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {

@@ -2,12 +2,12 @@
 
 #include "db/db_impl.h"
 #include "rocksdb/status.h"
-#include "utilities/titandb/blob_file_builder.h"
-#include "utilities/titandb/blob_file_iterator.h"
-#include "utilities/titandb/blob_file_manager.h"
-#include "utilities/titandb/blob_gc.h"
-#include "utilities/titandb/options.h"
-#include "utilities/titandb/version_set.h"
+#include "blob_file_builder.h"
+#include "blob_file_iterator.h"
+#include "blob_file_manager.h"
+#include "blob_gc.h"
+#include "titan/options.h"
+#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {
