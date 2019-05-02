@@ -70,7 +70,6 @@ set(SOURCES
         src/options.cc
         src/table_builder.cc
         src/table_factory.cc
-        src/titan_c.cc
         src/util.cc
         src/version.cc
         src/version_edit.cc
