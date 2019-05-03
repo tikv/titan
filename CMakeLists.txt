@@ -7,50 +7,12 @@ if (NOT DEFINED ROCKSDB_DIR)
   message(FATAL_ERROR "ROCKSDB_DIR is not defined.")
 endif()
 
-set(ROCKSDB_FLAGS
-        -DROCKSDB_LIB_IO_POSIX
-        -DROCKSDB_PLATFORM_POSIX
-        -DROCKSDB_SUPPORT_THREAD_LOCAL)
- 
-add_definitions(${ROCKSDB_FLAGS})
-set(CMAKE_CXX_FLAGS_DEBUG "-g")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+include(cmake/rocksdb_flags.cmake)
 
 include_directories(${ROCKSDB_DIR})
 include_directories(${ROCKSDB_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/src)
-
-option(WITH_ASAN "build with ASAN" OFF)
-if(WITH_ASAN)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
-  if(WITH_JEMALLOC)
-    message(FATAL "ASAN does not work well with JeMalloc")
-  endif()
-endif()
-
-option(WITH_TSAN "build with TSAN" OFF)
-if(WITH_TSAN)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread -pie")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread -fPIC")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread -fPIC")
-  if(WITH_JEMALLOC)
-    message(FATAL "TSAN does not work well with JeMalloc")
-  endif()
-endif()
-
-option(WITH_UBSAN "build with UBSAN" OFF)
-if(WITH_UBSAN)
-  add_definitions(-DROCKSDB_UBSAN_RUN)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=undefined")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=undefined")
-  if(WITH_JEMALLOC)
-    message(FATAL "UBSAN does not work well with JeMalloc")
-  endif()
-endif()
 
 set(SOURCES
         src/blob_file_builder.cc
@@ -86,7 +48,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
-  message("with tests or tools")
   add_subdirectory(${ROCKSDB_DIR} rocksdb EXCLUDE_FROM_ALL)
 endif()
 
