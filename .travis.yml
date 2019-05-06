@@ -1,0 +1,33 @@
+language: cpp
+
+os:
+  - linux
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - g++-8
+      - libgflags-dev
+
+matrix:
+  include:
+    - compiler: clang
+    - compiler: clang
+      env: SANITIZER="-DWITH_ASAN=ON"
+    - compiler: clang
+      env: SANITIZER="-DWITH_TSAN=ON"
+    - compiler: clang
+      env: SANITIZER="-DWITH_UBSAN=ON"
+    - env: COMPILER=gcc8
+
+install:
+  - git clone --depth=1 --branch=tikv-3.0 https://github.com/pingcap/rocksdb.git 
+  - if [ "${COMPILER}" == gcc8 ]; then
+      CC=gcc-8 && CXX=g++-8;
+    fi
+
+script:
+  - ${CXX} --version
+  - cmake . -DROCKSDB_DIR=./rocksdb -DTRAVIS=ON ${SANITIZER} && make -j4 && ctest -R titan
