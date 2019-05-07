@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/pingcap/titan.svg?branch=master)](https://travis-ci.org/pingcap/titan)
+
 # Titan: A RocksDB Plugin to Reduce Write Amplification
 
 Titan is a RocksDB Plugin for key-value separation, inspired by 
