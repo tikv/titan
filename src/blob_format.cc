@@ -1,4 +1,4 @@
-#include "utilities/titandb/blob_format.h"
+#include "blob_format.h"
 
 #include "util/crc32c.h"
 #include "util/sync_point.h"

@@ -2,9 +2,9 @@
 #include "table/table_reader.h"
 #include "util/filename.h"
 #include "util/testharness.h"
-#include "utilities/titandb/blob_file_manager.h"
-#include "utilities/titandb/blob_file_reader.h"
-#include "utilities/titandb/table_factory.h"
+#include "blob_file_manager.h"
+#include "blob_file_reader.h"
+#include "table_factory.h"
 
 namespace rocksdb {
 namespace titandb {

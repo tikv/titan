@@ -1,4 +1,4 @@
-#include "utilities/titandb/blob_file_size_collector.h"
+#include "blob_file_size_collector.h"
 #include "util/testharness.h"
 
 namespace rocksdb {

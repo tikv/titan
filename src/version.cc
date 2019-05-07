@@ -1,5 +1,5 @@
-#include "utilities/titandb/version.h"
-#include "utilities/titandb/version_set.h"
+#include "version.h"
+#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {

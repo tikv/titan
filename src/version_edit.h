@@ -3,7 +3,7 @@
 #include <set>
 
 #include "rocksdb/slice.h"
-#include "utilities/titandb/blob_format.h"
+#include "blob_format.h"
 
 namespace rocksdb {
 namespace titandb {

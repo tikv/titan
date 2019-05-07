@@ -1,7 +1,7 @@
-#include "utilities/titandb/blob_format.h"
+#include "blob_format.h"
 #include "util/testharness.h"
-#include "utilities/titandb/testutil.h"
-#include "utilities/titandb/util.h"
+#include "testutil.h"
+#include "util.h"
 
 namespace rocksdb {
 namespace titandb {

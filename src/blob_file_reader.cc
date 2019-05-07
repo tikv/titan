@@ -1,4 +1,4 @@
-#include "utilities/titandb/blob_file_reader.h"
+#include "blob_file_reader.h"
 
 #include "util/crc32c.h"
 #include "util/filename.h"

@@ -1,4 +1,4 @@
-#include "utilities/titandb/options.h"
+#include "titan/options.h"
 
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS

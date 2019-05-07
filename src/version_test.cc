@@ -1,9 +1,9 @@
 #include "util/filename.h"
 #include "util/testharness.h"
-#include "utilities/titandb/testutil.h"
-#include "utilities/titandb/util.h"
-#include "utilities/titandb/version_edit.h"
-#include "utilities/titandb/version_set.h"
+#include "testutil.h"
+#include "util.h"
+#include "version_edit.h"
+#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {

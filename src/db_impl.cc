@@ -1,12 +1,12 @@
-#include "utilities/titandb/db_impl.h"
+#include "db_impl.h"
 
-#include "utilities/titandb/base_db_listener.h"
-#include "utilities/titandb/blob_file_builder.h"
-#include "utilities/titandb/blob_file_iterator.h"
-#include "utilities/titandb/blob_file_size_collector.h"
-#include "utilities/titandb/blob_gc.h"
-#include "utilities/titandb/db_iter.h"
-#include "utilities/titandb/table_factory.h"
+#include "base_db_listener.h"
+#include "blob_file_builder.h"
+#include "blob_file_iterator.h"
+#include "blob_file_size_collector.h"
+#include "blob_gc.h"
+#include "db_iter.h"
+#include "table_factory.h"
 
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS

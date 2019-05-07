@@ -11,10 +11,10 @@
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "util/mutexlock.h"
-#include "utilities/titandb/blob_file_cache.h"
-#include "utilities/titandb/options.h"
-#include "utilities/titandb/version_edit.h"
-#include "utilities/titandb/version.h"
+#include "blob_file_cache.h"
+#include "titan/options.h"
+#include "version_edit.h"
+#include "version.h"
 
 namespace rocksdb {
 namespace titandb {

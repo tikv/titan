@@ -1,8 +1,8 @@
-#include "utilities/titandb/blob_gc_job.h"
+#include "blob_gc_job.h"
 
 #include "util/testharness.h"
-#include "utilities/titandb/blob_gc_picker.h"
-#include "utilities/titandb/db_impl.h"
+#include "blob_gc_picker.h"
+#include "db_impl.h"
 
 namespace rocksdb {
 namespace titandb {

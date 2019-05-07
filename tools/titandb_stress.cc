@@ -58,7 +58,6 @@ int main() {
 #include "rocksdb/utilities/checkpoint.h"
 #include "rocksdb/utilities/db_ttl.h"
 #include "rocksdb/utilities/options_util.h"
-#include "rocksdb/utilities/titandb/db.h"
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
 #include "rocksdb/write_batch.h"
@@ -77,6 +76,8 @@ int main() {
 #include "util/testutil.h"
 
 #include "utilities/merge_operators.h"
+
+#include "titan/db.h"
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::RegisterFlagValidator;

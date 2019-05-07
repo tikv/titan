@@ -1,11 +1,11 @@
-#include "utilities/titandb/blob_gc_picker.h"
+#include "blob_gc_picker.h"
 
 #include "util/filename.h"
 #include "util/testharness.h"
-#include "utilities/titandb/blob_file_builder.h"
-#include "utilities/titandb/blob_file_cache.h"
-#include "utilities/titandb/blob_file_iterator.h"
-#include "utilities/titandb/blob_file_reader.h"
+#include "blob_file_builder.h"
+#include "blob_file_cache.h"
+#include "blob_file_iterator.h"
+#include "blob_file_reader.h"
 
 namespace rocksdb {
 namespace titandb {

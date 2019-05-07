@@ -1,6 +1,6 @@
-#include "utilities/titandb/table_factory.h"
+#include "table_factory.h"
 
-#include "utilities/titandb/table_builder.h"
+#include "table_builder.h"
 
 namespace rocksdb {
 namespace titandb {

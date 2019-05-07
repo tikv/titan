@@ -1,7 +1,7 @@
 #pragma once
 
 #include "util/file_reader_writer.h"
-#include "utilities/titandb/blob_format.h"
+#include "blob_format.h"
 
 namespace rocksdb {
 namespace titandb {

@@ -1,7 +1,7 @@
-#include "utilities/titandb/blob_file_iterator.h"
+#include "blob_file_iterator.h"
 
 #include "util/crc32c.h"
-#include "utilities/titandb/util.h"
+#include "util.h"
 
 namespace rocksdb {
 namespace titandb {
