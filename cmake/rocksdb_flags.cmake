@@ -1,6 +1,32 @@
 # Generate compile and link flags
 # Extracted from rocksdb/CMakeLists.txt
 
+
+option(WITH_JEMALLOC "build with JeMalloc" OFF)
+if (WITH_JEMALLOC)
+  add_definitions(-DROCKSDB_JEMALLOC -DJEMALLOC_NO_DEMANGLE)
+endif()
+
+option(WITH_SNAPPY "build with SNAPPY" OFF)
+if (WITH_SNAPPY)
+  add_definitions(-DSNAPPY)
+endif()
+
+option(WITH_LZ4 "build with lz4" OFF)
+if (WITH_LZ4)
+  add_definitions(-DLZ4)
+endif()
+
+option(WITH_ZLIB "build with zlib" OFF)
+if (WITH_ZLIB)
+  add_definitions(-DZLIB)
+endif()
+
+option(WITH_ZSTD "build with zstd" OFF)
+if (WITH_ZSTD)
+  add_definitions(-DZSTD)
+endif()
+
 if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zi /nologo /EHsc /GS /Gd /GR /GF /fp:precise /Zc:wchar_t /Zc:forScope /errorReport:queue")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /FC /d2Zi+ /W4 /wd4127 /wd4800 /wd4996 /wd4351 /wd4100 /wd4204 /wd4324")

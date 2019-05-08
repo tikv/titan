@@ -41,6 +41,7 @@ add_library(titan STATIC ${SOURCES})
 
 option(WITH_TITAN_TESTS "Build with tests." ON)
 option(WITH_TITAN_TOOLS "Build with tools." ON)
+option(TRAVIS "Building in Travis." OFF)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(WITH_TITAN_TESTS OFF)
@@ -49,12 +50,13 @@ endif()
 
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
   add_subdirectory(${ROCKSDB_DIR} rocksdb EXCLUDE_FROM_ALL)
+  # -latomic is needed when building titandb_stress using clang.
+  link_libraries(atomic)
 endif()
 
 if (WITH_TITAN_TESTS)
   include(CTest)
-  find_package(Threads REQUIRED)
-  find_package(GTest REQUIRED)
+  include_directories(SYSTEM ${ROCKSDB_DIR}/third-party/gtest-1.7.0/fused-src)
   set(TESTS
         blob_file_iterator_test
         blob_file_size_collector_test
@@ -69,26 +71,30 @@ if (WITH_TITAN_TESTS)
   set(TEST_LIBS
         titan
         rocksdb
-        testharness
         testutillib
-        Threads::Threads
-        GTest::GTest)
+        gtest)
         
   foreach(test ${TESTS})
-      add_executable(titan_${test} src/${test}.cc)
-      target_include_directories(titan_${test} PRIVATE ${GTEST_INCLUDE_DIRS})
+    add_executable(titan_${test} src/${test}.cc $<TARGET_OBJECTS:testharness>)
       target_link_libraries(titan_${test} ${TEST_LIBS})
       add_test(titan_${test} titan_${test})
   endforeach(test ${TESTS})  
 endif()
 
 if (WITH_TITAN_TOOLS)
-  find_package(gflags REQUIRED)
-  add_definitions(-DGFLAGS)
-
   set(TOOLS_LIBS
         titan
         rocksdb)
+
+  if (NOT TRAVIS)
+    find_package(gflags REQUIRED)
+  else()
+    # Hack: On Travis (with Ubuntu xenial or before), libgflags-dev package doesn't come with
+    # gflags-config.cmake, so find_package will fail. Hard-code gflag path for now.
+    set(gflags_INCLUDE_DIR "/usr/include/gflags")
+    list(APPEND TOOLS_LIBS "/usr/lib/x86_64-linux-gnu/libgflags.a")
+  endif()
+  add_definitions(-DGFLAGS)
 
   add_executable(titandb_stress tools/titandb_stress.cc)
   target_include_directories(titandb_stress PRIVATE ${gflags_INCLUDE_DIR})
