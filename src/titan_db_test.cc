@@ -212,6 +212,7 @@ class TitanDBTest : public testing::Test {
                                        cf_options);
     ASSERT_EQ(original_table_factory, immu_cf_options.table_factory);
     ASSERT_OK(db->Close());
+    delete db;
 
     DeleteDir(env_, options_.dirname);
     DeleteDir(env_, dbname_);
@@ -377,7 +378,7 @@ TEST_F(TitanDBTest, IngestExternalFiles) {
   }
 }
 
-TEST_F(TitanDBTest, DISABLED_ReadAfterDropCF) {
+TEST_F(TitanDBTest, ReadAfterDropCF) {
   Open();
   const uint64_t kNumCF = 3;
   for(uint64_t i = 1; i <= kNumCF; i++) {

@@ -1,3 +1,5 @@
+dist: xenial
+
 language: cpp
 
 os:
@@ -14,12 +16,15 @@ addons:
 matrix:
   include:
     - compiler: clang
+      env: BUILD_TYPE="Debug"
     - compiler: clang
-      env: SANITIZER="-DWITH_ASAN=ON"
+      env: BUILD_TYPE="Release"
     - compiler: clang
-      env: SANITIZER="-DWITH_TSAN=ON"
+      env: SANITIZER="ASAN"
     - compiler: clang
-      env: SANITIZER="-DWITH_UBSAN=ON"
+      env: SANITIZER="TSAN"
+    - compiler: clang
+      env: SANITIZER="UBSAN"
     - env: COMPILER=gcc8
 
 install:
@@ -27,7 +32,16 @@ install:
   - if [ "${COMPILER}" == gcc8 ]; then
       CC=gcc-8 && CXX=g++-8;
     fi
+  - if [ ! -z "${BUILD_TYPE}" ]; then
+      BUILD_OPT="-DCMAKE_BUILD_TYPE=${BUILD_TYPE}";
+    fi
+  - if [ ! -z "${SANITIZER}" ]; then
+      SANITIZER_OPT="-DWITH_${SANITIZER}=ON" && TOOLS_OPT="-DWITH_TITAN_TOOLS=OFF";
+    fi
 
 script:
   - ${CXX} --version
-  - cmake . -DROCKSDB_DIR=./rocksdb -DTRAVIS=ON ${SANITIZER} && make -j4 && ctest -R titan
+  - echo $BUILD_OPT
+  - echo $SANITIZER_OPT
+  - echo $TOOLS_OPT
+  - cmake . -DROCKSDB_DIR=./rocksdb -DTRAVIS=ON ${BUILD_OPT} ${SANITIZER_OPT} ${TOOLS_OPT} && make -j4 && ctest -R titan

@@ -7,6 +7,7 @@ if (NOT DEFINED ROCKSDB_DIR)
   message(FATAL_ERROR "ROCKSDB_DIR is not defined.")
 endif()
 
+list(APPEND CMAKE_MODULE_PATH "${ROCKSDB_DIR}/cmake/modules/")
 include(cmake/rocksdb_flags.cmake)
 
 include_directories(${ROCKSDB_DIR})
@@ -45,7 +46,6 @@ option(TRAVIS "Building in Travis." OFF)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(WITH_TITAN_TESTS OFF)
-  set(WITH_TITAN_TOOLS OFF)
 endif()
 
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
@@ -54,7 +54,7 @@ if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
   link_libraries(atomic)
 endif()
 
-if (WITH_TITAN_TESTS)
+if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
   include(CTest)
   include_directories(SYSTEM ${ROCKSDB_DIR}/third-party/gtest-1.7.0/fused-src)
   set(TESTS
