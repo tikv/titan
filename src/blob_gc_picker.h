@@ -9,7 +9,7 @@
 #include "blob_file_manager.h"
 #include "blob_format.h"
 #include "blob_gc.h"
-#include "version.h"
+#include "blob_storage.h"
 
 namespace rocksdb {
 namespace titandb {

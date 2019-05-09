@@ -14,7 +14,7 @@
 #include "blob_file_cache.h"
 #include "titan/options.h"
 #include "version_edit.h"
-#include "version.h"
+#include "blob_storage.h"
 
 namespace rocksdb {
 namespace titandb {
