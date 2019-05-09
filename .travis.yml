@@ -29,7 +29,11 @@ install:
   - if [ "${COMPILER}" == gcc8 ]; then
       CC=gcc-8 && CXX=g++-8;
     fi
+  # Tools depend on gflags, and linking with gflags will fail in sanitizer build.
+  - if [ ! -z "${SANITIZER}" ]; then
+      BUILD_TOOLS="-DWTIH_TITAN_TOOLS=OFF";
+    fi
 
 script:
   - ${CXX} --version
-  - cmake . -DROCKSDB_DIR=./rocksdb -DTRAVIS=ON ${SANITIZER} && make -j4 && ctest -R titan
+  - cmake . -DROCKSDB_DIR=./rocksdb -DTRAVIS=ON ${SANITIZER} ${BUILD_TOOLS} && make -j4 && ctest -R titan
