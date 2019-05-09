@@ -17,7 +17,7 @@ matrix:
   include:
     - compiler: clang
     - compiler: clang
-      env: BUILD=Release
+      env: BUILD_TYPE=Release
     - compiler: clang
       env: SANITIZER=ASAN
     - compiler: clang
@@ -31,10 +31,10 @@ install:
   - if [ "${COMPILER}" == gcc8 ]; then
       CC=gcc-8 && CXX=g++-8;
     fi
-  - if [ ! -z "$BUILD_TYPE" ]; then
+  - if [ ! -z "${BUILD_TYPE}" ]; then
       BUILD_OPT="-DCMAKE_BUILD_TYPE=${BUILD_TYPE}";
     fi
-  - if [ ! -z "$SANITIZER" ]; then
+  - if [ ! -z "${SANITIZER}" ]; then
       # Tools depend on gflags, and linking with gflags will fail in sanitizer build.
       SANITIZER_OPT="-DWITH_${SANITIZER}=ON";
       TOOLS_OPT="-DWITH_TITAN_TOOLS=OFF";
