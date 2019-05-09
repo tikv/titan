@@ -55,7 +55,7 @@ if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
   link_libraries(atomic)
 endif()
 
-if (WITH_TITAN_TESTS)
+if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
   include(CTest)
   include_directories(SYSTEM ${ROCKSDB_DIR}/third-party/gtest-1.7.0/fused-src)
   set(TESTS
