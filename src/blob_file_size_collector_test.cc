@@ -47,9 +47,10 @@ class BlobFileSizeCollectorTest : public testing::Test {
 
   void NewTableBuilder(WritableFileWriter* file,
                        std::unique_ptr<TableBuilder>* result) {
+    CompressionOptions compression_opts;
     TableBuilderOptions options(cf_ioptions_, cf_moptions_,
                                 cf_ioptions_.internal_comparator, &collectors_,
-                                kNoCompression, CompressionOptions(), nullptr,
+                                kNoCompression, compression_opts, nullptr,
                                 false, kDefaultColumnFamilyName, 0);
     result->reset(table_factory_->NewTableBuilder(options, 0, file));
     ASSERT_TRUE(*result);
