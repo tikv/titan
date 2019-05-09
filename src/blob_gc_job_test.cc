@@ -129,6 +129,7 @@ class BlobGCJobTest : public testing::Test {
     }
 
     mutex_->Unlock();
+    //
     tdb_->PurgeObsoleteFiles();
     mutex_->Lock();
   }

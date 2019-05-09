@@ -57,7 +57,10 @@ class VersionSet {
   // Drops some column families. The obsolete files will be deleted in
   // background when they will not be accessed anymore.
   // REQUIRES: mutex is held
-  void DropColumnFamilies(const std::vector<uint32_t>& column_families, SequenceNumber obsolete_sequence);
+  Status DropColumnFamilies(const std::vector<ColumnFamilyHandle*>& handles, SequenceNumber obsolete_sequence);
+
+  // REQUIRES: mutex is held
+  void DestroyColumnFamily(uint32_t cf_id);
 
   // Allocates a new file number.
   uint64_t NewFileNumber() { return next_file_number_.fetch_add(1); }
@@ -101,6 +104,11 @@ class VersionSet {
   std::shared_ptr<Cache> file_cache_;
 
   ObsoleteFiles obsolete_files_;
+
+  // As rocksdb described, `DropColumnFamilies()` only records the drop of the column family specified by ColumnFamilyHandle.
+  // The actual data is not deleted until the client calls `delete column_family`, namely `DestroyColumnFamilyHandle()`.
+  // We can still continue using the column family if we have outstanding ColumnFamilyHandle pointer.
+  // So we should delete blob files in `DestroyColumnFamilyHandle()` but not here.
   std::unordered_set<uint32_t> obsolete_columns_;
 
   std::unordered_map<uint32_t, std::shared_ptr<BlobStorage>> column_families_;

@@ -12,7 +12,7 @@ namespace titandb {
 // column family. The version must be valid when this storage is used.
 class BlobStorage {
  public:
-  BlobStorage(const BlobStorage& bs) : mutex_() {
+  BlobStorage(const BlobStorage& bs) : mutex_(), destroyed_(false) {
     this->files_ = bs.files_;
     this->file_cache_ = bs.file_cache_;
     this->titan_cf_options_ = bs.titan_cf_options_;
@@ -20,7 +20,7 @@ class BlobStorage {
 
   BlobStorage(const TitanCFOptions& _options,
               std::shared_ptr<BlobFileCache> _file_cache)
-      : titan_cf_options_(_options), mutex_(), file_cache_(_file_cache) {}
+      : titan_cf_options_(_options), mutex_(), file_cache_(_file_cache), destroyed_(false) {}
 
   // Gets the blob record pointed by the blob index. The provided
   // buffer is used to store the record data, so the buffer must be
@@ -48,8 +48,15 @@ class BlobStorage {
     WriteLock wl(&mutex_);
     for (auto& file : files_) {
       file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
-      //      file.second->marked_for_gc_ = true;
     }
+  }
+
+  void MarkDestroyed() {
+    destroyed_ = true;
+  }
+
+  bool MaybeRemove() {
+    return files_.empty() && destroyed_;
   }
 
   const std::vector<GCScore> gc_score() { return gc_score_; }
@@ -79,6 +86,11 @@ class BlobStorage {
   std::shared_ptr<BlobFileCache> file_cache_;
 
   std::vector<GCScore> gc_score_;
+
+  // It is marked when the column family handle is destroyed, indicating this
+  // structure can be removed after all the blob files of this column family are
+  // physically deleted.
+  bool destroyed_;
 };
 
 }  // namespace titandb

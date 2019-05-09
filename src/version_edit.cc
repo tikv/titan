@@ -24,6 +24,7 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     file->EncodeTo(dst);
   }
   for (auto& file : deleted_files_) {
+    // obsolete sequence is a inpersistent field, so no need to encode it.
     PutVarint32Varint64(dst, kDeletedBlobFile, file.first);
   }
 }

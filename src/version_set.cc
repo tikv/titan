@@ -223,6 +223,7 @@ void VersionSet::Apply(VersionEdit* edit) {
   auto cf_id = edit->column_family_id_;
   auto it = column_families_.find(cf_id);
   if (it == column_families_.end()) {
+    // TODO: when open DB without some columns families. if ignore here, when regard blob files belonging to it as invalidate, so not ignore it
     // Ignore unknown column families.
     return;
   }
@@ -267,9 +268,11 @@ void VersionSet::AddColumnFamilies(const std::map<uint32_t, TitanCFOptions>& col
   }
 }
 
-void VersionSet::DropColumnFamilies(const std::vector<uint32_t>& column_families, SequenceNumber obsolete_sequence) {
-  for (auto& cf : column_families) {
-    auto it = column_families_.find(cf);
+Status VersionSet::DropColumnFamilies(const std::vector<ColumnFamilyHandle*>& handles, SequenceNumber obsolete_sequence) {
+  Status s;
+  for (auto& handle : handles) {
+    auto cf_id = handle->GetID();
+    auto it = column_families_.find(cf_id);
     if (it != column_families_.end()) {
       VersionEdit edit;
       edit.SetColumnFamilyID(it->first);
@@ -278,27 +281,40 @@ void VersionSet::DropColumnFamilies(const std::vector<uint32_t>& column_families
           file.second->file_number());
         edit.DeleteBlobFile(file.first, obsolete_sequence);
       }
-      // TODO: check status
-      LogAndApply(&edit);
+      s = LogAndApply(&edit);
+      if (!s.ok()) return s;
     }
-    obsolete_columns_.insert(cf);
-  }       
+    obsolete_columns_.insert(cf_id);
+  }  
+  return s; 
+}
+
+void VersionSet::DestroyColumnFamily(uint32_t cf_id) {
+  obsolete_columns_.erase(cf_id);
+  auto it = column_families_.find(cf_id);
+  if (it != column_families_.end()) {
+    it->second->MarkDestroyed();
+  } else {
+    fprintf(stderr, "column %u not found for destroy\n", cf_id);
+    abort();    
+  }
 }
 
 void VersionSet::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file, SequenceNumber obsolete_sequence, uint32_t cf_id) {
-    obsolete_files_.blob_files.push_back(std::make_tuple(file->file_number(), obsolete_sequence, cf_id));
-    file->FileStateTransit(BlobFileMeta::FileEvent::kDelete);
+  obsolete_files_.blob_files.push_back(std::make_tuple(file->file_number(), obsolete_sequence, cf_id));
+  file->FileStateTransit(BlobFileMeta::FileEvent::kDelete);
 }
 
 void VersionSet::GetObsoleteFiles(ObsoleteFiles* obsolete_files, SequenceNumber oldest_sequence) {
   for (auto tuple_it = obsolete_files_.blob_files.begin(); tuple_it != obsolete_files_.blob_files.end();) {
     auto& obsolete_sequence = std::get<1>(*tuple_it);
+    auto& cf_id = std::get<2>(*tuple_it);
     // We check whether the oldest snapshot is no less than the last sequence
     // by the time the blob file become obsolete. If so, the blob file is not
     // visible to all existing snapshots.
-    if (oldest_sequence > obsolete_sequence) {
+    // Also, when
+    if (oldest_sequence > obsolete_sequence && obsolete_columns_.find(cf_id) == obsolete_columns_.end()) {
       auto& file_number = std::get<0>(*tuple_it);
-      auto& cf_id = std::get<2>(*tuple_it);
       ROCKS_LOG_INFO(db_options_.info_log,
         "Obsolete blob file %" PRIu64 " (obsolete at %" PRIu64
         ") not visible to oldest snapshot %" PRIu64 ", delete it.",
@@ -307,16 +323,15 @@ void VersionSet::GetObsoleteFiles(ObsoleteFiles* obsolete_files, SequenceNumber 
       auto it = column_families_.find(cf_id);
       if (it != column_families_.end()) {
         it->second->DeleteBlobFile(file_number);
-        if (it->second->files_.empty() && obsolete_columns_.find(cf_id) != obsolete_columns_.end()) {
+        if (it->second->MaybeRemove()) {
           column_families_.erase(it);
-          obsolete_columns_.erase(cf_id);
         }
       } else {
         fprintf(stderr, "column %u not found when deleting obsolete file%" PRIu64 "\n", 
           cf_id, file_number);
         abort();        
       }
-      auto now = tuple_it++;
+      auto now = tuple_it++; // is that okay?
       obsolete_files->blob_files.splice(obsolete_files->blob_files.end(), obsolete_files_.blob_files, now);
     } else {
       ++tuple_it;

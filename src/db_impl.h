@@ -28,6 +28,8 @@ class TitanDBImpl : public TitanDB {
   Status DropColumnFamilies(
       const std::vector<ColumnFamilyHandle*>& handles) override;
 
+  Status DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) override;
+
   using TitanDB::CompactFiles;
   Status CompactFiles(
       const CompactionOptions& compact_options,
