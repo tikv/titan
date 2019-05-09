@@ -46,7 +46,6 @@ option(TRAVIS "Building in Travis." OFF)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(WITH_TITAN_TESTS OFF)
-  set(WITH_TITAN_TOOLS OFF)
 endif()
 
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)

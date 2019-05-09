@@ -16,14 +16,15 @@ addons:
 matrix:
   include:
     - compiler: clang
+      env: BUILD_TYPE="Debug"
     - compiler: clang
-      env: BUILD_TYPE=Release
+      env: BUILD_TYPE="Release"
     - compiler: clang
-      env: SANITIZER=ASAN
+      env: SANITIZER="ASAN"
     - compiler: clang
-      env: SANITIZER=TSAN
+      env: SANITIZER="TSAN"
     - compiler: clang
-      env: SANITIZER=UBSAN
+      env: SANITIZER="UBSAN"
     - env: COMPILER=gcc8
 
 install:
@@ -35,9 +36,7 @@ install:
       BUILD_OPT="-DCMAKE_BUILD_TYPE=${BUILD_TYPE}";
     fi
   - if [ ! -z "${SANITIZER}" ]; then
-      # Tools depend on gflags, and linking with gflags will fail in sanitizer build.
-      SANITIZER_OPT="-DWITH_${SANITIZER}=ON";
-      TOOLS_OPT="-DWITH_TITAN_TOOLS=OFF";
+      SANITIZER_OPT="-DWITH_${SANITIZER}=ON" && TOOLS_OPT="-DWITH_TITAN_TOOLS=OFF";
     fi
 
 script:
