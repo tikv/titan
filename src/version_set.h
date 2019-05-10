@@ -60,7 +60,7 @@ class VersionSet {
   Status DropColumnFamilies(const std::vector<ColumnFamilyHandle*>& handles, SequenceNumber obsolete_sequence);
 
   // REQUIRES: mutex is held
-  void DestroyColumnFamily(uint32_t cf_id);
+  Status DestroyColumnFamily(uint32_t cf_id);
 
   // Allocates a new file number.
   uint64_t NewFileNumber() { return next_file_number_.fetch_add(1); }

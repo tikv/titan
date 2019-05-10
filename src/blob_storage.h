@@ -22,6 +22,12 @@ class BlobStorage {
               std::shared_ptr<BlobFileCache> _file_cache)
       : titan_cf_options_(_options), mutex_(), file_cache_(_file_cache), destroyed_(false) {}
 
+  ~BlobStorage() {
+    for (auto& file: files_) {
+      file_cache_->Evict(file.second->file_number());
+    }
+  }
+
   // Gets the blob record pointed by the blob index. The provided
   // buffer is used to store the record data, so the buffer must be
   // valid when the record is used.
@@ -52,10 +58,12 @@ class BlobStorage {
   }
 
   void MarkDestroyed() {
+    WriteLock wl(&mutex_);
     destroyed_ = true;
   }
 
   bool MaybeRemove() {
+    ReadLock rl(&mutex_);
     return files_.empty() && destroyed_;
   }
 

@@ -289,15 +289,16 @@ Status VersionSet::DropColumnFamilies(const std::vector<ColumnFamilyHandle*>& ha
   return s; 
 }
 
-void VersionSet::DestroyColumnFamily(uint32_t cf_id) {
+Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
   obsolete_columns_.erase(cf_id);
   auto it = column_families_.find(cf_id);
   if (it != column_families_.end()) {
     it->second->MarkDestroyed();
-  } else {
-    fprintf(stderr, "column %u not found for destroy\n", cf_id);
-    abort();    
+    return Status::OK();
   }
+  ROCKS_LOG_ERROR(db_options_.info_log, 
+    "column %u not found for destroy\n", cf_id);
+  return Status::NotFound("invalid column family");
 }
 
 void VersionSet::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file, SequenceNumber obsolete_sequence, uint32_t cf_id) {
@@ -312,30 +313,29 @@ void VersionSet::GetObsoleteFiles(ObsoleteFiles* obsolete_files, SequenceNumber 
     // We check whether the oldest snapshot is no less than the last sequence
     // by the time the blob file become obsolete. If so, the blob file is not
     // visible to all existing snapshots.
-    // Also, when
+    // Also, in the case dropping column family, blob files can be deleted only
+    // after the column family handle is destroyed.
     if (oldest_sequence > obsolete_sequence && obsolete_columns_.find(cf_id) == obsolete_columns_.end()) {
       auto& file_number = std::get<0>(*tuple_it);
       ROCKS_LOG_INFO(db_options_.info_log,
         "Obsolete blob file %" PRIu64 " (obsolete at %" PRIu64
         ") not visible to oldest snapshot %" PRIu64 ", delete it.",
         file_number, obsolete_sequence, oldest_sequence);
-      // Cleanup obsolete column family when all the blob files for that are deleted.
       auto it = column_families_.find(cf_id);
       if (it != column_families_.end()) {
         it->second->DeleteBlobFile(file_number);
+        // Cleanup obsolete column family when all the blob files for that are deleted.
         if (it->second->MaybeRemove()) {
           column_families_.erase(it);
         }
-      } else {
-        fprintf(stderr, "column %u not found when deleting obsolete file%" PRIu64 "\n", 
-          cf_id, file_number);
-        abort();        
+        auto now = tuple_it++;
+        obsolete_files->blob_files.splice(obsolete_files->blob_files.end(), obsolete_files_.blob_files, now);
+        continue;
       }
-      auto now = tuple_it++; // is that okay?
-      obsolete_files->blob_files.splice(obsolete_files->blob_files.end(), obsolete_files_.blob_files, now);
-    } else {
-      ++tuple_it;
+      ROCKS_LOG_ERROR(db_options_.info_log, "column %u not found when deleting obsolete file%" PRIu64 "\n", 
+        cf_id, file_number);
     }
+    ++tuple_it;
   }
   obsolete_files_.manifests.swap(obsolete_files->manifests);
 }

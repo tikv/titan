@@ -274,11 +274,11 @@ Status TitanDBImpl::CreateColumnFamilies(
   assert(handles->size() == descs.size());
 
   if (s.ok()) {
-    MutexLock l(&mutex_);
     std::map<uint32_t, TitanCFOptions> column_families;
     for (size_t i = 0; i < descs.size(); i++) {
       column_families.emplace((*handles)[i]->GetID(), descs[i].options);
     }
+    MutexLock l(&mutex_);
     vset_->AddColumnFamilies(column_families);
   }
   return s;
