@@ -1,4 +1,4 @@
-#include "version.h"
+#include "blob_storage.h"
 #include "version_set.h"
 
 namespace rocksdb {

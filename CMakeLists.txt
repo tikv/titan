@@ -26,6 +26,7 @@ set(SOURCES
         src/blob_gc.cc
         src/blob_gc_job.cc
         src/blob_gc_picker.cc
+        src/blob_storage.cc
         src/db.cc
         src/db_impl.cc
         src/db_impl_files.cc
@@ -34,7 +35,6 @@ set(SOURCES
         src/table_builder.cc
         src/table_factory.cc
         src/util.cc
-        src/version.cc
         src/version_edit.cc
         src/version_set.cc)
 
