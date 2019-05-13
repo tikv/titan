@@ -286,11 +286,15 @@ Status TitanDBImpl::CreateColumnFamilies(
 
 Status TitanDBImpl::DropColumnFamilies(
     const std::vector<ColumnFamilyHandle*>& handles) {
+  std::vector<uint32_t> column_families;
+  for (auto& handle: handles) { 
+    column_families.emplace_back(handle->GetID());
+  }
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
     MutexLock l(&mutex_);
     SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
-    s = vset_->DropColumnFamilies(handles, obsolete_sequence);
+    s = vset_->DropColumnFamilies(column_families, obsolete_sequence);
   }
   return s;
 }
