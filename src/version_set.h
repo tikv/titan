@@ -45,6 +45,8 @@ class VersionSet {
   // REQUIRES: mutex is held
   Status DropColumnFamilies(const std::vector<uint32_t>& handles, SequenceNumber obsolete_sequence);
 
+  // Destroy the column family. Only after this is called, the obsolete files
+  // of the dropped column family can be physical deleted.
   // REQUIRES: mutex is held
   Status DestroyColumnFamily(uint32_t cf_id);
 
