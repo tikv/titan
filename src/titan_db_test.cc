@@ -53,6 +53,7 @@ class TitanDBTest : public testing::Test {
       }
       cf_handles_.clear();
       ASSERT_OK(TitanDB::Open(db_options, dbname_, descs, &cf_handles_, &db_));
+      db_impl_ = reinterpret_cast<TitanDBImpl*>(db_);
     }
   }
 
@@ -120,6 +121,8 @@ class TitanDBTest : public testing::Test {
   }
 
   void VerifyDB(const std::map<std::string, std::string>& data, ReadOptions ropts = ReadOptions()) {
+    db_impl_->PurgeObsoleteFiles();
+    
     for (auto& kv : data) {
       std::string value;
       ASSERT_OK(db_->Get(ropts, kv.first, &value));
@@ -378,7 +381,7 @@ TEST_F(TitanDBTest, IngestExternalFiles) {
   }
 }
 
-TEST_F(TitanDBTest, ReadAfterDropCF) {
+TEST_F(TitanDBTest, DropColumnFamily) {
   Open();
   const uint64_t kNumCF = 3;
   for(uint64_t i = 1; i <= kNumCF; i++) {
@@ -392,10 +395,28 @@ TEST_F(TitanDBTest, ReadAfterDropCF) {
   VerifyDB(data);
   Flush();
   VerifyDB(data);
+
+  // Destroy column families handle, check whether the data is preserved after a round of GC and restart.
+  for (auto& handle : cf_handles_) {
+    db_->DestroyColumnFamilyHandle(handle);
+  }
+  cf_handles_.clear();
+  VerifyDB(data);
+  Reopen();
+  VerifyDB(data);
+
   for(auto& handle : cf_handles_) {
+    // we can't drop default column family
+    if (handle->GetName() == kDefaultColumnFamilyName) {
+      continue;
+    }
     ASSERT_OK(db_->DropColumnFamily(handle));
+    // The data is actually deleted only after destroying all outstanding column family handles, 
+    // so we can still read from the dropped column family.
     VerifyDB(data);
   }
+
+  Close();
 }
 
 #ifndef NDEBUG

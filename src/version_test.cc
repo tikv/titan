@@ -18,7 +18,7 @@ void DeleteDir(Env* env, const std::string& dirname) {
       ASSERT_OK(env->DeleteFile(dirname + "/" + fname));
     }
   }
-  env->DeleteDir(dirname);
+  ASSERT_OK(env->DeleteDir(dirname));
 }
 
 class VersionTest : public testing::Test {
@@ -43,16 +43,18 @@ class VersionTest : public testing::Test {
   }
 
   void Reset() {
-    DeleteDir(env_, dbname_);
+    DeleteDir(env_, db_options_.dirname);
+    env_->CreateDirIfMissing(db_options_.dirname);
+
     vset_.reset(new VersionSet(db_options_));
     ASSERT_OK(vset_->Open({}));
     column_families_.clear();
     // Sets up some column families.
     for (uint32_t id = 0; id < 10; id++) {
       std::shared_ptr<BlobStorage> storage;
-      storage.reset(new BlobStorage(cf_options_, file_cache_));
+      storage.reset(new BlobStorage(db_options_, cf_options_, file_cache_));
       column_families_.emplace(id, storage);
-      storage.reset(new BlobStorage(cf_options_, file_cache_));
+      storage.reset(new BlobStorage(db_options_, cf_options_, file_cache_));
       vset_->column_families_.emplace(id, storage);
     }
   }
@@ -74,7 +76,7 @@ class VersionTest : public testing::Test {
 
   void BuildAndCheck(std::vector<VersionEdit> edits) {
     for (auto& edit : edits) {
-      vset_->Apply(&edit);
+      ASSERT_TRUE(vset_->Apply(&edit).ok());
     }
     for (auto& it : vset_->column_families_) {
       auto& storage = column_families_[it.first];
@@ -172,20 +174,29 @@ TEST_F(VersionTest, ObsoleteFiles) {
   m.insert({1, TitanCFOptions()});
   vset_->AddColumnFamilies(m);
   {
-    auto add1_0_4 = AddBlobFilesEdit(1, 0, 4);
+    auto add1_1_5 = AddBlobFilesEdit(1, 1, 5);
     MutexLock l(&mutex_);
-    vset_->LogAndApply(&add1_0_4);
+    vset_->LogAndApply(&add1_1_5);
   }
-  ObsoleteFiles of;
+  std::vector<std::string> of;
   vset_->GetObsoleteFiles(&of, kMaxSequenceNumber);
-  ASSERT_EQ(of.blob_files.size(), 0);
+  ASSERT_EQ(of.size(), 0);
   {
-    auto del1_3_4 = DeleteBlobFilesEdit(1, 3, 4);
+    auto del1_4_5 = DeleteBlobFilesEdit(1, 4, 5);
     MutexLock l(&mutex_);
-    vset_->LogAndApply(&del1_3_4);
+    vset_->LogAndApply(&del1_4_5);
   }
   vset_->GetObsoleteFiles(&of, kMaxSequenceNumber);
-  ASSERT_EQ(of.blob_files.size(), 1);
+  ASSERT_EQ(of.size(), 1);
+
+  std::vector<uint32_t> cfs = {1};
+  ASSERT_OK(vset_->DropColumnFamilies(cfs, 0));
+  vset_->GetObsoleteFiles(&of, kMaxSequenceNumber);
+  ASSERT_EQ(of.size(), 1);  
+
+  ASSERT_OK(vset_->DestroyColumnFamily(1));
+  vset_->GetObsoleteFiles(&of, kMaxSequenceNumber);
+  ASSERT_EQ(of.size(), 4);
 }
 
 }  // namespace titandb
