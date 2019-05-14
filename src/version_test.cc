@@ -76,7 +76,7 @@ class VersionTest : public testing::Test {
 
   void BuildAndCheck(std::vector<VersionEdit> edits) {
     for (auto& edit : edits) {
-      ASSERT_TRUE(vset_->Apply(&edit).ok());
+      ASSERT_OK(vset_->Apply(&edit));
     }
     for (auto& it : vset_->column_families_) {
       auto& storage = column_families_[it.first];

@@ -287,6 +287,9 @@ Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
   auto it = column_families_.find(cf_id);
   if (it != column_families_.end()) {
     it->second->MarkDestroyed();
+    if (it->second->MaybeRemove()) {
+      column_families_.erase(it);
+    }
     return Status::OK();
   }
   ROCKS_LOG_ERROR(db_options_.info_log, 
@@ -316,6 +319,7 @@ void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files, Sequ
   }
 
   obsolete_files->insert(obsolete_files->end(), obsolete_manifests_.begin(), obsolete_manifests_.end());
+  obsolete_manifests_.clear();
 }
 
 }  // namespace titandb
