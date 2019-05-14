@@ -16,7 +16,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
 
   uint64_t batch_size = 0;
   //  ROCKS_LOG_INFO(db_options_.info_log, "blob file num:%lu gc score:%lu",
-  //                 blob_storage->NumBlobFiles(), blob_storage->gc_score().size());
+  //                 blob_storage->NumBlobFiles(),
+  //                 blob_storage->gc_score().size());
   for (auto& gc_score : blob_storage->gc_score()) {
     auto blob_file = blob_storage->FindFile(gc_score.file_number).lock();
     assert(blob_file);

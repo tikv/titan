@@ -1,11 +1,11 @@
 #pragma once
 
-#include "db/db_impl.h"
-#include "rocksdb/status.h"
 #include "blob_file_builder.h"
 #include "blob_file_iterator.h"
 #include "blob_file_manager.h"
 #include "blob_gc.h"
+#include "db/db_impl.h"
+#include "rocksdb/status.h"
 #include "titan/options.h"
 #include "version_set.h"
 

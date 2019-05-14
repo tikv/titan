@@ -1,10 +1,10 @@
 #include "table/table_builder.h"
-#include "table/table_reader.h"
-#include "util/filename.h"
-#include "util/testharness.h"
 #include "blob_file_manager.h"
 #include "blob_file_reader.h"
+#include "table/table_reader.h"
 #include "table_factory.h"
+#include "util/filename.h"
+#include "util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -80,7 +80,8 @@ class TableBuilderTest : public testing::Test {
     db_options_.dirname = tmpdir_;
     cf_options_.min_blob_size = kMinBlobSize;
     blob_manager_.reset(new FileManager(db_options_));
-    table_factory_.reset(new TitanTableFactory(db_options_, cf_options_, blob_manager_));
+    table_factory_.reset(
+        new TitanTableFactory(db_options_, cf_options_, blob_manager_));
   }
 
   ~TableBuilderTest() {

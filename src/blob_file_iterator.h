@@ -3,13 +3,13 @@
 #include <cstdint>
 #include <queue>
 
+#include "blob_format.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "table/internal_iterator.h"
-#include "util/file_reader_writer.h"
-#include "blob_format.h"
 #include "titan/options.h"
 #include "util.h"
+#include "util/file_reader_writer.h"
 
 namespace rocksdb {
 namespace titandb {

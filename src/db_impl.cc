@@ -125,7 +125,7 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
 TitanDBImpl::~TitanDBImpl() { Close(); }
 
 // how often to schedule delete obs files periods
-static constexpr uint32_t kDeleteObsoleteFilesPeriodSecs = 10; // 10s
+static constexpr uint32_t kDeleteObsoleteFilesPeriodSecs = 10;  // 10s
 
 void TitanDBImpl::StartBackgroundTasks() {
   if (!thread_purge_obsolete_) {
@@ -287,7 +287,7 @@ Status TitanDBImpl::CreateColumnFamilies(
 Status TitanDBImpl::DropColumnFamilies(
     const std::vector<ColumnFamilyHandle*>& handles) {
   std::vector<uint32_t> column_families;
-  for (auto& handle: handles) { 
+  for (auto& handle : handles) {
     column_families.emplace_back(handle->GetID());
   }
   Status s = db_impl_->DropColumnFamilies(handles);
@@ -299,7 +299,8 @@ Status TitanDBImpl::DropColumnFamilies(
   return s;
 }
 
-Status TitanDBImpl::DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) {
+Status TitanDBImpl::DestroyColumnFamilyHandle(
+    ColumnFamilyHandle* column_family) {
   auto cf_id = column_family->GetID();
   Status s = db_impl_->DestroyColumnFamilyHandle(column_family);
 
@@ -365,7 +366,8 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
 
   s = storage->Get(options, index, &record, &buffer);
   if (s.IsCorruption()) {
-    ROCKS_LOG_DEBUG(db_options_.info_log, "Key:%s Snapshot:%" PRIu64 " GetBlobFile err:%s\n",
+    ROCKS_LOG_DEBUG(db_options_.info_log,
+                    "Key:%s Snapshot:%" PRIu64 " GetBlobFile err:%s\n",
                     key.ToString(true).c_str(),
                     options.snapshot->GetSequenceNumber(),
                     s.ToString().c_str());
@@ -426,14 +428,14 @@ Iterator* TitanDBImpl::NewIteratorImpl(
     const ReadOptions& options, ColumnFamilyHandle* handle,
     std::shared_ptr<ManagedSnapshot> snapshot) {
   auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
-  
+
   mutex_.Lock();
   auto storage = vset_->GetBlobStorage(handle->GetID());
   mutex_.Unlock();
-  
+
   std::unique_ptr<ArenaWrappedDBIter> iter(db_impl_->NewIteratorImpl(
-      options, cfd, options.snapshot->GetSequenceNumber(), nullptr /*read_callback*/,
-      true /*allow_blob*/, true /*allow_refresh*/));
+      options, cfd, options.snapshot->GetSequenceNumber(),
+      nullptr /*read_callback*/, true /*allow_blob*/, true /*allow_refresh*/));
   return new TitanDBIterator(options, storage.lock().get(), snapshot,
                              std::move(iter));
 }
@@ -456,12 +458,10 @@ Status TitanDBImpl::NewIterators(
   return Status::OK();
 }
 
-const Snapshot* TitanDBImpl::GetSnapshot() {
-  return db_->GetSnapshot();
-}
+const Snapshot* TitanDBImpl::GetSnapshot() { return db_->GetSnapshot(); }
 
 void TitanDBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
-  // TODO: 
+  // TODO:
   // We can record here whether the oldest snapshot is released.
   // If not, we can just skip the next round of purging obsolete files.
   db_->ReleaseSnapshot(snapshot);

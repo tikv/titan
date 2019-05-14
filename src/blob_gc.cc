@@ -12,9 +12,7 @@ BlobGC::BlobGC(std::vector<BlobFileMeta*>&& blob_files,
 
 BlobGC::~BlobGC() {}
 
-void BlobGC::SetColumnFamily(ColumnFamilyHandle* cfh) {
-  cfh_ = cfh;
-}
+void BlobGC::SetColumnFamily(ColumnFamilyHandle* cfh) { cfh_ = cfh; }
 
 ColumnFamilyData* BlobGC::GetColumnFamilyData() {
   auto* cfhi = reinterpret_cast<ColumnFamilyHandleImpl*>(cfh_);

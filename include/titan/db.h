@@ -46,8 +46,7 @@ class TitanDB : public StackableDB {
 
   using StackableDB::CreateColumnFamilies;
   Status CreateColumnFamilies(
-      const ColumnFamilyOptions& options,
-      const std::vector<std::string>& names,
+      const ColumnFamilyOptions& options, const std::vector<std::string>& names,
       std::vector<ColumnFamilyHandle*>* handles) override {
     std::vector<TitanCFDescriptor> descs;
     for (auto& name : names) {
@@ -75,7 +74,8 @@ class TitanDB : public StackableDB {
   Status DropColumnFamilies(
       const std::vector<ColumnFamilyHandle*>& handles) override = 0;
 
-  Status DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) override = 0;
+  Status DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) override =
+      0;
 
   using StackableDB::Merge;
   Status Merge(const WriteOptions&, ColumnFamilyHandle*, const Slice& /*key*/,
@@ -85,8 +85,8 @@ class TitanDB : public StackableDB {
 
   using rocksdb::StackableDB::SingleDelete;
   Status SingleDelete(const WriteOptions& /*wopts*/,
-                              ColumnFamilyHandle* /*column_family*/,
-                              const Slice& /*key*/) override {
+                      ColumnFamilyHandle* /*column_family*/,
+                      const Slice& /*key*/) override {
     return Status::NotSupported("Not supported operation in titan db.");
   }
 

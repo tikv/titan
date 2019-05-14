@@ -37,7 +37,7 @@ std::weak_ptr<BlobFileMeta> BlobStorage::FindFile(uint64_t file_number) const {
 void BlobStorage::ExportBlobFiles(
     std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const {
   ReadLock rl(&mutex_);
-  for(auto& kv : files_) {
+  for (auto& kv : files_) {
     ret.emplace(kv.first, std::weak_ptr<BlobFileMeta>(kv.second));
   }
 }
@@ -47,13 +47,16 @@ void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   files_.emplace(std::make_pair(file->file_number(), file));
 }
 
-void BlobStorage::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file, SequenceNumber obsolete_sequence) {
+void BlobStorage::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file,
+                                   SequenceNumber obsolete_sequence) {
   WriteLock wl(&mutex_);
-  obsolete_files_.push_back(std::make_pair(file->file_number(), obsolete_sequence));
+  obsolete_files_.push_back(
+      std::make_pair(file->file_number(), obsolete_sequence));
   file->FileStateTransit(BlobFileMeta::FileEvent::kDelete);
 }
 
-void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files, SequenceNumber oldest_sequence) {
+void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
+                                   SequenceNumber oldest_sequence) {
   WriteLock wl(&mutex_);
 
   for (auto it = obsolete_files_.begin(); it != obsolete_files_.end();) {
@@ -68,14 +71,14 @@ void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files, Seq
       file_cache_->Evict(file_number);
 
       ROCKS_LOG_INFO(db_options_.info_log,
-        "Obsolete blob file %" PRIu64 " (obsolete at %" PRIu64
-        ") not visible to oldest snapshot %" PRIu64 ", delete it.",
-        file_number, obsolete_sequence, oldest_sequence);
+                     "Obsolete blob file %" PRIu64 " (obsolete at %" PRIu64
+                     ") not visible to oldest snapshot %" PRIu64 ", delete it.",
+                     file_number, obsolete_sequence, oldest_sequence);
       if (obsolete_files) {
         obsolete_files->emplace_back(
-          BlobFileName(db_options_.dirname, file_number));
+            BlobFileName(db_options_.dirname, file_number));
       }
-      
+
       it = obsolete_files_.erase(it);
       continue;
     }
@@ -96,8 +99,7 @@ void BlobStorage::ComputeGCScore() {
       gc_score_.push_back({});
       auto& gcs = gc_score_.back();
       gcs.file_number = file.first;
-      if (file.second->file_size() <
-          cf_options_.merge_small_file_threshold) {
+      if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
         gcs.score = 1;
       } else {
         gcs.score = file.second->GetDiscardableRatio();
@@ -110,7 +112,6 @@ void BlobStorage::ComputeGCScore() {
               return first.score > second.score;
             });
 }
-
 
 }  // namespace titandb
 }  // namespace rocksdb

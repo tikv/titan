@@ -2,8 +2,8 @@
 
 #include <memory>
 
-#include "db/column_family.h"
 #include "blob_format.h"
+#include "db/column_family.h"
 #include "titan/options.h"
 
 namespace rocksdb {
