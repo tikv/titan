@@ -49,7 +49,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(WITH_TITAN_TESTS OFF)
 endif()
 
-# Enable gcov, which is available only for gcc.
 if (CODE_COVERAGE)
   target_compile_options(titan PRIVATE "--coverage")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
