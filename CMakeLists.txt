@@ -43,9 +43,15 @@ add_library(titan STATIC ${SOURCES})
 option(WITH_TITAN_TESTS "Build with tests." ON)
 option(WITH_TITAN_TOOLS "Build with tools." ON)
 option(TRAVIS "Building in Travis." OFF)
+option(CODE_COVERAGE "Generate code coverage report." OFF)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(WITH_TITAN_TESTS OFF)
+endif()
+
+if (CODE_COVERAGE)
+  target_compile_options(titan PRIVATE "--coverage")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
 endif()
 
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
