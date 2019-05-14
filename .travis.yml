@@ -10,13 +10,13 @@ addons:
     sources:
       - ubuntu-toolchain-r-test
     packages:
-      - g++-8
+      - g++-7
       - libgflags-dev
+      - lcov
 
+# For GCC build, we also report code coverage to codecov.
 matrix:
   include:
-    - compiler: clang
-      env: BUILD_TYPE="Debug"
     - compiler: clang
       env: BUILD_TYPE="Release"
     - compiler: clang
@@ -25,23 +25,34 @@ matrix:
       env: SANITIZER="TSAN"
     - compiler: clang
       env: SANITIZER="UBSAN"
-    - env: COMPILER=gcc8
+    - env: COMPILER=gcc7
 
 install:
-  - git clone --depth=1 --branch=tikv-3.0 https://github.com/pingcap/rocksdb.git 
-  - if [ "${COMPILER}" == gcc8 ]; then
-      CC=gcc-8 && CXX=g++-8;
+  - git clone --depth=1 --branch=tikv-3.0 https://github.com/pingcap/rocksdb.git
+  - if [ "${COMPILER}" == gcc7 ]; then
+      CC=gcc-7;
+      CXX=g++-7;
+      COVERAGE_OPT="-DCODE_COVERAGE=ON";
     fi
   - if [ ! -z "${BUILD_TYPE}" ]; then
       BUILD_OPT="-DCMAKE_BUILD_TYPE=${BUILD_TYPE}";
+    else
+      BUILD_OPT="-DCMAKE_BUILD_TYPE=Debug";
     fi
   - if [ ! -z "${SANITIZER}" ]; then
-      SANITIZER_OPT="-DWITH_${SANITIZER}=ON" && TOOLS_OPT="-DWITH_TITAN_TOOLS=OFF";
+      SANITIZER_OPT="-DWITH_${SANITIZER}=ON";
+      TOOLS_OPT="-DWITH_TITAN_TOOLS=OFF";
     fi
 
 script:
-  - ${CXX} --version
-  - echo $BUILD_OPT
-  - echo $SANITIZER_OPT
-  - echo $TOOLS_OPT
-  - cmake . -DROCKSDB_DIR=./rocksdb -DTRAVIS=ON ${BUILD_OPT} ${SANITIZER_OPT} ${TOOLS_OPT} && make -j4 && ctest -R titan
+  - cmake . -L -DROCKSDB_DIR=./rocksdb -DTRAVIS=ON ${BUILD_OPT} ${SANITIZER_OPT} ${TOOLS_OPT} ${COVERAGE_OPT}
+  - make -j4
+  - ctest -R titan
+
+after_success:
+  - if [ "${COMPILER}" == gcc7 ]; then
+      lcov --gcov-tool gcov-7 --directory . --capture --output-file coverage.info;
+      lcov --remove coverage.info '/usr/*' --output-file coverage.info;
+      lcov --list coverage.info;
+      bash <(curl -s https://codecov.io/bash) -f coverage.info || echo "Codecov did not collect coverage reports";
+    fi
