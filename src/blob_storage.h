@@ -1,5 +1,7 @@
 #pragma once
 
+#include <inttypes.h>
+
 #include "rocksdb/options.h"
 #include "blob_file_cache.h"
 #include "blob_format.h"
@@ -12,15 +14,22 @@ namespace titandb {
 // column family. The version must be valid when this storage is used.
 class BlobStorage {
  public:
-  BlobStorage(const BlobStorage& bs) : mutex_() {
+  BlobStorage(const BlobStorage& bs) : destroyed_(false) {
     this->files_ = bs.files_;
     this->file_cache_ = bs.file_cache_;
-    this->titan_cf_options_ = bs.titan_cf_options_;
+    this->db_options_ = bs.db_options_;
+    this->cf_options_ = bs.cf_options_;
   }
 
-  BlobStorage(const TitanCFOptions& _options,
+  BlobStorage(const TitanDBOptions& _db_options, const TitanCFOptions& _cf_options,
               std::shared_ptr<BlobFileCache> _file_cache)
-      : titan_cf_options_(_options), mutex_(), file_cache_(_file_cache) {}
+      : db_options_(_db_options), cf_options_(_cf_options), file_cache_(_file_cache), destroyed_(false) {}
+
+  ~BlobStorage() {
+    for (auto& file: files_) {
+      file_cache_->Evict(file.second->file_number());
+    }
+  }
 
   // Gets the blob record pointed by the blob index. The provided
   // buffer is used to store the record data, so the buffer must be
@@ -48,19 +57,30 @@ class BlobStorage {
     WriteLock wl(&mutex_);
     for (auto& file : files_) {
       file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
-      //      file.second->marked_for_gc_ = true;
     }
+  }
+
+  void MarkDestroyed() {
+    WriteLock wl(&mutex_);
+    destroyed_ = true;
+  }
+
+  bool MaybeRemove() const {
+    ReadLock rl(&mutex_);
+    return destroyed_ && obsolete_files_.empty();
   }
 
   const std::vector<GCScore> gc_score() { return gc_score_; }
 
   void ComputeGCScore();
 
-  const TitanCFOptions& titan_cf_options() { return titan_cf_options_; }
+  const TitanCFOptions& cf_options() { return cf_options_; }
 
   void AddBlobFile(std::shared_ptr<BlobFileMeta>& file);
 
-  void DeleteBlobFile(uint64_t file);
+  void GetObsoleteFiles(std::vector<std::string>* obsolete_files, SequenceNumber oldest_sequence);
+
+  void MarkFileObsolete(std::shared_ptr<BlobFileMeta> file, SequenceNumber obsolete_sequence);
 
  private:
   friend class VersionSet;
@@ -69,7 +89,8 @@ class BlobStorage {
   friend class BlobGCJobTest;
   friend class BlobFileSizeCollectorTest;
 
-  TitanCFOptions titan_cf_options_;
+  TitanDBOptions db_options_;
+  TitanCFOptions cf_options_;
 
   // Read Write Mutex, which protects the `files_` structures 
   mutable port::RWMutex mutex_;
@@ -79,6 +100,11 @@ class BlobStorage {
   std::shared_ptr<BlobFileCache> file_cache_;
 
   std::vector<GCScore> gc_score_;
+
+  std::list<std::pair<uint64_t, SequenceNumber>> obsolete_files_;
+  // It is marked when the column family handle is destroyed, indicating the
+  // in-memory data structure can be destroyed. Physical files may still be kept.
+  bool destroyed_;
 };
 
 }  // namespace titandb

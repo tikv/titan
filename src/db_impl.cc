@@ -270,15 +270,15 @@ Status TitanDBImpl::CreateColumnFamilies(
     base_descs.emplace_back(desc.name, options);
   }
 
-  MutexLock l(&mutex_);
-
   Status s = db_impl_->CreateColumnFamilies(base_descs, handles);
   assert(handles->size() == descs.size());
+
   if (s.ok()) {
     std::map<uint32_t, TitanCFOptions> column_families;
     for (size_t i = 0; i < descs.size(); i++) {
       column_families.emplace((*handles)[i]->GetID(), descs[i].options);
     }
+    MutexLock l(&mutex_);
     vset_->AddColumnFamilies(column_families);
   }
   return s;
@@ -287,24 +287,26 @@ Status TitanDBImpl::CreateColumnFamilies(
 Status TitanDBImpl::DropColumnFamilies(
     const std::vector<ColumnFamilyHandle*>& handles) {
   std::vector<uint32_t> column_families;
-  std::vector<ColumnFamilyData*> cfds;
-  for (auto& handle : handles) {
-    column_families.push_back(handle->GetID());
-    auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
-    cfds.push_back(cfd);
+  for (auto& handle: handles) { 
+    column_families.emplace_back(handle->GetID());
   }
-
-  MutexLock l(&mutex_);
-
-  // TODO:
-  // As rocksdb described, `DropColumnFamilies()` only records the drop of the column family specified by ColumnFamilyHandle.
-  // The actual data is not deleted until the client calls `delete column_family`, namely `DestroyColumnFamilyHandle()`.
-  // We can still continue using the column family if we have outstanding ColumnFamilyHandle pointer.
-  // So we should delete blob files in `DestroyColumnFamilyHandle()` but not here.
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
+    MutexLock l(&mutex_);
     SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
-    vset_->DropColumnFamilies(column_families, obsolete_sequence);
+    s = vset_->DropColumnFamilies(column_families, obsolete_sequence);
+  }
+  return s;
+}
+
+Status TitanDBImpl::DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) {
+  auto cf_id = column_family->GetID();
+  Status s = db_impl_->DestroyColumnFamilyHandle(column_family);
+
+  if (s.ok()) {
+    MutexLock l(&mutex_);
+    // it just changes some marks and doesn't delete blob files physically.
+    vset_->DestroyColumnFamily(cf_id);
   }
   return s;
 }

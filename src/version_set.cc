@@ -2,7 +2,6 @@
 
 #include <inttypes.h>
 
-#include "util/autovector.h"
 #include "util/filename.h"
 
 namespace rocksdb {
@@ -80,7 +79,8 @@ Status VersionSet::Recover() {
       VersionEdit edit;
       s = DecodeInto(record, &edit);
       if (!s.ok()) return s;
-      Apply(&edit);
+      s = Apply(&edit);
+      if (!s.ok()) return s;
       if (edit.has_next_file_number_) {
         assert(edit.next_file_number_ >= next_file_number);
         next_file_number = edit.next_file_number_;
@@ -102,23 +102,11 @@ Status VersionSet::Recover() {
   std::set<uint64_t> alive_files;
   alive_files.insert(new_manifest_file_number);
   for (const auto& bs : column_families_) {
-    autovector<uint64_t> obsolete_files;
-     for (const auto& f : bs.second->files_) {
-      if (f.second->is_obsolete()) {
-        // delete already obsoleted files at reopen
-        obsolete_files.push_back(f.second->file_number());
-        for (auto it = obsolete_files_.blob_files.begin(); it != obsolete_files_.blob_files.end(); ++it) {
-          if (std::get<0>(*it) == f.second->file_number())  {
-            it = this->obsolete_files_.blob_files.erase(it);
-            break;
-          }
-        }
-      } else {
-        alive_files.insert(f.second->file_number());
-      }
-    }
-    for (uint64_t obsolete_file : obsolete_files) {
-      bs.second->DeleteBlobFile(obsolete_file);
+    // delete obsoleted files at reopen
+    // all the obsolete files's obsolete sequence are 0
+    bs.second->GetObsoleteFiles(nullptr, kMaxSequenceNumber);
+    for (const auto& f : bs.second->files_) {
+      alive_files.insert(f.second->file_number());
     }
   }
   std::vector<std::string> files;
@@ -168,7 +156,7 @@ Status VersionSet::OpenManifest(uint64_t file_number) {
 
   if (!s.ok()) {
     manifest_.reset();
-    obsolete_files_.manifests.emplace_back(file_name);
+    obsolete_manifests_.emplace_back(file_name);
   }
   return s;
 }
@@ -215,16 +203,18 @@ Status VersionSet::LogAndApply(VersionEdit* edit) {
   }
   if (!s.ok()) return s;
 
-  Apply(edit);
-  return s;
+  return Apply(edit);
 }
 
-void VersionSet::Apply(VersionEdit* edit) {
+Status VersionSet::Apply(VersionEdit* edit) {
   auto cf_id = edit->column_family_id_;
   auto it = column_families_.find(cf_id);
   if (it == column_families_.end()) {
-    // Ignore unknown column families.
-    return;
+    // TODO: support OpenForReadOnly which doesn't open DB with all column family
+    // so there are maybe some invalid column family, but we can't just skip it
+    // otherwise blob files of the non-open column families will be regarded as
+    // obsolete and deleted.
+    return Status::OK();
   }
   auto& files = it->second->files_;
 
@@ -238,7 +228,7 @@ void VersionSet::Apply(VersionEdit* edit) {
       fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n", number);
       abort();
     }
-    MarkFileObsolete(blob_it->second, file.second, cf_id);
+    it->second->MarkFileObsolete(blob_it->second, file.second);
   }
 
   for (auto& file : edit->added_files_) {
@@ -256,20 +246,22 @@ void VersionSet::Apply(VersionEdit* edit) {
   }
 
   it->second->ComputeGCScore();
+  return Status::OK();
 }
 
 void VersionSet::AddColumnFamilies(const std::map<uint32_t, TitanCFOptions>& column_families) {
   for (auto& cf : column_families) {
     auto file_cache =
         std::make_shared<BlobFileCache>(db_options_, cf.second, file_cache_);
-    auto blob_storage = std::make_shared<BlobStorage>(cf.second, file_cache);
+    auto blob_storage = std::make_shared<BlobStorage>(db_options_, cf.second, file_cache);
     column_families_.emplace(cf.first, blob_storage);
   }
 }
 
-void VersionSet::DropColumnFamilies(const std::vector<uint32_t>& column_families, SequenceNumber obsolete_sequence) {
-  for (auto& cf : column_families) {
-    auto it = column_families_.find(cf);
+Status VersionSet::DropColumnFamilies(const std::vector<uint32_t>& column_families, SequenceNumber obsolete_sequence) {
+  Status s;
+  for (auto& cf_id : column_families) {
+    auto it = column_families_.find(cf_id);
     if (it != column_families_.end()) {
       VersionEdit edit;
       edit.SetColumnFamilyID(it->first);
@@ -278,51 +270,56 @@ void VersionSet::DropColumnFamilies(const std::vector<uint32_t>& column_families
           file.second->file_number());
         edit.DeleteBlobFile(file.first, obsolete_sequence);
       }
-      // TODO: check status
-      LogAndApply(&edit);
-    }
-    obsolete_columns_.insert(cf);
-  }       
-}
-
-void VersionSet::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file, SequenceNumber obsolete_sequence, uint32_t cf_id) {
-    obsolete_files_.blob_files.push_back(std::make_tuple(file->file_number(), obsolete_sequence, cf_id));
-    file->FileStateTransit(BlobFileMeta::FileEvent::kDelete);
-}
-
-void VersionSet::GetObsoleteFiles(ObsoleteFiles* obsolete_files, SequenceNumber oldest_sequence) {
-  for (auto tuple_it = obsolete_files_.blob_files.begin(); tuple_it != obsolete_files_.blob_files.end();) {
-    auto& obsolete_sequence = std::get<1>(*tuple_it);
-    // We check whether the oldest snapshot is no less than the last sequence
-    // by the time the blob file become obsolete. If so, the blob file is not
-    // visible to all existing snapshots.
-    if (oldest_sequence > obsolete_sequence) {
-      auto& file_number = std::get<0>(*tuple_it);
-      auto& cf_id = std::get<2>(*tuple_it);
-      ROCKS_LOG_INFO(db_options_.info_log,
-        "Obsolete blob file %" PRIu64 " (obsolete at %" PRIu64
-        ") not visible to oldest snapshot %" PRIu64 ", delete it.",
-        file_number, obsolete_sequence, oldest_sequence);
-      // Cleanup obsolete column family when all the blob files for that are deleted.
-      auto it = column_families_.find(cf_id);
-      if (it != column_families_.end()) {
-        it->second->DeleteBlobFile(file_number);
-        if (it->second->files_.empty() && obsolete_columns_.find(cf_id) != obsolete_columns_.end()) {
-          column_families_.erase(it);
-          obsolete_columns_.erase(cf_id);
-        }
-      } else {
-        fprintf(stderr, "column %u not found when deleting obsolete file%" PRIu64 "\n", 
-          cf_id, file_number);
-        abort();        
-      }
-      auto now = tuple_it++;
-      obsolete_files->blob_files.splice(obsolete_files->blob_files.end(), obsolete_files_.blob_files, now);
+      s = LogAndApply(&edit);
+      if (!s.ok()) return s;
     } else {
-      ++tuple_it;
+      ROCKS_LOG_ERROR(db_options_.info_log, 
+        "column %u not found for drop\n", cf_id);
+      return Status::NotFound("invalid column family");
     }
+    obsolete_columns_.insert(cf_id);
+  }  
+  return s; 
+}
+
+Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
+  obsolete_columns_.erase(cf_id);
+  auto it = column_families_.find(cf_id);
+  if (it != column_families_.end()) {
+    it->second->MarkDestroyed();
+    if (it->second->MaybeRemove()) {
+      column_families_.erase(it);
+    }
+    return Status::OK();
   }
-  obsolete_files_.manifests.swap(obsolete_files->manifests);
+  ROCKS_LOG_ERROR(db_options_.info_log, 
+    "column %u not found for destroy\n", cf_id);
+  return Status::NotFound("invalid column family");
+}
+
+void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files, SequenceNumber oldest_sequence) {
+  for (auto it = column_families_.begin(); it != column_families_.end();) {
+    auto& cf_id = it->first;
+    auto& blob_storage = it->second;
+    // In the case of dropping column family, obsolete blob files can be deleted only
+    // after the column family handle is destroyed.
+    if (obsolete_columns_.find(cf_id) != obsolete_columns_.end()) {
+      ++it;
+      continue;
+    }
+
+    blob_storage->GetObsoleteFiles(obsolete_files, oldest_sequence);
+    
+    // Cleanup obsolete column family when all the blob files for that are deleted.
+    if (blob_storage->MaybeRemove()) {
+      it = column_families_.erase(it);
+      continue;
+    }
+    ++it;
+  }
+
+  obsolete_files->insert(obsolete_files->end(), obsolete_manifests_.begin(), obsolete_manifests_.end());
+  obsolete_manifests_.clear();
 }
 
 }  // namespace titandb
