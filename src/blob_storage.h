@@ -102,9 +102,8 @@ class BlobStorage {
   std::vector<GCScore> gc_score_;
 
   std::list<std::pair<uint64_t, SequenceNumber>> obsolete_files_;
-  // It is marked when the column family handle is destroyed, indicating this
-  // structure can be removed after all the blob files of this column family are
-  // physically deleted.
+  // It is marked when the column family handle is destroyed, indicating the
+  // in-memory data structure can be destroyed. Physical files may still be kept.
   bool destroyed_;
 };
 

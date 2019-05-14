@@ -305,6 +305,7 @@ Status TitanDBImpl::DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family)
 
   if (s.ok()) {
     MutexLock l(&mutex_);
+    // it just changes some marks and doesn't delete blob files physically.
     vset_->DestroyColumnFamily(cf_id);
   }
   return s;
