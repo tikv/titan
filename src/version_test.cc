@@ -95,6 +95,10 @@ class VersionTest : public testing::Test {
       }
     }
   }
+
+  void CheckColumnFamiliesSize(uint64_t size) {
+    ASSERT_EQ(vset_->column_families_.size(), size);
+  }
 };
 
 TEST_F(VersionTest, VersionEdit) {
@@ -170,8 +174,10 @@ TEST_F(VersionTest, VersionBuilder) {
 }
 
 TEST_F(VersionTest, ObsoleteFiles) {
+  CheckColumnFamiliesSize(10);
   std::map<uint32_t, TitanCFOptions> m;
   m.insert({1, TitanCFOptions()});
+  m.insert({2, TitanCFOptions()});
   vset_->AddColumnFamilies(m);
   {
     auto add1_1_5 = AddBlobFilesEdit(1, 1, 5);
@@ -193,10 +199,15 @@ TEST_F(VersionTest, ObsoleteFiles) {
   ASSERT_OK(vset_->DropColumnFamilies(cfs, 0));
   vset_->GetObsoleteFiles(&of, kMaxSequenceNumber);
   ASSERT_EQ(of.size(), 1);  
+  CheckColumnFamiliesSize(10);
 
   ASSERT_OK(vset_->DestroyColumnFamily(1));
   vset_->GetObsoleteFiles(&of, kMaxSequenceNumber);
   ASSERT_EQ(of.size(), 4);
+  CheckColumnFamiliesSize(9);
+
+  ASSERT_OK(vset_->DestroyColumnFamily(2));
+  CheckColumnFamiliesSize(8);
 }
 
 }  // namespace titandb
