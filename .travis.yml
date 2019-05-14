@@ -35,16 +35,16 @@ install:
   - if [ "${COMPILER}" == gcc7 ]; then
       CC=gcc-7;
       CXX=g++-7;
-      COVERAGE_OPT="-DCODE_COVERAGE=ON";
+      export COVERAGE_OPT="-DCODE_COVERAGE=ON";
     fi
   - if [ ! -z "${BUILD_TYPE}" ]; then
-      BUILD_OPT="-DCMAKE_BUILD_TYPE=${BUILD_TYPE}";
+      export BUILD_OPT="-DCMAKE_BUILD_TYPE=${BUILD_TYPE}";
     else
-      BUILD_OPT="-DCMAKE_BUILD_TYPE=Debug";
+      export BUILD_OPT="-DCMAKE_BUILD_TYPE=Debug";
     fi
   - if [ ! -z "${SANITIZER}" ]; then
-      SANITIZER_OPT="-DWITH_${SANITIZER}=ON";
-      TOOLS_OPT="-DWITH_TITAN_TOOLS=OFF";
+      export SANITIZER_OPT="-DWITH_${SANITIZER}=ON";
+      export TOOLS_OPT="-DWITH_TITAN_TOOLS=OFF";
     fi
 
 script:
