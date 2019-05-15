@@ -741,14 +741,21 @@ DEFINE_uint64(blob_db_max_ttl_range, 86400,
 DEFINE_uint64(blob_db_ttl_range_secs, 3600,
               "TTL bucket size to use when creating blob files.");
 
-DEFINE_uint64(blob_db_min_blob_size, 0,
-              "Smallest blob to store in a file. Blobs smaller than this "
-              "will be inlined with the key in the LSM tree.");
-
 DEFINE_uint64(blob_db_bytes_per_sync, 0, "Bytes to sync blob file at.");
 
 DEFINE_uint64(blob_db_file_size, 256 * 1024 * 1024,
               "Target size of each blob file.");
+
+DEFINE_uint64(blob_db_min_blob_size, 0,
+              "Smallest blob to store in a file. Blob smaller than this "
+              "will be inlined with the key in the LSM tree.");
+
+// Titan Options
+DEFINE_bool(use_titan, true, "Open a Titan instance.");
+
+DEFINE_uint64(titan_db_min_blob_size, 0,
+              "Smallest blob to store in a file. Blobs smaller than this "
+              "will be inlined with the key in the LSM tree.");
 
 #endif  // ROCKSDB_LITE
 
@@ -1123,8 +1130,6 @@ DEFINE_int32(skip_list_lookahead, 0,
 DEFINE_bool(report_file_operations, false,
             "if report number of file "
             "operations");
-
-DEFINE_bool(use_titan, true, "Open a Titan instance.");
 
 static const bool FLAGS_soft_rate_limit_dummy __attribute__((__unused__)) =
     RegisterFlagValidator(&FLAGS_soft_rate_limit, &ValidateRateLimit);
@@ -3581,7 +3586,7 @@ class Benchmark {
 
     options.listeners.emplace_back(listener_);
 
-    opts->min_blob_size = 0;
+    opts->min_blob_size = FLAGS_titan_db_min_blob_size;
     opts->min_gc_batch_size = 128 << 20;
     opts->blob_file_compression = FLAGS_compression_type_e;
     if (FLAGS_cache_size) {
@@ -3731,13 +3736,13 @@ class Benchmark {
       if (s.ok()) {
         db->db = ptr;
       }
-#endif  // ROCKSDB_LITE
     } else if (FLAGS_use_titan) {
       titandb::TitanDB* ptr;
       s = titandb::TitanDB::Open(options, db_name, &ptr);
       if (s.ok()) {
         db->db = ptr;
       }
+#endif  // ROCKSDB_LITE
     } else {
       s = DB::Open(options, db_name, &db->db);
     }

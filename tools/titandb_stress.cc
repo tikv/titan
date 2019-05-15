@@ -437,6 +437,10 @@ DEFINE_int32(max_background_gc,
              "The maximum number of concurrent background gc "
              "that can occur in parallel.");
 
+DEFINE_uint64(min_blob_size, 0,
+              "Smallest blob to store in a file. Blob smaller than this "
+              "will be inlined with the key in the LSM tree.");
+
 static bool ValidateInt32Percent(const char* flagname, int32_t value) {
   if (value < 0 || value > 100) {
     fprintf(stderr, "Invalid value for --%s: %d, 0<= pct <=100 \n", flagname,
@@ -2314,7 +2318,7 @@ class StressTest {
         options_.blob_file_compression = kLZ4Compression;
         options_.blob_file_target_size = 128 << 20;
         options_.disable_background_gc = FLAGS_disable_background_gc;
-        options_.min_blob_size = 0;
+        options_.min_blob_size = FLAGS_min_blob_size;
         options_.min_gc_batch_size = 0;
         options_.blob_file_discardable_ratio = 0.01;
         options_.max_background_gc = FLAGS_max_background_gc;
