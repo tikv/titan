@@ -32,4 +32,7 @@ cmake .. -DROCKSDB_DIR=<rocksdb_source_dir> -DWITH_SNAPPY=ON
 
 # Run tests after build. You need to filter tests by "titan" prefix.
 ctest -R titan
+
+# To format code, install clang-format and run the script.
+bash scripts/format-diff.sh
 ```

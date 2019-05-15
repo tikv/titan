@@ -1,7 +1,7 @@
 #pragma once
 
-#include "rocksdb/listener.h"
 #include "db_impl.h"
+#include "rocksdb/listener.h"
 
 namespace rocksdb {
 

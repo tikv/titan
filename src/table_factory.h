@@ -1,7 +1,7 @@
 #pragma once
 
-#include "rocksdb/table.h"
 #include "blob_file_manager.h"
+#include "rocksdb/table.h"
 #include "titan/options.h"
 
 namespace rocksdb {

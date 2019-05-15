@@ -1,7 +1,7 @@
 #include "blob_file_iterator.h"
 
-#include "util/crc32c.h"
 #include "util.h"
+#include "util/crc32c.h"
 
 namespace rocksdb {
 namespace titandb {

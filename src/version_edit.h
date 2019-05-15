@@ -2,8 +2,8 @@
 
 #include <set>
 
-#include "rocksdb/slice.h"
 #include "blob_format.h"
+#include "rocksdb/slice.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -21,7 +21,8 @@ class VersionEdit {
     added_files_.push_back(file);
   }
 
-  void DeleteBlobFile(uint64_t file_number, SequenceNumber obsolete_sequence = 0) {
+  void DeleteBlobFile(uint64_t file_number,
+                      SequenceNumber obsolete_sequence = 0) {
     deleted_files_.emplace_back(std::make_pair(file_number, obsolete_sequence));
   }
 

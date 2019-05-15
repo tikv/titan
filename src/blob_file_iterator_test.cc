@@ -2,11 +2,11 @@
 
 #include <cinttypes>
 
-#include "util/filename.h"
-#include "util/testharness.h"
 #include "blob_file_builder.h"
 #include "blob_file_cache.h"
 #include "blob_file_reader.h"
+#include "util/filename.h"
+#include "util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -57,7 +57,8 @@ class BlobFileIteratorTest : public testing::Test {
     {
       std::unique_ptr<WritableFile> f;
       ASSERT_OK(env_->NewWritableFile(file_name_, &f, env_options_));
-      writable_file_.reset(new WritableFileWriter(std::move(f), file_name_, env_options_));
+      writable_file_.reset(
+          new WritableFileWriter(std::move(f), file_name_, env_options_));
     }
     builder_.reset(new BlobFileBuilder(cf_options, writable_file_.get()));
   }

@@ -210,10 +210,10 @@ Status VersionSet::Apply(VersionEdit* edit) {
   auto cf_id = edit->column_family_id_;
   auto it = column_families_.find(cf_id);
   if (it == column_families_.end()) {
-    // TODO: support OpenForReadOnly which doesn't open DB with all column family
-    // so there are maybe some invalid column family, but we can't just skip it
-    // otherwise blob files of the non-open column families will be regarded as
-    // obsolete and deleted.
+    // TODO: support OpenForReadOnly which doesn't open DB with all column
+    // family so there are maybe some invalid column family, but we can't just
+    // skip it otherwise blob files of the non-open column families will be
+    // regarded as obsolete and deleted.
     return Status::OK();
   }
   auto& files = it->second->files_;
@@ -225,7 +225,8 @@ Status VersionSet::Apply(VersionEdit* edit) {
       fprintf(stderr, "blob file %" PRIu64 " doesn't exist before\n", number);
       abort();
     } else if (blob_it->second->is_obsolete()) {
-      fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n", number);
+      fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n",
+              number);
       abort();
     }
     it->second->MarkFileObsolete(blob_it->second, file.second);
@@ -236,9 +237,11 @@ Status VersionSet::Apply(VersionEdit* edit) {
     auto blob_it = files.find(number);
     if (blob_it != files.end()) {
       if (blob_it->second->is_obsolete()) {
-        fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n", number);
+        fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n",
+                number);
       } else {
-        fprintf(stderr, "blob file %" PRIu64 " has been added before\n", number);
+        fprintf(stderr, "blob file %" PRIu64 " has been added before\n",
+                number);
       }
       abort();
     }
@@ -249,37 +252,41 @@ Status VersionSet::Apply(VersionEdit* edit) {
   return Status::OK();
 }
 
-void VersionSet::AddColumnFamilies(const std::map<uint32_t, TitanCFOptions>& column_families) {
+void VersionSet::AddColumnFamilies(
+    const std::map<uint32_t, TitanCFOptions>& column_families) {
   for (auto& cf : column_families) {
     auto file_cache =
         std::make_shared<BlobFileCache>(db_options_, cf.second, file_cache_);
-    auto blob_storage = std::make_shared<BlobStorage>(db_options_, cf.second, file_cache);
+    auto blob_storage =
+        std::make_shared<BlobStorage>(db_options_, cf.second, file_cache);
     column_families_.emplace(cf.first, blob_storage);
   }
 }
 
-Status VersionSet::DropColumnFamilies(const std::vector<uint32_t>& column_families, SequenceNumber obsolete_sequence) {
+Status VersionSet::DropColumnFamilies(
+    const std::vector<uint32_t>& column_families,
+    SequenceNumber obsolete_sequence) {
   Status s;
   for (auto& cf_id : column_families) {
     auto it = column_families_.find(cf_id);
     if (it != column_families_.end()) {
       VersionEdit edit;
       edit.SetColumnFamilyID(it->first);
-      for (auto& file: it->second->files_) {
+      for (auto& file : it->second->files_) {
         ROCKS_LOG_INFO(db_options_.info_log, "Titan add obsolete file [%llu]",
-          file.second->file_number());
+                       file.second->file_number());
         edit.DeleteBlobFile(file.first, obsolete_sequence);
       }
       s = LogAndApply(&edit);
       if (!s.ok()) return s;
     } else {
-      ROCKS_LOG_ERROR(db_options_.info_log, 
-        "column %u not found for drop\n", cf_id);
+      ROCKS_LOG_ERROR(db_options_.info_log, "column %u not found for drop\n",
+                      cf_id);
       return Status::NotFound("invalid column family");
     }
     obsolete_columns_.insert(cf_id);
-  }  
-  return s; 
+  }
+  return s;
 }
 
 Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
@@ -292,25 +299,27 @@ Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
     }
     return Status::OK();
   }
-  ROCKS_LOG_ERROR(db_options_.info_log, 
-    "column %u not found for destroy\n", cf_id);
+  ROCKS_LOG_ERROR(db_options_.info_log, "column %u not found for destroy\n",
+                  cf_id);
   return Status::NotFound("invalid column family");
 }
 
-void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files, SequenceNumber oldest_sequence) {
+void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
+                                  SequenceNumber oldest_sequence) {
   for (auto it = column_families_.begin(); it != column_families_.end();) {
     auto& cf_id = it->first;
     auto& blob_storage = it->second;
-    // In the case of dropping column family, obsolete blob files can be deleted only
-    // after the column family handle is destroyed.
+    // In the case of dropping column family, obsolete blob files can be deleted
+    // only after the column family handle is destroyed.
     if (obsolete_columns_.find(cf_id) != obsolete_columns_.end()) {
       ++it;
       continue;
     }
 
     blob_storage->GetObsoleteFiles(obsolete_files, oldest_sequence);
-    
-    // Cleanup obsolete column family when all the blob files for that are deleted.
+
+    // Cleanup obsolete column family when all the blob files for that are
+    // deleted.
     if (blob_storage->MaybeRemove()) {
       it = column_families_.erase(it);
       continue;
@@ -318,7 +327,8 @@ void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files, Sequ
     ++it;
   }
 
-  obsolete_files->insert(obsolete_files->end(), obsolete_manifests_.begin(), obsolete_manifests_.end());
+  obsolete_files->insert(obsolete_files->end(), obsolete_manifests_.begin(),
+                         obsolete_manifests_.end());
   obsolete_manifests_.clear();
 }
 

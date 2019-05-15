@@ -1,9 +1,9 @@
 #pragma once
 
-#include "db/db_impl.h"
-#include "util/repeatable_thread.h"
-#include "titan/db.h"
 #include "blob_file_manager.h"
+#include "db/db_impl.h"
+#include "titan/db.h"
+#include "util/repeatable_thread.h"
 #include "version_set.h"
 
 namespace rocksdb {
@@ -71,6 +71,7 @@ class TitanDBImpl : public TitanDB {
   void OnCompactionCompleted(const CompactionJobInfo& compaction_job_info);
 
   void StartBackgroundTasks();
+
  private:
   class FileManager;
   friend class FileManager;

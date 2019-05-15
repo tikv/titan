@@ -1,11 +1,11 @@
 #include "blob_gc_picker.h"
 
-#include "util/filename.h"
-#include "util/testharness.h"
 #include "blob_file_builder.h"
 #include "blob_file_cache.h"
 #include "blob_file_iterator.h"
 #include "blob_file_reader.h"
+#include "util/filename.h"
+#include "util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -22,8 +22,10 @@ class BlobGCPickerTest : public testing::Test {
                                const TitanCFOptions& titan_cf_options) {
     auto blob_file_cache = std::make_shared<BlobFileCache>(
         titan_db_options, titan_cf_options, NewLRUCache(128));
-    blob_storage_.reset(new BlobStorage(titan_db_options, titan_cf_options, blob_file_cache));
-    basic_blob_gc_picker_.reset(new BasicBlobGCPicker(titan_db_options, titan_cf_options));
+    blob_storage_.reset(
+        new BlobStorage(titan_db_options, titan_cf_options, blob_file_cache));
+    basic_blob_gc_picker_.reset(
+        new BasicBlobGCPicker(titan_db_options, titan_cf_options));
   }
 
   void AddBlobFile(uint64_t file_number, uint64_t file_size,
