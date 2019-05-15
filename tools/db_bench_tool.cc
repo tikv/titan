@@ -730,14 +730,18 @@ DEFINE_uint64(blob_db_max_ttl_range, 86400,
 DEFINE_uint64(blob_db_ttl_range_secs, 3600,
               "TTL bucket size to use when creating blob files.");
 
-DEFINE_uint64(blob_db_min_blob_size, 0,
-              "Smallest blob to store in a file. Blobs smaller than this "
-              "will be inlined with the key in the LSM tree.");
-
 DEFINE_uint64(blob_db_bytes_per_sync, 0, "Bytes to sync blob file at.");
 
 DEFINE_uint64(blob_db_file_size, 256 * 1024 * 1024,
               "Target size of each blob file.");
+
+// Titan Options
+DEFINE_bool(use_titan, true, "Open a Titan instance.");
+
+// Shared Options
+DEFINE_uint64(min_blob_size, 0,
+              "Smallest blob to store in a file. Blobs smaller than this "
+              "will be inlined with the key in the LSM tree.");
 
 #endif  // ROCKSDB_LITE
 
@@ -1096,8 +1100,6 @@ DEFINE_int32(skip_list_lookahead, 0, "Used with skip_list memtablerep; try "
              "position");
 DEFINE_bool(report_file_operations, false, "if report number of file "
             "operations");
-
-DEFINE_bool(use_titan, true, "Open a Titan instance.");
 
 static const bool FLAGS_soft_rate_limit_dummy __attribute__((__unused__)) =
     RegisterFlagValidator(&FLAGS_soft_rate_limit, &ValidateRateLimit);
@@ -3570,7 +3572,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
 
     options.listeners.emplace_back(listener_);
     
-    opts->min_blob_size = 0;
+    opts->min_blob_size = FLAGS_min_blob_size;
     opts->min_gc_batch_size = 128 << 20;
     opts->blob_file_compression = FLAGS_compression_type_e;
     if (FLAGS_cache_size) {
@@ -3712,7 +3714,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
       blob_db_options.is_fifo = FLAGS_blob_db_is_fifo;
       blob_db_options.max_db_size = FLAGS_blob_db_max_db_size;
       blob_db_options.ttl_range_secs = FLAGS_blob_db_ttl_range_secs;
-      blob_db_options.min_blob_size = FLAGS_blob_db_min_blob_size;
+      blob_db_options.min_blob_size = FLAGS_min_blob_size;
       blob_db_options.bytes_per_sync = FLAGS_blob_db_bytes_per_sync;
       blob_db_options.blob_file_size = FLAGS_blob_db_file_size;
       blob_db::BlobDB* ptr = nullptr;
@@ -3720,13 +3722,13 @@ void VerifyDBFromDB(std::string& truth_db_name) {
       if (s.ok()) {
         db->db = ptr;
       }
-#endif  // ROCKSDB_LITE
     } else if (FLAGS_use_titan) {
       titandb::TitanDB* ptr;
       s = titandb::TitanDB::Open(options, db_name, &ptr);
       if (s.ok()) {
         db->db = ptr;
       }
+#endif  // ROCKSDB_LITE
     } else {
       s = DB::Open(options, db_name, &db->db);
     }
