@@ -1,8 +1,8 @@
 #include "blob_gc_job.h"
 
-#include "util/testharness.h"
 #include "blob_gc_picker.h"
 #include "db_impl.h"
+#include "util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -42,7 +42,9 @@ class BlobGCJobTest : public testing::Test {
   ~BlobGCJobTest() {}
 
   void CheckBlobNumber(int expected) {
-    auto b = version_set_->GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
+    auto b =
+        version_set_->GetBlobStorage(base_db_->DefaultColumnFamily()->GetID())
+            .lock();
     ASSERT_EQ(expected, b->files_.size());
   }
 
@@ -80,7 +82,7 @@ class BlobGCJobTest : public testing::Test {
   }
 
   void DestroyDB() {
-    Status s __attribute__((__unused__)) = db_->Close(); 
+    Status s __attribute__((__unused__)) = db_->Close();
     assert(s.ok());
     delete db_;
     db_ = nullptr;
@@ -121,7 +123,7 @@ class BlobGCJobTest : public testing::Test {
         s = blob_gc_job.Run();
         mutex_->Lock();
       }
-      
+
       if (s.ok()) {
         s = blob_gc_job.Finish();
         ASSERT_OK(s);
@@ -182,12 +184,14 @@ class BlobGCJobTest : public testing::Test {
       db_->Delete(WriteOptions(), GenKey(i));
     }
     Flush();
-    auto b = version_set_->GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
+    auto b =
+        version_set_->GetBlobStorage(base_db_->DefaultColumnFamily()->GetID())
+            .lock();
     ASSERT_EQ(b->files_.size(), 1);
     auto old = b->files_.begin()->first;
-//    for (auto& f : b->files_) {
-//      f.second->marked_for_sample = false;
-//    }
+    //    for (auto& f : b->files_) {
+    //      f.second->marked_for_sample = false;
+    //    }
     std::unique_ptr<BlobFileIterator> iter;
     ASSERT_OK(NewIterator(b->files_.begin()->second->file_number(),
                           b->files_.begin()->second->file_size(), &iter));
@@ -198,7 +202,8 @@ class BlobGCJobTest : public testing::Test {
       ASSERT_TRUE(iter->key().compare(Slice(GenKey(i))) == 0);
     }
     RunGC();
-    b = version_set_->GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
+    b = version_set_->GetBlobStorage(base_db_->DefaultColumnFamily()->GetID())
+            .lock();
     ASSERT_EQ(b->files_.size(), 1);
     auto new1 = b->files_.begin()->first;
     ASSERT_TRUE(old != new1);
@@ -234,14 +239,15 @@ TEST_F(BlobGCJobTest, DiscardEntry) { TestDiscardEntry(); }
 
 TEST_F(BlobGCJobTest, RunGC) { TestRunGC(); }
 
-// Tests blob file will be kept after GC, if it is still visible by active snapshots.
+// Tests blob file will be kept after GC, if it is still visible by active
+// snapshots.
 TEST_F(BlobGCJobTest, PurgeBlobs) {
   NewDB();
 
   auto snap1 = db_->GetSnapshot();
-  
+
   for (int i = 0; i < 10; i++) {
-      db_->Put(WriteOptions(), GenKey(i), GenValue(i));
+    db_->Put(WriteOptions(), GenKey(i), GenValue(i));
   }
   Flush();
   CheckBlobNumber(1);
@@ -254,7 +260,7 @@ TEST_F(BlobGCJobTest, PurgeBlobs) {
   Flush();
   CheckBlobNumber(1);
   auto snap4 = db_->GetSnapshot();
-  
+
   RunGC();
   CheckBlobNumber(1);
 
@@ -264,7 +270,7 @@ TEST_F(BlobGCJobTest, PurgeBlobs) {
   Flush();
   auto snap5 = db_->GetSnapshot();
   CheckBlobNumber(2);
-  
+
   db_->ReleaseSnapshot(snap2);
   RunGC();
   CheckBlobNumber(2);
@@ -280,7 +286,7 @@ TEST_F(BlobGCJobTest, PurgeBlobs) {
   db_->ReleaseSnapshot(snap4);
   RunGC();
   CheckBlobNumber(1);
-  
+
   db_->ReleaseSnapshot(snap5);
   RunGC();
   CheckBlobNumber(1);

@@ -40,8 +40,8 @@ class BlobFileSizeCollectorTest : public testing::Test {
   void NewFileWriter(std::unique_ptr<WritableFileWriter>* result) {
     std::unique_ptr<WritableFile> writable_file;
     ASSERT_OK(env_->NewWritableFile(file_name_, &writable_file, env_options_));
-    result->reset(
-        new WritableFileWriter(std::move(writable_file), file_name_, env_options_));
+    result->reset(new WritableFileWriter(std::move(writable_file), file_name_,
+                                         env_options_));
     ASSERT_TRUE(*result);
   }
 

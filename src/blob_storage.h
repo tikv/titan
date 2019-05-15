@@ -2,10 +2,10 @@
 
 #include <inttypes.h>
 
-#include "rocksdb/options.h"
 #include "blob_file_cache.h"
 #include "blob_format.h"
 #include "blob_gc.h"
+#include "rocksdb/options.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -21,12 +21,16 @@ class BlobStorage {
     this->cf_options_ = bs.cf_options_;
   }
 
-  BlobStorage(const TitanDBOptions& _db_options, const TitanCFOptions& _cf_options,
+  BlobStorage(const TitanDBOptions& _db_options,
+              const TitanCFOptions& _cf_options,
               std::shared_ptr<BlobFileCache> _file_cache)
-      : db_options_(_db_options), cf_options_(_cf_options), file_cache_(_file_cache), destroyed_(false) {}
+      : db_options_(_db_options),
+        cf_options_(_cf_options),
+        file_cache_(_file_cache),
+        destroyed_(false) {}
 
   ~BlobStorage() {
-    for (auto& file: files_) {
+    for (auto& file : files_) {
       file_cache_->Evict(file.second->file_number());
     }
   }
@@ -45,11 +49,11 @@ class BlobStorage {
   // corruption if the file doesn't exist in the specific version.
   std::weak_ptr<BlobFileMeta> FindFile(uint64_t file_number) const;
 
-  std::size_t NumBlobFiles() const { 
+  std::size_t NumBlobFiles() const {
     ReadLock rl(&mutex_);
-    return files_.size(); 
+    return files_.size();
   }
-  
+
   void ExportBlobFiles(
       std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
@@ -78,9 +82,11 @@ class BlobStorage {
 
   void AddBlobFile(std::shared_ptr<BlobFileMeta>& file);
 
-  void GetObsoleteFiles(std::vector<std::string>* obsolete_files, SequenceNumber oldest_sequence);
+  void GetObsoleteFiles(std::vector<std::string>* obsolete_files,
+                        SequenceNumber oldest_sequence);
 
-  void MarkFileObsolete(std::shared_ptr<BlobFileMeta> file, SequenceNumber obsolete_sequence);
+  void MarkFileObsolete(std::shared_ptr<BlobFileMeta> file,
+                        SequenceNumber obsolete_sequence);
 
  private:
   friend class VersionSet;
@@ -92,7 +98,7 @@ class BlobStorage {
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
 
-  // Read Write Mutex, which protects the `files_` structures 
+  // Read Write Mutex, which protects the `files_` structures
   mutable port::RWMutex mutex_;
 
   // Only BlobStorage OWNS BlobFileMeta
@@ -103,7 +109,8 @@ class BlobStorage {
 
   std::list<std::pair<uint64_t, SequenceNumber>> obsolete_files_;
   // It is marked when the column family handle is destroyed, indicating the
-  // in-memory data structure can be destroyed. Physical files may still be kept.
+  // in-memory data structure can be destroyed. Physical files may still be
+  // kept.
   bool destroyed_;
 };
 

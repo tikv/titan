@@ -1,7 +1,7 @@
-#include "util/filename.h"
-#include "util/testharness.h"
 #include "testutil.h"
 #include "util.h"
+#include "util/filename.h"
+#include "util/testharness.h"
 #include "version_edit.h"
 #include "version_set.h"
 
@@ -82,7 +82,7 @@ class VersionTest : public testing::Test {
       auto& storage = column_families_[it.first];
       // ignore obsolete file
       auto size = 0;
-      for (auto& file: it.second->files_) {
+      for (auto& file : it.second->files_) {
         if (!file.second->is_obsolete()) {
           size++;
         }
@@ -198,7 +198,7 @@ TEST_F(VersionTest, ObsoleteFiles) {
   std::vector<uint32_t> cfs = {1};
   ASSERT_OK(vset_->DropColumnFamilies(cfs, 0));
   vset_->GetObsoleteFiles(&of, kMaxSequenceNumber);
-  ASSERT_EQ(of.size(), 1);  
+  ASSERT_EQ(of.size(), 1);
   CheckColumnFamiliesSize(10);
 
   ASSERT_OK(vset_->DestroyColumnFamily(1));

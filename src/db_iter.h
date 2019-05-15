@@ -25,7 +25,7 @@ class TitanDBIterator : public Iterator {
 
   Status status() const override {
     // assume volatile inner iter
-    if(status_.ok()) {
+    if (status_.ok()) {
       return iter_->status();
     } else {
       return status_;
