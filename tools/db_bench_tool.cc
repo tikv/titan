@@ -735,11 +735,14 @@ DEFINE_uint64(blob_db_bytes_per_sync, 0, "Bytes to sync blob file at.");
 DEFINE_uint64(blob_db_file_size, 256 * 1024 * 1024,
               "Target size of each blob file.");
 
+DEFINE_uint64(blob_db_min_blob_size, 0,
+              "Smallest blob to store in a file. Blob smaller than this "
+              "will be inlined with the key in the LSM tree.");
+
 // Titan Options
 DEFINE_bool(use_titan, true, "Open a Titan instance.");
 
-// Shared Options
-DEFINE_uint64(min_blob_size, 0,
+DEFINE_uint64(titan_db_min_blob_size, 0,
               "Smallest blob to store in a file. Blobs smaller than this "
               "will be inlined with the key in the LSM tree.");
 
@@ -3572,7 +3575,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
 
     options.listeners.emplace_back(listener_);
     
-    opts->min_blob_size = FLAGS_min_blob_size;
+    opts->min_blob_size = FLAGS_titan_db_min_blob_size;
     opts->min_gc_batch_size = 128 << 20;
     opts->blob_file_compression = FLAGS_compression_type_e;
     if (FLAGS_cache_size) {
@@ -3714,7 +3717,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
       blob_db_options.is_fifo = FLAGS_blob_db_is_fifo;
       blob_db_options.max_db_size = FLAGS_blob_db_max_db_size;
       blob_db_options.ttl_range_secs = FLAGS_blob_db_ttl_range_secs;
-      blob_db_options.min_blob_size = FLAGS_min_blob_size;
+      blob_db_options.min_blob_size = FLAGS_blob_db_min_blob_size;
       blob_db_options.bytes_per_sync = FLAGS_blob_db_bytes_per_sync;
       blob_db_options.blob_file_size = FLAGS_blob_db_file_size;
       blob_db::BlobDB* ptr = nullptr;
