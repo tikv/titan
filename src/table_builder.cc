@@ -12,7 +12,33 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     return;
   }
 
-  if (ikey.type != kTypeValue || value.size() < cf_options_.min_blob_size) {
+  std::shared_ptr<VersionSet> vset;
+  if (ikey.type != kTypeValue &&
+      cf_options_.blob_run_mode == TitanBlobRunMode::kFallback &&
+      (vset = vset_ref_.lock()) != nullptr) {
+
+    Slice copy = value;
+    uint64_t cf_id = GetTableProperties().column_family_id;
+    BlobIndex index;
+    Status s = index.DecodeFrom(&copy);
+    assert(s.ok());
+
+    BlobRecord record;
+    PinnableSlice buffer;
+
+    auto storage = vset->GetBlobStorage(cf_id).lock();
+
+    ReadOptions options; // dummy option
+    s = storage->Get(options, index, &record, &buffer);
+    if (s.ok()) {
+      base_builder_->Add(key, record.value);
+      return;
+    }
+  }
+
+  if (ikey.type != kTypeValue ||
+      value.size() < cf_options_.min_blob_size ||
+      cf_options_.blob_run_mode != TitanBlobRunMode::kNormal) {
     base_builder_->Add(key, value);
     return;
   }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blob_file_manager.h"
+#include "version_set.h"
 #include "rocksdb/table.h"
 #include "titan/options.h"
 
@@ -11,11 +12,13 @@ class TitanTableFactory : public TableFactory {
  public:
   TitanTableFactory(const TitanDBOptions& db_options,
                     const TitanCFOptions& cf_options,
-                    std::shared_ptr<BlobFileManager> blob_manager)
+                    std::shared_ptr<BlobFileManager> blob_manager,
+                    std::shared_ptr<VersionSet> vset)
       : db_options_(db_options),
         cf_options_(cf_options),
         base_factory_(cf_options.table_factory),
-        blob_manager_(blob_manager) {}
+        blob_manager_(blob_manager),
+        vset_(vset) {}
 
   const char* Name() const override { return "TitanTable"; }
 
@@ -45,6 +48,8 @@ class TitanTableFactory : public TableFactory {
 
   void* GetOptions() override { return base_factory_->GetOptions(); }
 
+  TitanCFOptions* GetCFOptions() { return &cf_options_; }
+
   bool IsDeleteRangeSupported() const override {
     return base_factory_->IsDeleteRangeSupported();
   }
@@ -54,6 +59,7 @@ class TitanTableFactory : public TableFactory {
   TitanCFOptions cf_options_;
   std::shared_ptr<TableFactory> base_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
+  std::shared_ptr<VersionSet> vset_;
 };
 
 }  // namespace titandb

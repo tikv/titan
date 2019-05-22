@@ -1,5 +1,6 @@
 #include <inttypes.h>
 #include <options/cf_options.h>
+#include <unordered_map>
 
 #include "blob_file_iterator.h"
 #include "blob_file_reader.h"
@@ -605,6 +606,40 @@ TEST_F(TitanDBTest, BlobFileCorruptionErrorHandling) {
   SyncPoint::GetInstance()->ClearAllCallBacks();
 }
 #endif  // !NDEBUG
+
+TEST_F(TitanDBTest, BlobRunModeBasic) {
+  Open();
+  const uint64_t kNumEntries = 100;
+  std::map<std::string, std::string> data;
+  for (uint64_t i = 1; i <= kNumEntries; i++) {
+    Put(i, &data);
+  }
+  ASSERT_EQ(kNumEntries, data.size());
+  VerifyDB(data);
+  Flush();
+  VerifyDB(data);
+
+  std::unordered_map<std::string, std::string> opts;
+  opts["blob_run_mode"] = "readonly";
+  db_->SetOptions(opts);
+  for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
+    Put(i, &data);
+  }
+  ASSERT_EQ(kNumEntries * 2, data.size());
+  VerifyDB(data);
+  Flush();
+  VerifyDB(data);
+
+  opts["blob_run_mode"] = "fallback";
+  db_->SetOptions(opts);
+  for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
+    Put(i, &data);
+  }
+  ASSERT_EQ(kNumEntries * 2, data.size());
+  VerifyDB(data);
+  Flush();
+  VerifyDB(data);
+}
 
 }  // namespace titandb
 }  // namespace rocksdb

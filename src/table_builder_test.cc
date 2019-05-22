@@ -81,7 +81,7 @@ class TableBuilderTest : public testing::Test {
     cf_options_.min_blob_size = kMinBlobSize;
     blob_manager_.reset(new FileManager(db_options_));
     table_factory_.reset(
-        new TitanTableFactory(db_options_, cf_options_, blob_manager_));
+        new TitanTableFactory(db_options_, cf_options_, blob_manager_, nullptr));
   }
 
   ~TableBuilderTest() {

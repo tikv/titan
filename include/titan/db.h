@@ -98,6 +98,16 @@ class TitanDB : public StackableDB {
       const int output_path_id = -1,
       std::vector<std::string>* const output_file_names = nullptr,
       CompactionJobInfo* compaction_job_info = nullptr) override = 0;
+
+  using rocksdb::StackableDB::GetOptions;
+  Options GetOptions(ColumnFamilyHandle* column_family) const override = 0;
+
+  using rocksdb::StackableDB::SetOptions;
+  Status SetOptions(ColumnFamilyHandle* column_family,
+                    const std::unordered_map<std::string, std::string>& new_options) override = 0;
+  Status SetOptions(const std::unordered_map<std::string, std::string>& new_options) override {
+    return SetOptions(DefaultColumnFamily(), new_options);
+  }
 };
 
 }  // namespace titandb

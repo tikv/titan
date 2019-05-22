@@ -66,6 +66,10 @@ class TitanDBImpl : public TitanDB {
   using TitanDB::GetOptions;
   Options GetOptions(ColumnFamilyHandle* column_family) const override;
 
+  using TitanDB::SetOptions;
+  Status SetOptions(ColumnFamilyHandle* column_family,
+                    const std::unordered_map<std::string, std::string>& new_options) override;
+
   void OnFlushCompleted(const FlushJobInfo& flush_job_info);
 
   void OnCompactionCompleted(const CompactionJobInfo& compaction_job_info);
@@ -149,7 +153,7 @@ class TitanDBImpl : public TitanDB {
   // handle for purging obsolete blob files at fixed intervals
   std::unique_ptr<RepeatableThread> thread_purge_obsolete_;
 
-  std::unique_ptr<VersionSet> vset_;
+  std::shared_ptr<VersionSet> vset_;
   std::set<uint64_t> pending_outputs_;
   std::shared_ptr<BlobFileManager> blob_manager_;
 

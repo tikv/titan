@@ -2,6 +2,7 @@
 
 #include "blob_file_builder.h"
 #include "blob_file_manager.h"
+#include "version_set.h"
 #include "table/table_builder.h"
 #include "titan/options.h"
 
@@ -13,12 +14,14 @@ class TitanTableBuilder : public TableBuilder {
   TitanTableBuilder(uint32_t cf_id, const TitanDBOptions& db_options,
                     const TitanCFOptions& cf_options,
                     std::unique_ptr<TableBuilder> base_builder,
-                    std::shared_ptr<BlobFileManager> blob_manager)
+                    std::shared_ptr<BlobFileManager> blob_manager,
+                    std::shared_ptr<VersionSet> vset)
       : cf_id_(cf_id),
         db_options_(db_options),
         cf_options_(cf_options),
         base_builder_(std::move(base_builder)),
-        blob_manager_(blob_manager) {}
+        blob_manager_(blob_manager),
+        vset_ref_(vset) {}
 
   void Add(const Slice& key, const Slice& value) override;
 
@@ -49,6 +52,7 @@ class TitanTableBuilder : public TableBuilder {
   std::unique_ptr<BlobFileHandle> blob_handle_;
   std::shared_ptr<BlobFileManager> blob_manager_;
   std::unique_ptr<BlobFileBuilder> blob_builder_;
+  std::weak_ptr<VersionSet> vset_ref_;
 };
 
 }  // namespace titandb
