@@ -8,8 +8,11 @@ namespace titandb {
 class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
  public:
   GarbageCollectionWriteCallback(ColumnFamilyHandle* cfh, std::string&& _key,
-                                 BlobIndex&& blob_index)
-      : cfh_(cfh), key_(std::move(_key)), blob_index_(blob_index) {
+                                 BlobIndex&& blob_index, Statistics* stats)
+      : cfh_(cfh),
+        key_(std::move(_key)),
+        blob_index_(blob_index),
+        stats_(stats) {
     assert(!key_.empty());
   }
 
@@ -26,6 +29,7 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
       fprintf(stderr, "GetImpl err, status:%s\n", s.ToString().c_str());
       abort();
     }
+    RecordTick(stats_, BLOB_DB_BYTES_READ, key_.size() + index_entry.size());
     if (s.IsNotFound()) {
       // Either the key is deleted or updated with a newer version which is
       // inlined in LSM.
@@ -48,6 +52,12 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
       }
     }
 
+    if (!s.ok()) {
+      RecordTick(stats_, BLOB_DB_BLOB_INDEX_EVICTED_COUNT);
+      RecordTick(stats_, BLOB_DB_BLOB_INDEX_EVICTED_SIZE,
+                 key_.size() + index_entry.size());
+    }
+
     return s;
   }
 
@@ -60,6 +70,7 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
   // Key to check
   std::string key_;
   BlobIndex blob_index_;
+  Statistics* stats_;
 };
 
 BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
@@ -78,7 +89,8 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
       blob_file_manager_(blob_file_manager),
       version_set_(version_set),
       log_buffer_(log_buffer),
-      shuting_down_(shuting_down) {}
+      shuting_down_(shuting_down),
+      stats_(db_options_.statistics.get()) {}
 
 BlobGCJob::~BlobGCJob() {
   if (cmp_) delete cmp_;
@@ -140,6 +152,8 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
     return true;
   }
 
+  // TODO: add do sample count metrics
+
   Status s;
   uint64_t sample_size_window = static_cast<uint64_t>(
       file->file_size() * blob_gc_->titan_cf_options().sample_file_size_ratio);
@@ -185,6 +199,7 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
       discardable_size += total_length;
     }
   }
+  RecordTick(stats_, BLOB_DB_BYTES_READ, iterated_size);
   assert(iter.status().ok());
 
   return discardable_size >=
@@ -230,6 +245,7 @@ Status BlobGCJob::DoRunGC() {
       break;
     }
     BlobIndex blob_index = gc_iter->GetBlobIndex();
+    RecordTick(stats_, BLOB_DB_BYTES_READ, blob_index.blob_handle.size);
     if (!last_key.empty() && !gc_iter->key().compare(last_key)) {
       if (last_key_valid) {
         continue;
@@ -259,8 +275,9 @@ Status BlobGCJob::DoRunGC() {
       if (!s.ok()) {
         break;
       }
-      blob_file_builder = unique_ptr<BlobFileBuilder>(new BlobFileBuilder(
-          blob_gc_->titan_cf_options(), blob_file_handle->GetFile()));
+      blob_file_builder = unique_ptr<BlobFileBuilder>(
+          new BlobFileBuilder(db_options_, blob_gc_->titan_cf_options(),
+                              blob_file_handle->GetFile()));
       file_size = 0;
     }
     assert(blob_file_handle);
@@ -269,8 +286,8 @@ Status BlobGCJob::DoRunGC() {
     BlobRecord blob_record;
     blob_record.key = gc_iter->key();
     blob_record.value = gc_iter->value();
-
-    //    file_size_ += blob_record.key.size() + blob_record.value.size();
+    RecordTick(stats_, BLOB_DB_BYTES_WRITTEN,
+               blob_record.key.size() + blob_record.value.size());
 
     BlobIndex new_blob_index;
     new_blob_index.file_number = blob_file_handle->GetNumber();
@@ -280,13 +297,15 @@ Status BlobGCJob::DoRunGC() {
 
     // Store WriteBatch for rewriting new Key-Index pairs to LSM
     GarbageCollectionWriteCallback callback(cfh, blob_record.key.ToString(),
-                                            std::move(blob_index));
+                                            std::move(blob_index), stats_);
     callback.value = index_entry;
     rewrite_batches_.emplace_back(
         std::make_pair(WriteBatch(), std::move(callback)));
     auto& wb = rewrite_batches_.back().first;
     s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), blob_record.key,
                                          index_entry);
+    RecordTick(stats_, BLOB_DB_BYTES_WRITTEN,
+               blob_record.key.size() + index_entry.size());
     if (!s.ok()) {
       break;
     }
@@ -341,7 +360,11 @@ bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
     fprintf(stderr, "GetImpl err, status:%s\n", s.ToString().c_str());
     abort();
   }
+  RecordTick(stats_, BLOB_DB_BYTES_READ, key.size() + index_entry.size());
   if (s.IsNotFound() || !is_blob_index) {
+    RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN);
+    RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
+               key.size() + blob_index.blob_handle.size);
     // Either the key is deleted or updated with a newer version which is
     // inlined in LSM.
     return true;
@@ -353,7 +376,13 @@ bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
     abort();
   }
 
-  return !(blob_index == other_blob_index);
+  bool relocate = !(blob_index == other_blob_index);
+  if (relocate) {
+    RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED);
+    RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
+               key.size() + blob_index.blob_handle.size);
+  }
+  return relocate;
 }
 
 // We have to make sure crash consistency, but LSM db MANIFEST and BLOB db
@@ -384,6 +413,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     if (!s.ok()) {
       break;
     }
+    RecordTick(stats_, BLOB_DB_GC_NUM_NEW_FILES);
   }
   if (s.ok()) {
     std::vector<std::pair<std::shared_ptr<BlobFileMeta>,

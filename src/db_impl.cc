@@ -113,7 +113,8 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
       dbname_(dbname),
       env_(options.env),
       env_options_(options),
-      db_options_(options) {
+      db_options_(options),
+      stats_(options.statistics.get()) {
   if (db_options_.dirname.empty()) {
     db_options_.dirname = dbname_ + "/titandb";
   }
@@ -124,7 +125,7 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
 
 TitanDBImpl::~TitanDBImpl() { Close(); }
 
-// how often to schedule delete obs files periods
+// how often to schedule delete obsolete blob files periods
 static constexpr uint32_t kDeleteObsoleteFilesPeriodSecs = 10;  // 10s
 
 void TitanDBImpl::StartBackgroundTasks() {
@@ -352,6 +353,8 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                         nullptr /*read_callback*/, &is_blob_index);
   if (!s.ok() || !is_blob_index) return s;
 
+  StopWatch get_sw(env_, stats_, BLOB_DB_GET_MICROS);
+
   BlobIndex index;
   s = index.DecodeFrom(value);
   assert(s.ok());
@@ -364,7 +367,12 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   auto storage = vset_->GetBlobStorage(handle->GetID()).lock();
   mutex_.Unlock();
 
-  s = storage->Get(options, index, &record, &buffer);
+  {
+    StopWatch read_sw(env_, stats_, BLOB_DB_BLOB_FILE_READ_MICROS);
+    s = storage->Get(options, index, &record, &buffer);
+    RecordTick(stats_, BLOB_DB_NUM_KEYS_READ);
+    RecordTick(stats_, BLOB_DB_BLOB_FILE_BYTES_READ, index.blob_handle.size);
+  }
   if (s.IsCorruption()) {
     ROCKS_LOG_DEBUG(db_options_.info_log,
                     "Key:%s Snapshot:%" PRIu64 " GetBlobFile err:%s\n",
@@ -410,6 +418,70 @@ std::vector<Status> TitanDBImpl::MultiGetImpl(
   return res;
 }
 
+// class TitanDBImpl::BlobInserter : public WriteBatch::Handler {
+//  private:
+//   const WriteOptions& options_;
+//   BlobDBImpl* blob_db_impl_;
+//   uint32_t default_cf_id_;
+//   WriteBatch batch_;
+
+//  public:
+//   BlobInserter(const WriteOptions& options, BlobDBImpl* blob_db_impl,
+//                uint32_t default_cf_id)
+//       : options_(options),
+//         blob_db_impl_(blob_db_impl),
+//         default_cf_id_(default_cf_id) {}
+
+//   WriteBatch* batch() { return &batch_; }
+
+//   virtual Status PutCF(uint32_t column_family_id, const Slice& key,
+//                        const Slice& value) override {
+//     if (column_family_id != default_cf_id_) {
+//       return Status::NotSupported(
+//           "Blob DB doesn't support non-default column family.");
+//     }
+//     Status s = blob_db_impl_->PutBlobValue(options_, key, value,
+//     kNoExpiration,
+//                                            &batch_);
+//     return s;
+//   }
+
+//   virtual Status DeleteCF(uint32_t column_family_id,
+//                           const Slice& key) override {
+//     if (column_family_id != default_cf_id_) {
+//       return Status::NotSupported(
+//           "Blob DB doesn't support non-default column family.");
+//     }
+//     Status s = WriteBatchInternal::Delete(&batch_, column_family_id, key);
+//     return s;
+//   }
+
+//   virtual Status DeleteRange(uint32_t column_family_id, const Slice&
+//   begin_key,
+//                              const Slice& end_key) {
+//     if (column_family_id != default_cf_id_) {
+//       return Status::NotSupported(
+//           "Blob DB doesn't support non-default column family.");
+//     }
+//     Status s = WriteBatchInternal::DeleteRange(&batch_, column_family_id,
+//                                                begin_key, end_key);
+//     return s;
+//   }
+
+//   virtual Status SingleDeleteCF(uint32_t /*column_family_id*/,
+//                                 const Slice& /*key*/) override {
+//     return Status::NotSupported("Not supported operation in blob db.");
+//   }
+
+//   virtual Status MergeCF(uint32_t /*column_family_id*/, const Slice& /*key*/,
+//                          const Slice& /*value*/) override {
+//     return Status::NotSupported("Not supported operation in blob db.");
+//   }
+
+//   virtual void LogData(const Slice& blob) override { batch_.PutLogData(blob);
+//   }
+// };
+
 Iterator* TitanDBImpl::NewIterator(const ReadOptions& options,
                                    ColumnFamilyHandle* handle) {
   ReadOptions options_copy = options;
@@ -437,7 +509,7 @@ Iterator* TitanDBImpl::NewIteratorImpl(
       options, cfd, options.snapshot->GetSequenceNumber(),
       nullptr /*read_callback*/, true /*allow_blob*/, true /*allow_refresh*/));
   return new TitanDBIterator(options, storage.lock().get(), snapshot,
-                             std::move(iter));
+                             std::move(iter), env_, stats_);
 }
 
 Status TitanDBImpl::NewIterators(

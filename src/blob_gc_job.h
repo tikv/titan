@@ -5,6 +5,7 @@
 #include "blob_file_manager.h"
 #include "blob_gc.h"
 #include "db/db_impl.h"
+#include "rocksdb/statistics.h"
 #include "rocksdb/status.h"
 #include "titan/options.h"
 #include "version_set.h"
@@ -56,6 +57,8 @@ class BlobGCJob {
   InternalKeyComparator* cmp_{nullptr};
 
   std::atomic_bool* shuting_down_{nullptr};
+
+  Statistics* stats_;
 
   Status SampleCandidateFiles();
   bool DoSample(const BlobFileMeta* file);
