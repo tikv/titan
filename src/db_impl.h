@@ -67,8 +67,9 @@ class TitanDBImpl : public TitanDB {
   Options GetOptions(ColumnFamilyHandle* column_family) const override;
 
   using TitanDB::SetOptions;
-  Status SetOptions(ColumnFamilyHandle* column_family,
-                    const std::unordered_map<std::string, std::string>& new_options) override;
+  Status SetOptions(
+      ColumnFamilyHandle* column_family,
+      const std::unordered_map<std::string, std::string>& new_options) override;
 
   void OnFlushCompleted(const FlushJobInfo& flush_job_info);
 

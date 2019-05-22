@@ -2,9 +2,9 @@
 
 #include "blob_file_builder.h"
 #include "blob_file_manager.h"
-#include "version_set.h"
 #include "table/table_builder.h"
 #include "titan/options.h"
+#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {

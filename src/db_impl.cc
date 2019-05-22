@@ -266,8 +266,7 @@ Status TitanDBImpl::CreateColumnFamilies(
     ColumnFamilyOptions options = desc.options;
     // Replaces the provided table factory with TitanTableFactory.
     options.table_factory.reset(
-        new TitanTableFactory(db_options_, desc.options, blob_manager_,
-                              vset_));
+        new TitanTableFactory(db_options_, desc.options, blob_manager_, vset_));
     base_descs.emplace_back(desc.name, options);
   }
 
@@ -477,30 +476,32 @@ Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
   return options;
 }
 
-Status TitanDBImpl::SetOptions(ColumnFamilyHandle* column_family,
-                               const std::unordered_map<std::string, std::string>& new_options) {
-  if(new_options.empty()) {
+Status TitanDBImpl::SetOptions(
+    ColumnFamilyHandle* column_family,
+    const std::unordered_map<std::string, std::string>& new_options) {
+  if (new_options.empty()) {
     return Status::InvalidArgument("Empty input");
   }
   auto p = new_options.find("blob_run_mode");
-  if(p != new_options.end()) {
-    if(column_family != DefaultColumnFamily()) {
+  if (p != new_options.end()) {
+    if (column_family != DefaultColumnFamily()) {
       return Status::NotSupported("BlobRunMode not implemented on thi CF");
     }
     TitanBlobRunMode mode = TitanBlobRunMode::kNormal;
-    if(p->second == "normal") {
+    if (p->second == "normal") {
       mode = TitanBlobRunMode::kNormal;
-    } else if(p->second == "readonly") {
+    } else if (p->second == "readonly") {
       mode = TitanBlobRunMode::kReadOnly;
-    } else if(p->second == "fallback") {
+    } else if (p->second == "fallback") {
       mode = TitanBlobRunMode::kFallback;
     } else {
       return Status::InvalidArgument("No BlobRunMode defined for " + p->second);
     }
     Options opts = db_->GetOptions(column_family);
-    auto table_factory = reinterpret_cast<TitanTableFactory*>(opts.table_factory.get());
+    auto table_factory =
+        reinterpret_cast<TitanTableFactory*>(opts.table_factory.get());
     table_factory->GetCFOptions()->blob_run_mode = mode;
-    return Status::OK(); // omit other options
+    return Status::OK();  // omit other options
   }
   return Status::NotSupported("Not implemented");
 }

@@ -16,7 +16,6 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   if (ikey.type != kTypeValue &&
       cf_options_.blob_run_mode == TitanBlobRunMode::kFallback &&
       (vset = vset_ref_.lock()) != nullptr) {
-
     Slice copy = value;
     uint64_t cf_id = GetTableProperties().column_family_id;
     BlobIndex index;
@@ -28,7 +27,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
 
     auto storage = vset->GetBlobStorage(cf_id).lock();
 
-    ReadOptions options; // dummy option
+    ReadOptions options;  // dummy option
     s = storage->Get(options, index, &record, &buffer);
     if (s.ok()) {
       base_builder_->Add(key, record.value);
@@ -36,8 +35,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     }
   }
 
-  if (ikey.type != kTypeValue ||
-      value.size() < cf_options_.min_blob_size ||
+  if (ikey.type != kTypeValue || value.size() < cf_options_.min_blob_size ||
       cf_options_.blob_run_mode != TitanBlobRunMode::kNormal) {
     base_builder_->Add(key, value);
     return;

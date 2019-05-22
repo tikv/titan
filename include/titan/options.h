@@ -32,11 +32,11 @@ struct TitanDBOptions : public DBOptions {
 };
 
 enum class TitanBlobRunMode {
-  kNormal = 0,     // Titan process read/write as normal
-  kReadOnly = 1,  // Titan stop writing value into blob log during flush 
-                  // and compaction. Existing values in blob log is still 
+  kNormal = 0,    // Titan process read/write as normal
+  kReadOnly = 1,  // Titan stop writing value into blob log during flush
+                  // and compaction. Existing values in blob log is still
                   // readable and garbage collected.
-  kFallback = 2,  // On flush and compaction, Titan will convert blob 
+  kFallback = 2,  // On flush and compaction, Titan will convert blob
                   // index into real value, by reading from blob log, 
                   // and store the value in SST file.
 };
@@ -88,7 +88,7 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: 8MB
   uint64_t merge_small_file_threshold{8 << 20};
 
-  // The blob running mode used to turn off Titan. This option is only 
+  // The blob running mode used to turn off Titan. This option is only
   // valid for default column family using key-value seperation.
   //
   // Default: kNormal
