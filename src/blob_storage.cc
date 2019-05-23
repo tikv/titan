@@ -52,7 +52,6 @@ void BlobStorage::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file,
   WriteLock wl(&mutex_);
   obsolete_files_.push_back(
       std::make_pair(file->file_number(), obsolete_sequence));
-  RecordTick(stats_, BLOB_DB_GC_NUM_FILES);
   file->FileStateTransit(BlobFileMeta::FileEvent::kDelete);
 }
 

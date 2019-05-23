@@ -168,7 +168,7 @@ class BlobGCJobTest : public testing::Test {
     BlobGCJob blob_gc_job(&blob_gc, base_db_, mutex_, TitanDBOptions(),
                           Env::Default(), EnvOptions(), nullptr, version_set_,
                           nullptr, nullptr);
-    ASSERT_FALSE(blob_gc_job.DiscardEntry(key, blob_index, false));
+    ASSERT_FALSE(blob_gc_job.DiscardEntry(key, blob_index));
     DestroyDB();
   }
 

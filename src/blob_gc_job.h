@@ -46,7 +46,7 @@ class BlobGCJob {
   Env* env_;
   EnvOptions env_options_;
   BlobFileManager* blob_file_manager_;
-  titandb::VersionSet* version_set_;
+  VersionSet* version_set_;
   LogBuffer* log_buffer_{nullptr};
 
   std::vector<std::pair<std::unique_ptr<BlobFileHandle>,
@@ -54,21 +54,30 @@ class BlobGCJob {
       blob_file_builders_;
   std::vector<std::pair<WriteBatch, GarbageCollectionWriteCallback>>
       rewrite_batches_;
-  InternalKeyComparator* cmp_{nullptr};
 
   std::atomic_bool* shuting_down_{nullptr};
 
   Statistics* stats_;
 
+  struct {
+    uint64_t blob_db_bytes_read;
+    uint64_t blob_db_bytes_written;
+    uint64_t blob_db_gc_num_keys_overwritten;
+    uint64_t blob_db_gc_bytes_overwritten;
+    uint64_t blob_db_gc_num_keys_relocated;
+    uint64_t blob_db_gc_bytes_relocated;
+    uint64_t blob_db_gc_num_new_files;
+    uint64_t blob_db_gc_num_files;
+  } metrics_;
+
   Status SampleCandidateFiles();
   bool DoSample(const BlobFileMeta* file);
   Status DoRunGC();
   Status BuildIterator(std::unique_ptr<BlobFileMergeIterator>* result);
-  bool DiscardEntry(const Slice& key, const BlobIndex& blob_index,
-                    bool enable_metrics);
+  bool DiscardEntry(const Slice& key, const BlobIndex& blob_index);
   Status InstallOutputBlobFiles();
   Status RewriteValidKeyToLSM();
-  Status DeleteInputBlobFiles() const;
+  Status DeleteInputBlobFiles();
 
   bool IsShutingDown();
 };

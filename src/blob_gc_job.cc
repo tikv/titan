@@ -9,10 +9,7 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
  public:
   GarbageCollectionWriteCallback(ColumnFamilyHandle* cfh, std::string&& _key,
                                  BlobIndex&& blob_index, Statistics* stats)
-      : cfh_(cfh),
-        key_(std::move(_key)),
-        blob_index_(blob_index),
-        stats_(stats) {
+      : cfh_(cfh), key_(std::move(_key)), blob_index_(blob_index) {
     assert(!key_.empty());
   }
 
@@ -29,7 +26,7 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
       fprintf(stderr, "GetImpl err, status:%s\n", s.ToString().c_str());
       abort();
     }
-    RecordTick(stats_, BLOB_DB_BYTES_READ, key_.size() + index_entry.size());
+    read_bytes_ = key_.size() + index_entry.size();
     if (s.IsNotFound()) {
       // Either the key is deleted or updated with a newer version which is
       // inlined in LSM.
@@ -49,14 +46,7 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
 
       if (!(blob_index_ == other_blob_index)) {
         s = Status::Busy("key overwritten with other blob");
-        RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED);
-        RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
-                   key_.size() + index_entry.size());
       }
-    } else {
-      RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN);
-      RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
-                 key_.size() + index_entry.size());
     }
 
     return s;
@@ -66,12 +56,16 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
 
   std::string key() { return key_; }
 
+  uint64_t read_bytes() { return read_bytes_; }
+
+  uint64_t blob_record_size() { return blob_index_.blob_handle.size; }
+
  private:
   ColumnFamilyHandle* cfh_;
   // Key to check
   std::string key_;
   BlobIndex blob_index_;
-  Statistics* stats_;
+  uint64_t read_bytes_;
 };
 
 BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
@@ -94,7 +88,20 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
       stats_(db_options_.statistics.get()) {}
 
 BlobGCJob::~BlobGCJob() {
-  if (cmp_) delete cmp_;
+  // flush metrics
+  RecordTick(stats_, BLOB_DB_BYTES_READ, metrics_.blob_db_bytes_read);
+  RecordTick(stats_, BLOB_DB_BYTES_WRITTEN, metrics_.blob_db_bytes_written);
+  RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN,
+             metrics_.blob_db_gc_num_keys_overwritten);
+  RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
+             metrics_.blob_db_gc_bytes_overwritten);
+  RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED,
+             metrics_.blob_db_gc_num_keys_relocated);
+  RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
+             metrics_.blob_db_gc_bytes_relocated);
+  RecordTick(stats_, BLOB_DB_GC_NUM_NEW_FILES,
+             metrics_.blob_db_gc_num_new_files);
+  RecordTick(stats_, BLOB_DB_GC_NUM_FILES, metrics_.blob_db_gc_num_files);
 }
 
 Status BlobGCJob::Prepare() { return Status::OK(); }
@@ -196,11 +203,11 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
     BlobIndex blob_index = iter.GetBlobIndex();
     uint64_t total_length = blob_index.blob_handle.size;
     iterated_size += total_length;
-    if (DiscardEntry(iter.key(), blob_index, false)) {
+    if (DiscardEntry(iter.key(), blob_index)) {
       discardable_size += total_length;
     }
   }
-  RecordTick(stats_, BLOB_DB_BYTES_READ, iterated_size);
+  metrics_.blob_db_bytes_read += iterated_size;
   assert(iter.status().ok());
 
   return discardable_size >=
@@ -246,7 +253,9 @@ Status BlobGCJob::DoRunGC() {
       break;
     }
     BlobIndex blob_index = gc_iter->GetBlobIndex();
-    RecordTick(stats_, BLOB_DB_BYTES_READ, blob_index.blob_handle.size);
+    // count read bytes for blob record of gc candidate files
+    metrics_.blob_db_bytes_read += blob_index.blob_handle.size;
+
     if (!last_key.empty() && !gc_iter->key().compare(last_key)) {
       if (last_key_valid) {
         continue;
@@ -256,7 +265,9 @@ Status BlobGCJob::DoRunGC() {
       last_key_valid = false;
     }
 
-    if (DiscardEntry(gc_iter->key(), blob_index, true)) {
+    if (DiscardEntry(gc_iter->key(), blob_index)) {
+      metrics_.blob_db_gc_num_keys_overwritten++;
+      metrics_.blob_db_gc_bytes_overwritten += blob_index.blob_handle.size;
       continue;
     }
 
@@ -287,8 +298,10 @@ Status BlobGCJob::DoRunGC() {
     BlobRecord blob_record;
     blob_record.key = gc_iter->key();
     blob_record.value = gc_iter->value();
-    RecordTick(stats_, BLOB_DB_BYTES_WRITTEN,
-               blob_record.key.size() + blob_record.value.size());
+    // count written bytes for new blob record,
+    // blob index's size is counted in `RewriteValidKeyToLSM`
+    metrics_.blob_db_bytes_written +=
+        blob_record.key.size() + blob_record.value.size();
 
     BlobIndex new_blob_index;
     new_blob_index.file_number = blob_file_handle->GetNumber();
@@ -305,8 +318,6 @@ Status BlobGCJob::DoRunGC() {
     auto& wb = rewrite_batches_.back().first;
     s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), blob_record.key,
                                          index_entry);
-    RecordTick(stats_, BLOB_DB_BYTES_WRITTEN,
-               blob_record.key.size() + index_entry.size());
     if (!s.ok()) {
       break;
     }
@@ -351,8 +362,7 @@ Status BlobGCJob::BuildIterator(unique_ptr<BlobFileMergeIterator>* result) {
   return s;
 }
 
-bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
-                             bool enable_metrics) {
+bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
   PinnableSlice index_entry;
   bool is_blob_index;
   auto s = base_db_impl_->GetImpl(
@@ -362,13 +372,9 @@ bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
     fprintf(stderr, "GetImpl err, status:%s\n", s.ToString().c_str());
     abort();
   }
-  RecordTick(stats_, BLOB_DB_BYTES_READ, key.size() + index_entry.size());
+  // count read bytes for checking LSM entry
+  metrics_.blob_db_bytes_read += key.size() + index_entry.size();
   if (s.IsNotFound() || !is_blob_index) {
-    if (enable_metrics) {
-      RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN);
-      RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
-                 key.size() + blob_index.blob_handle.size);
-    }
     // Either the key is deleted or updated with a newer version which is
     // inlined in LSM.
     return true;
@@ -380,13 +386,7 @@ bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
     abort();
   }
 
-  bool relocate = !(blob_index == other_blob_index);
-  if (relocate && enable_metrics) {
-    RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED);
-    RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
-               key.size() + blob_index.blob_handle.size);
-  }
-  return relocate;
+  return !(blob_index == other_blob_index);
 }
 
 // We have to make sure crash consistency, but LSM db MANIFEST and BLOB db
@@ -417,7 +417,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     if (!s.ok()) {
       break;
     }
-    RecordTick(stats_, BLOB_DB_GC_NUM_NEW_FILES);
+    metrics_.blob_db_gc_num_new_files++;
   }
   if (s.ok()) {
     std::vector<std::pair<std::shared_ptr<BlobFileMeta>,
@@ -458,13 +458,23 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
     }
     s = db_impl->WriteWithCallback(wo, &write_batch.first, &write_batch.second);
     if (s.ok()) {
-      // Key is successfully written to LSM
+      // count written bytes for new blob index.
+      metrics_.blob_db_bytes_written += write_batch.first.GetDataSize();
+      metrics_.blob_db_gc_num_keys_relocated++;
+      metrics_.blob_db_gc_bytes_relocated +=
+          write_batch.second.blob_record_size();
+      // Key is successfully written to LSM.
     } else if (s.IsBusy()) {
+      metrics_.blob_db_gc_num_keys_overwritten++;
+      metrics_.blob_db_gc_bytes_overwritten +=
+          write_batch.second.blob_record_size();
       // The key is overwritten in the meanwhile. Drop the blob record.
     } else {
       // We hit an error.
       break;
     }
+    // count read bytes in write callback
+    metrics_.blob_db_bytes_read += write_batch.second.read_bytes();
   }
   if (s.IsBusy()) {
     s = Status::OK();
@@ -477,7 +487,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
   return s;
 }
 
-Status BlobGCJob::DeleteInputBlobFiles() const {
+Status BlobGCJob::DeleteInputBlobFiles() {
   SequenceNumber obsolete_sequence = base_db_impl_->GetLatestSequenceNumber();
 
   Status s;
@@ -486,6 +496,7 @@ Status BlobGCJob::DeleteInputBlobFiles() const {
   for (const auto& file : blob_gc_->sampled_inputs()) {
     ROCKS_LOG_INFO(db_options_.info_log, "Titan add obsolete file [%llu]",
                    file->file_number());
+    metrics_.blob_db_gc_num_files++;
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
   }
   s = version_set_->LogAndApply(&edit);
