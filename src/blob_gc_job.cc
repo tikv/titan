@@ -361,12 +361,8 @@ bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
 // added to db before we rewrite any key to LSM
 Status BlobGCJob::Finish() {
   Status s;
-  {
-    mutex_->Unlock();
-    s = InstallOutputBlobFiles();
-    if (s.ok()) s = RewriteValidKeyToLSM();
-    mutex_->Lock();
-  }
+  s = InstallOutputBlobFiles();
+  if (s.ok()) s = RewriteValidKeyToLSM();
 
   // TODO(@DorianZheng) cal discardable size for new blob file
 

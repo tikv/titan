@@ -31,18 +31,13 @@ void TitanDBImpl::BackgroundCallGC() {
   LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
 
   {
-    MutexLock l(&mutex_);
     assert(bg_gc_scheduled_ > 0);
 
     BackgroundGC(&log_buffer);
+    log_buffer.FlushBufferToLog();
+    LogFlush(db_options_.info_log.get());
 
-    {
-      mutex_.Unlock();
-      log_buffer.FlushBufferToLog();
-      LogFlush(db_options_.info_log.get());
-      mutex_.Lock();
-    }
-
+    MutexLock l(&mutex_);
     bg_gc_scheduled_--;
     if (bg_gc_scheduled_ == 0) {
       // signal if
@@ -59,12 +54,11 @@ void TitanDBImpl::BackgroundCallGC() {
 }
 
 Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
-  mutex_.AssertHeld();
-
   std::unique_ptr<BlobGC> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;
   Status s;
 
+  mutex_.Lock();
   if (!gc_queue_.empty()) {
     uint32_t column_family_id = PopFirstFromGCQueue();
 
@@ -80,6 +74,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
       blob_gc->SetColumnFamily(cfh.get());
     }
   }
+  mutex_.Unlock();
 
   // TODO(@DorianZheng) Make sure enough room for GC
 
@@ -91,17 +86,12 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
                           env_options_, blob_manager_.get(), vset_.get(),
                           log_buffer, &shuting_down_);
     s = blob_gc_job.Prepare();
-
     if (s.ok()) {
-      mutex_.Unlock();
       s = blob_gc_job.Run();
-      mutex_.Lock();
     }
-
     if (s.ok()) {
       s = blob_gc_job.Finish();
     }
-
     blob_gc->ReleaseGcFiles();
   }
 

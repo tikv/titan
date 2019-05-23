@@ -108,6 +108,7 @@ class BlobGCJobTest : public testing::Test {
           version_set_->GetBlobStorage(cfh->GetID()).lock().get());
     }
 
+    mutex_->Unlock();
     if (blob_gc) {
       blob_gc->SetColumnFamily(cfh);
 
@@ -118,10 +119,8 @@ class BlobGCJobTest : public testing::Test {
       s = blob_gc_job.Prepare();
       ASSERT_OK(s);
 
-      {
-        mutex_->Unlock();
+      if (s.ok()) {
         s = blob_gc_job.Run();
-        mutex_->Lock();
       }
 
       if (s.ok()) {
@@ -129,8 +128,6 @@ class BlobGCJobTest : public testing::Test {
         ASSERT_OK(s);
       }
     }
-
-    mutex_->Unlock();
     tdb_->PurgeObsoleteFiles();
     mutex_->Lock();
   }
