@@ -51,7 +51,7 @@ class VersionSet {
   uint64_t NewFileNumber() { return next_file_number_.fetch_add(1); }
 
   std::weak_ptr<BlobStorage> GetBlobStorage(uint32_t cf_id) {
-    MutexLock l(&mutex_);
+    ReadLock l(&mutex_);
     auto it = column_families_.find(cf_id);
     if (it != column_families_.end()) {
       return it->second;
@@ -63,7 +63,7 @@ class VersionSet {
                         SequenceNumber oldest_sequence);
 
   void MarkAllFilesForGC() {
-    MutexLock l(&mutex_);
+    ReadLock l(&mutex_);
     for (auto& cf : column_families_) {
       cf.second->MarkAllFilesForGC();
     }
@@ -81,9 +81,10 @@ class VersionSet {
 
   Status Apply(VersionEdit* edit);
 
+  // REQUIRES: write lock is held
   Status LogAndApplyLocked(VersionEdit* edit);
 
-  port::Mutex mutex_;
+  port::RWMutex mutex_;
 
   std::string dirname_;
   Env* env_;

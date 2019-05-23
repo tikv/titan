@@ -193,12 +193,13 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
 }
 
 Status VersionSet::LogAndApply(VersionEdit* edit) {
-  MutexLock l(&mutex_);
+  WriteLock l(&mutex_);
   return LogAndApplyLocked(edit);
 }
 
 Status VersionSet::LogAndApplyLocked(VersionEdit* edit) {
   // TODO(@huachao): write manifest file unlocked
+  mutex_.AssertHeld();
   std::string record;
   edit->SetNextFileNumber(next_file_number_.load());
   edit->EncodeTo(&record);
@@ -260,7 +261,7 @@ Status VersionSet::Apply(VersionEdit* edit) {
 
 void VersionSet::AddColumnFamilies(
     const std::map<uint32_t, TitanCFOptions>& column_families) {
-  MutexLock l(&mutex_);
+  ReadLock l(&mutex_);
   for (auto& cf : column_families) {
     auto file_cache =
         std::make_shared<BlobFileCache>(db_options_, cf.second, file_cache_);
@@ -273,7 +274,7 @@ void VersionSet::AddColumnFamilies(
 Status VersionSet::DropColumnFamilies(
     const std::vector<uint32_t>& column_families,
     SequenceNumber obsolete_sequence) {
-  MutexLock l(&mutex_);
+  ReadLock l(&mutex_);
   Status s;
   for (auto& cf_id : column_families) {
     auto it = column_families_.find(cf_id);
@@ -298,7 +299,7 @@ Status VersionSet::DropColumnFamilies(
 }
 
 Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
-  MutexLock l(&mutex_);
+  WriteLock l(&mutex_);
   obsolete_columns_.erase(cf_id);
   auto it = column_families_.find(cf_id);
   if (it != column_families_.end()) {
@@ -315,7 +316,7 @@ Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
 
 void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                                   SequenceNumber oldest_sequence) {
-  MutexLock l(&mutex_);
+  WriteLock l(&mutex_);
   for (auto it = column_families_.begin(); it != column_families_.end();) {
     auto& cf_id = it->first;
     auto& blob_storage = it->second;
