@@ -482,7 +482,7 @@ Status TitanDBImpl::SetOptions(
   if (new_options.empty()) {
     return Status::InvalidArgument("Empty input");
   }
-  auto p = new_options.find("blob_run_mode");
+  auto p = new_options.find("blob-run-mode");
   if (p != new_options.end()) {
     if (column_family != DefaultColumnFamily()) {
       return Status::NotSupported("BlobRunMode not implemented on thi CF");
@@ -490,7 +490,7 @@ Status TitanDBImpl::SetOptions(
     TitanBlobRunMode mode = TitanBlobRunMode::kNormal;
     if (p->second == "normal") {
       mode = TitanBlobRunMode::kNormal;
-    } else if (p->second == "readonly") {
+    } else if (p->second == "read-only") {
       mode = TitanBlobRunMode::kReadOnly;
     } else if (p->second == "fallback") {
       mode = TitanBlobRunMode::kFallback;

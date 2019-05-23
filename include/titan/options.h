@@ -37,7 +37,7 @@ enum class TitanBlobRunMode {
                   // and compaction. Existing values in blob log is still
                   // readable and garbage collected.
   kFallback = 2,  // On flush and compaction, Titan will convert blob
-                  // index into real value, by reading from blob log, 
+                  // index into real value, by reading from blob log,
                   // and store the value in SST file.
 };
 

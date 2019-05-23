@@ -620,7 +620,7 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   VerifyDB(data);
 
   std::unordered_map<std::string, std::string> opts;
-  opts["blob_run_mode"] = "readonly";
+  opts["blob-run-mode"] = "read-only";
   db_->SetOptions(opts);
   for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
     Put(i, &data);
@@ -630,7 +630,7 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   Flush();
   VerifyDB(data);
 
-  opts["blob_run_mode"] = "fallback";
+  opts["blob-run-mode"] = "fallback";
   db_->SetOptions(opts);
   for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
     Put(i, &data);
