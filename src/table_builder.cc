@@ -12,12 +12,11 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     return;
   }
 
-  std::shared_ptr<VersionSet> vset;
-  if (ikey.type != kTypeValue &&
+  if (ikey.type == kTypeBlobIndex &&
       cf_options_.blob_run_mode == TitanBlobRunMode::kFallback &&
-      (vset = vset_ref_.lock()) != nullptr) {
+      vset_ != nullptr) {
+    // we ingest value from blob file
     Slice copy = value;
-    uint64_t cf_id = GetTableProperties().column_family_id;
     BlobIndex index;
     Status s = index.DecodeFrom(&copy);
     assert(s.ok());
@@ -25,30 +24,34 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     BlobRecord record;
     PinnableSlice buffer;
 
-    auto storage = vset->GetBlobStorage(cf_id).lock();
+    auto storage = vset_->GetBlobStorage(cf_id_).lock();
 
     ReadOptions options;  // dummy option
     s = storage->Get(options, index, &record, &buffer);
     if (s.ok()) {
-      base_builder_->Add(key, record.value);
-      return;
+      ikey.type = kTypeValue;
+      std::string index_key;
+      AppendInternalKey(&index_key, ikey);
+      base_builder_->Add(index_key, record.value);
+    } else {
+      status_ = s;
     }
-  }
-
-  if (ikey.type != kTypeValue || value.size() < cf_options_.min_blob_size ||
-      cf_options_.blob_run_mode != TitanBlobRunMode::kNormal) {
+  } else if (ikey.type == kTypeValue &&
+             value.size() >= cf_options_.min_blob_size &&
+             cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
+    // we write to blob file and insert index
+    std::string index_value;
+    AddBlob(ikey.user_key, value, &index_value);
+    if (ok()) {
+      ikey.type = kTypeBlobIndex;
+      std::string index_key;
+      AppendInternalKey(&index_key, ikey);
+      base_builder_->Add(index_key, index_value);
+    }
+  } else {
     base_builder_->Add(key, value);
-    return;
   }
-
-  std::string index_value;
-  AddBlob(ikey.user_key, value, &index_value);
-  if (!ok()) return;
-
-  ikey.type = kTypeBlobIndex;
-  std::string index_key;
-  AppendInternalKey(&index_key, ikey);
-  base_builder_->Add(index_key, index_value);
+  return;
 }
 
 void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,

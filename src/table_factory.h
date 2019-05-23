@@ -13,7 +13,7 @@ class TitanTableFactory : public TableFactory {
   TitanTableFactory(const TitanDBOptions& db_options,
                     const TitanCFOptions& cf_options,
                     std::shared_ptr<BlobFileManager> blob_manager,
-                    std::shared_ptr<VersionSet> vset)
+                    VersionSet* vset)
       : db_options_(db_options),
         cf_options_(cf_options),
         base_factory_(cf_options.table_factory),
@@ -59,7 +59,7 @@ class TitanTableFactory : public TableFactory {
   TitanCFOptions cf_options_;
   std::shared_ptr<TableFactory> base_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
-  std::shared_ptr<VersionSet> vset_;
+  VersionSet* vset_;
 };
 
 }  // namespace titandb

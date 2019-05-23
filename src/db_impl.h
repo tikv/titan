@@ -2,6 +2,7 @@
 
 #include "blob_file_manager.h"
 #include "db/db_impl.h"
+#include "table_factory.h"
 #include "titan/db.h"
 #include "util/repeatable_thread.h"
 #include "version_set.h"
@@ -150,6 +151,8 @@ class TitanDBImpl : public TitanDB {
   TitanDBOptions db_options_;
   std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
       original_table_factory_;
+  std::unordered_map<uint32_t, std::shared_ptr<TitanTableFactory>>
+      derived_table_factory_;
 
   // handle for purging obsolete blob files at fixed intervals
   std::unique_ptr<RepeatableThread> thread_purge_obsolete_;

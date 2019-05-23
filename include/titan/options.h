@@ -2,6 +2,8 @@
 
 #include "rocksdb/options.h"
 
+#include <unordered_map>
+
 namespace rocksdb {
 namespace titandb {
 
@@ -40,6 +42,14 @@ enum class TitanBlobRunMode {
                   // index into real value, by reading from blob log,
                   // and store the value in SST file.
 };
+
+struct TitanOptionsHelper {
+  static std::unordered_map<std::string, TitanBlobRunMode>
+      blob_run_mode_string_map;
+};
+
+static auto& blob_run_mode_string_map =
+    TitanOptionsHelper::blob_run_mode_string_map;
 
 struct TitanCFOptions : public ColumnFamilyOptions {
   // The smallest value to store in blob files. Value smaller than
@@ -88,8 +98,7 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: 8MB
   uint64_t merge_small_file_threshold{8 << 20};
 
-  // The blob running mode used to turn off Titan. This option is only
-  // valid for default column family using key-value seperation.
+  // The mode used to process blob file.
   //
   // Default: kNormal
   TitanBlobRunMode blob_run_mode{TitanBlobRunMode::kNormal};
