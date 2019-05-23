@@ -51,9 +51,10 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
-      RecordTick(stats_, BLOB_DB_BLOB_FILE_SYNCED);
+      RecordTick(db_->stats_, BLOB_DB_BLOB_FILE_SYNCED);
       {
-        StopWatch sync_sw(env_, stats_, BLOB_DB_BLOB_FILE_SYNC_MICROS);
+        StopWatch sync_sw(db_->env_, db_->stats_,
+                          BLOB_DB_BLOB_FILE_SYNC_MICROS);
         s = file.second->GetFile()->Sync(false);
       }
       if (s.ok()) {

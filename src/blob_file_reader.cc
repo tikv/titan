@@ -47,7 +47,8 @@ void EncodeBlobCache(std::string* dst, const Slice& prefix, uint64_t offset) {
 Status BlobFileReader::Open(const TitanCFOptions& options,
                             std::unique_ptr<RandomAccessFileReader> file,
                             uint64_t file_size,
-                            std::unique_ptr<BlobFileReader>* result) {
+                            std::unique_ptr<BlobFileReader>* result,
+                            Statistics* stats) {
   if (file_size < BlobFileFooter::kEncodedLength) {
     return Status::Corruption("file is too short to be a blob file");
   }
@@ -59,15 +60,19 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
   BlobFileFooter footer;
   TRY(DecodeInto(buffer, &footer));
 
-  auto reader = new BlobFileReader(options, std::move(file));
+  auto reader = new BlobFileReader(options, std::move(file), stats);
   reader->footer_ = footer;
   result->reset(reader);
   return Status::OK();
 }
 
 BlobFileReader::BlobFileReader(const TitanCFOptions& options,
-                               std::unique_ptr<RandomAccessFileReader> file)
-    : options_(options), file_(std::move(file)), cache_(options.blob_cache) {
+                               std::unique_ptr<RandomAccessFileReader> file,
+                               Statistics* stats)
+    : options_(options),
+      file_(std::move(file)),
+      cache_(options.blob_cache),
+      stats_(stats) {
   if (cache_) {
     GenerateCachePrefix(&cache_prefix_, cache_.get(), file_->file());
   }

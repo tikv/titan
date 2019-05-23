@@ -77,7 +77,8 @@ Status BlobFileCache::FindFile(uint64_t file_number, uint64_t file_size,
   }
 
   std::unique_ptr<BlobFileReader> reader;
-  s = BlobFileReader::Open(cf_options_, std::move(file), file_size, &reader);
+  s = BlobFileReader::Open(cf_options_, std::move(file), file_size, &reader,
+                           stats_);
   if (!s.ok()) return s;
 
   cache_->Insert(cache_key, reader.release(), 1,

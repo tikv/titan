@@ -49,13 +49,13 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
 
       if (!(blob_index_ == other_blob_index)) {
         s = Status::Busy("key overwritten with other blob");
-        RecordTick(stats_, BLOB_DB_BLOB_INDEX_RELOCATED_COUNT);
-        RecordTick(stats_, BLOB_DB_BLOB_INDEX_RELOCATED_SIZE,
+        RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED);
+        RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
                    key_.size() + index_entry.size());
       }
     } else {
-      RecordTick(stats_, BLOB_DB_BLOB_INDEX_OVERWRITTEN_COUNT);
-      RecordTick(stats_, BLOB_DB_BLOB_INDEX_OVERWRITTEN_SIZE,
+      RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN);
+      RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
                  key_.size() + index_entry.size());
     }
 

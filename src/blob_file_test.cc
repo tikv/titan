@@ -120,7 +120,7 @@ class BlobFileTest : public testing::Test {
     std::unique_ptr<BlobFileReader> blob_file_reader;
     ASSERT_OK(BlobFileReader::Open(cf_options,
                                    std::move(random_access_file_reader),
-                                   file_size, &blob_file_reader));
+                                   file_size, &blob_file_reader, nullptr));
     for (int i = 0; i < n; i++) {
       auto key = std::to_string(i);
       auto value = std::string(1024, i);
