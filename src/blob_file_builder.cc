@@ -8,9 +8,7 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
                                  WritableFileWriter* file)
     : cf_options_(cf_options),
       file_(file),
-      encoder_(cf_options_.blob_file_compression),
-      stats_(db_options.statistics.get()),
-      env_(db_options.env) {
+      encoder_(cf_options_.blob_file_compression) {
   BlobFileHeader header;
   std::string buffer;
   header.EncodeTo(&buffer);
