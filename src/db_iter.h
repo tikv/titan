@@ -38,32 +38,36 @@ class TitanDBIterator : public Iterator {
 
   void SeekToFirst() override {
     iter_->SeekToFirst();
-    StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
-    if (GetBlobValue()) {
+    if (Check()) {
+      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
   }
 
   void SeekToLast() override {
     iter_->SeekToLast();
-    StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
-    if (GetBlobValue()) {
+    if (Check()) {
+      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
   }
 
   void Seek(const Slice& target) override {
     iter_->Seek(target);
-    StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
-    if (GetBlobValue()) {
+    if (Check()) {
+      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
   }
 
   void SeekForPrev(const Slice& target) override {
     iter_->SeekForPrev(target);
-    StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
-    if (GetBlobValue()) {
+    if (Check()) {
+      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
   }
@@ -71,8 +75,9 @@ class TitanDBIterator : public Iterator {
   void Next() override {
     assert(Valid());
     iter_->Next();
-    StopWatch next_sw(env_, stats_, BLOB_DB_NEXT_MICROS);
-    if (GetBlobValue()) {
+    if (Check()) {
+      StopWatch next_sw(env_, stats_, BLOB_DB_NEXT_MICROS);
+      GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_NEXT);
     }
   }
@@ -80,8 +85,9 @@ class TitanDBIterator : public Iterator {
   void Prev() override {
     assert(Valid());
     iter_->Prev();
-    StopWatch prev_sw(env_, stats_, BLOB_DB_PREV_MICROS);
-    if (GetBlobValue()) {
+    if (Check()) {
+      StopWatch prev_sw(env_, stats_, BLOB_DB_PREV_MICROS);
+      GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_PREV);
     }
   }
@@ -98,12 +104,15 @@ class TitanDBIterator : public Iterator {
   }
 
  private:
-  // returns whether the value is in blob file or not
-  bool GetBlobValue() {
+  bool Check() {
     if (!iter_->Valid() || !iter_->IsBlob()) {
       status_ = iter_->status();
       return false;
     }
+    return true;
+  }
+
+  void GetBlobValue() {
     assert(iter_->status().ok());
 
     BlobIndex index;
@@ -124,13 +133,13 @@ class TitanDBIterator : public Iterator {
                 iter_->key().ToString(true).c_str(), status_.ToString().c_str(),
                 options_.snapshot->GetSequenceNumber());
       }
-      if (!status_.ok()) return true;
+      if (!status_.ok()) return;
       it = files_.emplace(index.file_number, std::move(prefetcher)).first;
     }
 
     buffer_.Reset();
     status_ = it->second->Get(options_, index.blob_handle, &record_, &buffer_);
-    return true;
+    return;
   }
 
   Status status_;
