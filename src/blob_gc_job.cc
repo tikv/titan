@@ -49,12 +49,13 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
 
       if (!(blob_index_ == other_blob_index)) {
         s = Status::Busy("key overwritten with other blob");
+        RecordTick(stats_, BLOB_DB_BLOB_INDEX_RELOCATED_COUNT);
+        RecordTick(stats_, BLOB_DB_BLOB_INDEX_RELOCATED_SIZE,
+                   key_.size() + index_entry.size());
       }
-    }
-
-    if (!s.ok()) {
-      RecordTick(stats_, BLOB_DB_BLOB_INDEX_EVICTED_COUNT);
-      RecordTick(stats_, BLOB_DB_BLOB_INDEX_EVICTED_SIZE,
+    } else {
+      RecordTick(stats_, BLOB_DB_BLOB_INDEX_OVERWRITTEN_COUNT);
+      RecordTick(stats_, BLOB_DB_BLOB_INDEX_OVERWRITTEN_SIZE,
                  key_.size() + index_entry.size());
     }
 
@@ -195,7 +196,7 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
     BlobIndex blob_index = iter.GetBlobIndex();
     uint64_t total_length = blob_index.blob_handle.size;
     iterated_size += total_length;
-    if (DiscardEntry(iter.key(), blob_index)) {
+    if (DiscardEntry(iter.key(), blob_index, false)) {
       discardable_size += total_length;
     }
   }
@@ -255,7 +256,7 @@ Status BlobGCJob::DoRunGC() {
       last_key_valid = false;
     }
 
-    if (DiscardEntry(gc_iter->key(), blob_index)) {
+    if (DiscardEntry(gc_iter->key(), blob_index, true)) {
       continue;
     }
 
@@ -350,7 +351,8 @@ Status BlobGCJob::BuildIterator(unique_ptr<BlobFileMergeIterator>* result) {
   return s;
 }
 
-bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
+bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
+                             bool metrics) {
   PinnableSlice index_entry;
   bool is_blob_index;
   auto s = base_db_impl_->GetImpl(
@@ -362,9 +364,11 @@ bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
   }
   RecordTick(stats_, BLOB_DB_BYTES_READ, key.size() + index_entry.size());
   if (s.IsNotFound() || !is_blob_index) {
-    RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN);
-    RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
-               key.size() + blob_index.blob_handle.size);
+    if (metrics) {
+      RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN);
+      RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
+                 key.size() + blob_index.blob_handle.size);
+    }
     // Either the key is deleted or updated with a newer version which is
     // inlined in LSM.
     return true;
@@ -377,7 +381,7 @@ bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
   }
 
   bool relocate = !(blob_index == other_blob_index);
-  if (relocate) {
+  if (relocate && metrics) {
     RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED);
     RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
                key.size() + blob_index.blob_handle.size);

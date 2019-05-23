@@ -39,9 +39,8 @@ Status BlobFileBuilder::Finish() {
 
   status_ = file_->Append(buffer);
   if (ok()) {
-    StopWatch sync_sw(env_, stats_, BLOB_DB_BLOB_FILE_SYNC_MICROS);
+    // The Sync will be done in `BatchFinishFiles`
     status_ = file_->Flush();
-    RecordTick(stats_, BLOB_DB_BLOB_FILE_SYNCED);
   }
   return status();
 }

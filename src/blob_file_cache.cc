@@ -61,12 +61,9 @@ Status BlobFileCache::FindFile(uint64_t file_number, uint64_t file_size,
   Slice cache_key = EncodeFileNumber(&file_number);
   *handle = cache_->Lookup(cache_key);
   if (*handle) {
-    RecordTick(stats_, BLOCK_CACHE_DATA_HIT);
-    RecordTick(stats_, BLOCK_CACHE_HIT);
+    // TODO: add file reader cache hit/miss metrics
     return s;
   }
-  RecordTick(stats_, BLOCK_CACHE_DATA_MISS);
-  RecordTick(stats_, BLOCK_CACHE_MISS);
   std::unique_ptr<RandomAccessFileReader> file;
   {
     std::unique_ptr<RandomAccessFile> f;

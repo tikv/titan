@@ -69,7 +69,6 @@ Status TitanTableBuilder::status() const {
 Status TitanTableBuilder::Finish() {
   base_builder_->Finish();
   if (blob_builder_) {
-    RecordTick(stats_, BLOB_DB_NUM_KEYS_WRITTEN);
     blob_builder_->Finish();
     if (ok()) {
       std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
