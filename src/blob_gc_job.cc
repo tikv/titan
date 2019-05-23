@@ -352,7 +352,7 @@ Status BlobGCJob::BuildIterator(unique_ptr<BlobFileMergeIterator>* result) {
 }
 
 bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
-                             bool metrics) {
+                             bool enable_metrics) {
   PinnableSlice index_entry;
   bool is_blob_index;
   auto s = base_db_impl_->GetImpl(
@@ -364,7 +364,7 @@ bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
   }
   RecordTick(stats_, BLOB_DB_BYTES_READ, key.size() + index_entry.size());
   if (s.IsNotFound() || !is_blob_index) {
-    if (metrics) {
+    if (enable_metrics) {
       RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN);
       RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
                  key.size() + blob_index.blob_handle.size);
@@ -381,7 +381,7 @@ bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
   }
 
   bool relocate = !(blob_index == other_blob_index);
-  if (relocate && metrics) {
+  if (relocate && enable_metrics) {
     RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED);
     RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
                key.size() + blob_index.blob_handle.size);
