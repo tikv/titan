@@ -60,7 +60,8 @@ class BlobFileIteratorTest : public testing::Test {
       writable_file_.reset(
           new WritableFileWriter(std::move(f), file_name_, env_options_));
     }
-    builder_.reset(new BlobFileBuilder(cf_options, writable_file_.get()));
+    builder_.reset(
+        new BlobFileBuilder(db_options, cf_options, writable_file_.get()));
   }
 
   void AddKeyValue(const std::string& key, const std::string& value,

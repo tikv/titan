@@ -126,8 +126,8 @@ class TableBuilderTest : public testing::Test {
     NewFileReader(blob_name_, &file);
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(blob_name_, &file_size));
-    ASSERT_OK(
-        BlobFileReader::Open(cf_options_, std::move(file), file_size, result));
+    ASSERT_OK(BlobFileReader::Open(cf_options_, std::move(file), file_size,
+                                   result, nullptr));
   }
 
   void NewTableReader(std::unique_ptr<TableReader>* result) {
