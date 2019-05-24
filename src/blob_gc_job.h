@@ -57,7 +57,7 @@ class BlobGCJob {
 
   std::atomic_bool* shuting_down_{nullptr};
 
-  Statistics* stats_;
+  TitanStats* stats_;
 
   struct {
     uint64_t blob_db_bytes_read;

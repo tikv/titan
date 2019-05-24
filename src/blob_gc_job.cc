@@ -8,7 +8,7 @@ namespace titandb {
 class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
  public:
   GarbageCollectionWriteCallback(ColumnFamilyHandle* cfh, std::string&& _key,
-                                 BlobIndex&& blob_index, Statistics* stats)
+                                 BlobIndex&& blob_index, TitanStats* stats)
       : cfh_(cfh), key_(std::move(_key)), blob_index_(blob_index) {
     assert(!key_.empty());
   }
@@ -85,23 +85,26 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
       version_set_(version_set),
       log_buffer_(log_buffer),
       shuting_down_(shuting_down),
-      stats_(db_options_.statistics.get()) {}
+      stats_(db_options_.titan_stats.get()) {}
 
 BlobGCJob::~BlobGCJob() {
   // flush metrics
-  RecordTick(stats_, BLOB_DB_BYTES_READ, metrics_.blob_db_bytes_read);
-  RecordTick(stats_, BLOB_DB_BYTES_WRITTEN, metrics_.blob_db_bytes_written);
-  RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN,
+  RecordTick(statistics(stats_), BLOB_DB_BYTES_READ,
+             metrics_.blob_db_bytes_read);
+  RecordTick(statistics(stats_), BLOB_DB_BYTES_WRITTEN,
+             metrics_.blob_db_bytes_written);
+  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_KEYS_OVERWRITTEN,
              metrics_.blob_db_gc_num_keys_overwritten);
-  RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
+  RecordTick(statistics(stats_), BLOB_DB_GC_BYTES_OVERWRITTEN,
              metrics_.blob_db_gc_bytes_overwritten);
-  RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED,
+  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_KEYS_RELOCATED,
              metrics_.blob_db_gc_num_keys_relocated);
-  RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
+  RecordTick(statistics(stats_), BLOB_DB_GC_BYTES_RELOCATED,
              metrics_.blob_db_gc_bytes_relocated);
-  RecordTick(stats_, BLOB_DB_GC_NUM_NEW_FILES,
+  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_NEW_FILES,
              metrics_.blob_db_gc_num_new_files);
-  RecordTick(stats_, BLOB_DB_GC_NUM_FILES, metrics_.blob_db_gc_num_files);
+  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_FILES,
+             metrics_.blob_db_gc_num_files);
 }
 
 Status BlobGCJob::Prepare() { return Status::OK(); }

@@ -98,6 +98,22 @@ class TitanDB : public StackableDB {
       const int output_path_id = -1,
       std::vector<std::string>* const output_file_names = nullptr,
       CompactionJobInfo* compaction_job_info = nullptr) override = 0;
+
+  struct Properties {
+    //  "rocksdb.titandb.size-blob-live" - returns total blob value size
+    //      referenced by LSM tree.
+    static const std::string kSizeBlobLive;
+    //  "rocksdb.titandb.num-blob-file" - returns total blob file size.
+    static const std::string kNumBlobFile;
+    //  "rocksdb.titandb.size-blob-file" - returns total size of blob files.
+    static const std::string kSizeBlobFile;
+  };
+
+  bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                   std::string* value) override = 0;
+  bool GetProperty(const Slice& property, std::string* value) {
+    return GetProperty(DefaultColumnFamily(), property, value);
+  }
 };
 
 }  // namespace titandb

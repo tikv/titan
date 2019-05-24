@@ -7,9 +7,24 @@
 #include <inttypes.h>
 
 #include "rocksdb/convenience.h"
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
+
+TitanDBOptions::TitanDBOptions(const DBOptions& options) : DBOptions(options) {
+  if (statistics.get() != nullptr) {
+    titan_stats = std::make_shared<TitanStats>(statistics.get());
+  }
+}
+
+TitanDBOptions& TitanDBOptions::operator=(const DBOptions& options) {
+  *dynamic_cast<DBOptions*>(this) = options;
+  if (statistics.get() != nullptr) {
+    titan_stats = std::make_shared<TitanStats>(statistics.get());
+  }
+  return *this;
+}
 
 std::string TitanCFOptions::ToString() const {
   char buf[256];

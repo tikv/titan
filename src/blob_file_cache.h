@@ -4,6 +4,7 @@
 #include "blob_format.h"
 #include "rocksdb/options.h"
 #include "titan/options.h"
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -41,7 +42,7 @@ class BlobFileCache {
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
   std::shared_ptr<Cache> cache_;
-  Statistics* stats_;
+  TitanStats* stats_;
 };
 
 }  // namespace titandb

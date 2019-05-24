@@ -5,6 +5,8 @@
 namespace rocksdb {
 namespace titandb {
 
+class TitanStats;
+
 struct TitanDBOptions : public DBOptions {
   // The directory to store data specific to TitanDB alongside with
   // the base DB.
@@ -22,13 +24,15 @@ struct TitanDBOptions : public DBOptions {
   // Default: 1
   int32_t max_background_gc{1};
 
-  TitanDBOptions() = default;
-  explicit TitanDBOptions(const DBOptions& options) : DBOptions(options) {}
+  // If not null, collect metrics about Titan operations
+  //
+  // Default: nullptr
+  std::shared_ptr<TitanStats> titan_stats{nullptr};
 
-  TitanDBOptions& operator=(const DBOptions& options) {
-    *dynamic_cast<DBOptions*>(this) = options;
-    return *this;
-  }
+  TitanDBOptions() = default;
+  explicit TitanDBOptions(const DBOptions& options);
+
+  TitanDBOptions& operator=(const DBOptions& options);
 };
 
 struct TitanCFOptions : public ColumnFamilyOptions {

@@ -51,9 +51,9 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
-      RecordTick(db_->stats_, BLOB_DB_BLOB_FILE_SYNCED);
+      RecordTick(statistics(db_->stats_), BLOB_DB_BLOB_FILE_SYNCED);
       {
-        StopWatch sync_sw(db_->env_, db_->stats_,
+        StopWatch sync_sw(db_->env_, statistics(db_->stats_),
                           BLOB_DB_BLOB_FILE_SYNC_MICROS);
         s = file.second->GetFile()->Sync(false);
       }
@@ -119,7 +119,7 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
       env_(options.env),
       env_options_(options),
       db_options_(options),
-      stats_(options.statistics.get()) {
+      stats_(options.titan_stats.get()) {
   if (db_options_.dirname.empty()) {
     db_options_.dirname = dbname_ + "/titandb";
   }
@@ -358,7 +358,7 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                         nullptr /*read_callback*/, &is_blob_index);
   if (!s.ok() || !is_blob_index) return s;
 
-  StopWatch get_sw(env_, stats_, BLOB_DB_GET_MICROS);
+  StopWatch get_sw(env_, statistics(stats_), BLOB_DB_GET_MICROS);
 
   BlobIndex index;
   s = index.DecodeFrom(value);
@@ -373,10 +373,11 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   mutex_.Unlock();
 
   {
-    StopWatch read_sw(env_, stats_, BLOB_DB_BLOB_FILE_READ_MICROS);
+    StopWatch read_sw(env_, statistics(stats_), BLOB_DB_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
-    RecordTick(stats_, BLOB_DB_NUM_KEYS_READ);
-    RecordTick(stats_, BLOB_DB_BLOB_FILE_BYTES_READ, index.blob_handle.size);
+    RecordTick(statistics(stats_), BLOB_DB_NUM_KEYS_READ);
+    RecordTick(statistics(stats_), BLOB_DB_BLOB_FILE_BYTES_READ,
+               index.blob_handle.size);
   }
   if (s.IsCorruption()) {
     ROCKS_LOG_DEBUG(db_options_.info_log,
@@ -494,6 +495,23 @@ Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
     options.table_factory.reset();
   }
   return options;
+}
+
+bool TitanDBImpl::GetProperty(ColumnFamilyHandle* column_family,
+                              const Slice& property, std::string* value) {
+  assert(column_family != nullptr);
+  bool s = false;
+  if (stats_ != nullptr) {
+    auto stats = stats_->internal_stats(column_family->GetID());
+    if (stats != nullptr) {
+      s = stats->GetStringProperty(property, value);
+    }
+  }
+  if (s) {
+    return s;
+  } else {
+    return db_impl_->GetProperty(column_family, property, value);
+  }
 }
 
 void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {

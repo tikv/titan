@@ -67,6 +67,10 @@ class TitanDBImpl : public TitanDB {
   using TitanDB::GetOptions;
   Options GetOptions(ColumnFamilyHandle* column_family) const override;
 
+  using TitanDB::GetProperty;
+  bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                   std::string* value) override;
+
   void OnFlushCompleted(const FlushJobInfo& flush_job_info);
 
   void OnCompactionCompleted(const CompactionJobInfo& compaction_job_info);
@@ -145,8 +149,7 @@ class TitanDBImpl : public TitanDB {
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
 
-  // statistics object sharing with RocksDB
-  Statistics* stats_;
+  TitanStats* stats_;
 
   std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
       original_table_factory_;

@@ -1,4 +1,5 @@
 #include "blob_file_reader.h"
+#include "titan_stats.h"
 
 #include "util/crc32c.h"
 #include "util/filename.h"
@@ -48,7 +49,7 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
                             std::unique_ptr<RandomAccessFileReader> file,
                             uint64_t file_size,
                             std::unique_ptr<BlobFileReader>* result,
-                            Statistics* stats) {
+                            TitanStats* stats) {
   if (file_size < BlobFileFooter::kEncodedLength) {
     return Status::Corruption("file is too short to be a blob file");
   }
@@ -68,7 +69,7 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
 
 BlobFileReader::BlobFileReader(const TitanCFOptions& options,
                                std::unique_ptr<RandomAccessFileReader> file,
-                               Statistics* stats)
+                               TitanStats* stats)
     : options_(options),
       file_(std::move(file)),
       cache_(options.blob_cache),
@@ -89,15 +90,15 @@ Status BlobFileReader::Get(const ReadOptions& /*options*/,
     EncodeBlobCache(&cache_key, cache_prefix_, handle.offset);
     cache_handle = cache_->Lookup(cache_key);
     if (cache_handle) {
-      RecordTick(stats_, BLOCK_CACHE_DATA_HIT);
-      RecordTick(stats_, BLOCK_CACHE_HIT);
+      RecordTick(statistics(stats_), BLOCK_CACHE_DATA_HIT);
+      RecordTick(statistics(stats_), BLOCK_CACHE_HIT);
       auto blob = reinterpret_cast<OwnedSlice*>(cache_->Value(cache_handle));
       buffer->PinSlice(*blob, UnrefCacheHandle, cache_.get(), cache_handle);
       return DecodeInto(*blob, record);
     }
   }
-  RecordTick(stats_, BLOCK_CACHE_DATA_MISS);
-  RecordTick(stats_, BLOCK_CACHE_MISS);
+  RecordTick(statistics(stats_), BLOCK_CACHE_DATA_MISS);
+  RecordTick(statistics(stats_), BLOCK_CACHE_MISS);
 
   OwnedSlice blob;
   TRY(ReadRecord(handle, record, &blob));

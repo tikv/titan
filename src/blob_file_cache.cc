@@ -22,7 +22,7 @@ BlobFileCache::BlobFileCache(const TitanDBOptions& db_options,
       db_options_(db_options),
       cf_options_(cf_options),
       cache_(cache),
-      stats_(db_options.statistics.get()) {}
+      stats_(db_options.titan_stats.get()) {}
 
 Status BlobFileCache::Get(const ReadOptions& options, uint64_t file_number,
                           uint64_t file_size, const BlobHandle& handle,
