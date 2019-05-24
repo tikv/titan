@@ -16,6 +16,8 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 file(GLOB SOURCES src/*.cc)
+file(GLOB TEST_SOURCES src/*test.cc)
+list(REMOVE_ITEM SOURCES ${TEST_SOURCES})
 
 add_library(titan STATIC ${SOURCES})
 
