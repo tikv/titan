@@ -51,7 +51,12 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
-      s = file.second->GetFile()->Sync(false);
+      RecordTick(db_->stats_, BLOB_DB_BLOB_FILE_SYNCED);
+      {
+        StopWatch sync_sw(db_->env_, db_->stats_,
+                          BLOB_DB_BLOB_FILE_SYNC_MICROS);
+        s = file.second->GetFile()->Sync(false);
+      }
       if (s.ok()) {
         s = file.second->GetFile()->Close();
       }
@@ -113,7 +118,8 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
       dbname_(dbname),
       env_(options.env),
       env_options_(options),
-      db_options_(options) {
+      db_options_(options),
+      stats_(options.statistics.get()) {
   if (db_options_.dirname.empty()) {
     db_options_.dirname = dbname_ + "/titandb";
   }
@@ -124,7 +130,7 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
 
 TitanDBImpl::~TitanDBImpl() { Close(); }
 
-// how often to schedule delete obs files periods
+// how often to schedule delete obsolete blob files periods
 static constexpr uint32_t kDeleteObsoleteFilesPeriodSecs = 10;  // 10s
 
 void TitanDBImpl::StartBackgroundTasks() {
@@ -354,6 +360,8 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                         nullptr /*read_callback*/, &is_blob_index);
   if (!s.ok() || !is_blob_index) return s;
 
+  StopWatch get_sw(env_, stats_, BLOB_DB_GET_MICROS);
+
   BlobIndex index;
   s = index.DecodeFrom(value);
   assert(s.ok());
@@ -364,7 +372,12 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
 
   auto storage = vset_->GetBlobStorage(handle->GetID()).lock();
 
-  s = storage->Get(options, index, &record, &buffer);
+  {
+    StopWatch read_sw(env_, stats_, BLOB_DB_BLOB_FILE_READ_MICROS);
+    s = storage->Get(options, index, &record, &buffer);
+    RecordTick(stats_, BLOB_DB_NUM_KEYS_READ);
+    RecordTick(stats_, BLOB_DB_BLOB_FILE_BYTES_READ, index.blob_handle.size);
+  }
   if (s.IsCorruption()) {
     ROCKS_LOG_DEBUG(db_options_.info_log,
                     "Key:%s Snapshot:%" PRIu64 " GetBlobFile err:%s\n",
@@ -435,7 +448,7 @@ Iterator* TitanDBImpl::NewIteratorImpl(
       options, cfd, options.snapshot->GetSequenceNumber(),
       nullptr /*read_callback*/, true /*allow_blob*/, true /*allow_refresh*/));
   return new TitanDBIterator(options, storage.lock().get(), snapshot,
-                             std::move(iter));
+                             std::move(iter), env_, stats_);
 }
 
 Status TitanDBImpl::NewIterators(

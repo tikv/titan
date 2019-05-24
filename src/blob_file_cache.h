@@ -41,6 +41,7 @@ class BlobFileCache {
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
   std::shared_ptr<Cache> cache_;
+  Statistics* stats_;
 };
 
 }  // namespace titandb

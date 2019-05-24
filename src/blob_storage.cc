@@ -77,6 +77,7 @@ void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
       if (obsolete_files) {
         obsolete_files->emplace_back(
             BlobFileName(db_options_.dirname, file_number));
+        // TODO: add obsolete files count metrics
       }
 
       it = obsolete_files_.erase(it);

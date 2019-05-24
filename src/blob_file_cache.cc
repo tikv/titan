@@ -21,7 +21,8 @@ BlobFileCache::BlobFileCache(const TitanDBOptions& db_options,
       env_options_(db_options),
       db_options_(db_options),
       cf_options_(cf_options),
-      cache_(cache) {}
+      cache_(cache),
+      stats_(db_options.statistics.get()) {}
 
 Status BlobFileCache::Get(const ReadOptions& options, uint64_t file_number,
                           uint64_t file_size, const BlobHandle& handle,
@@ -59,8 +60,10 @@ Status BlobFileCache::FindFile(uint64_t file_number, uint64_t file_size,
   Status s;
   Slice cache_key = EncodeFileNumber(&file_number);
   *handle = cache_->Lookup(cache_key);
-  if (*handle) return s;
-
+  if (*handle) {
+    // TODO: add file reader cache hit/miss metrics
+    return s;
+  }
   std::unique_ptr<RandomAccessFileReader> file;
   {
     std::unique_ptr<RandomAccessFile> f;
@@ -74,7 +77,8 @@ Status BlobFileCache::FindFile(uint64_t file_number, uint64_t file_size,
   }
 
   std::unique_ptr<BlobFileReader> reader;
-  s = BlobFileReader::Open(cf_options_, std::move(file), file_size, &reader);
+  s = BlobFileReader::Open(cf_options_, std::move(file), file_size, &reader,
+                           stats_);
   if (!s.ok()) return s;
 
   cache_->Insert(cache_key, reader.release(), 1,

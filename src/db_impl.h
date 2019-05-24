@@ -2,6 +2,7 @@
 
 #include "blob_file_manager.h"
 #include "db/db_impl.h"
+#include "rocksdb/statistics.h"
 #include "table_factory.h"
 #include "titan/db.h"
 #include "util/repeatable_thread.h"
@@ -149,6 +150,10 @@ class TitanDBImpl : public TitanDB {
   EnvOptions env_options_;
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
+
+  // statistics object sharing with RocksDB
+  Statistics* stats_;
+
   std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
       original_table_factory_;
   std::unordered_map<uint32_t, std::shared_ptr<TitanTableFactory>>

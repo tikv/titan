@@ -60,6 +60,7 @@ void TitanDBImpl::BackgroundCallGC() {
 
 Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   mutex_.AssertHeld();
+  StopWatch gc_sw(env_, stats_, BLOB_DB_GC_MICROS);
 
   std::unique_ptr<BlobGC> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;

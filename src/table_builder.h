@@ -22,6 +22,7 @@ class TitanTableBuilder : public TableBuilder {
         base_builder_(std::move(base_builder)),
         blob_manager_(blob_manager),
         vset_(vset) {}
+        stats_(db_options.statistics.get()) {}
 
   void Add(const Slice& key, const Slice& value) override;
 
@@ -53,6 +54,8 @@ class TitanTableBuilder : public TableBuilder {
   std::shared_ptr<BlobFileManager> blob_manager_;
   std::unique_ptr<BlobFileBuilder> blob_builder_;
   VersionSet* vset_;
+
+  Statistics* stats_;
 };
 
 }  // namespace titandb
