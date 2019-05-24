@@ -111,7 +111,7 @@ class TitanDB : public StackableDB {
 
   bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
                    std::string* value) override = 0;
-  bool GetProperty(const Slice& property, std::string* value) {
+  bool GetProperty(const Slice& property, std::string* value) override {
     return GetProperty(DefaultColumnFamily(), property, value);
   }
 };
