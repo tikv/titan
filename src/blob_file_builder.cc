@@ -1,5 +1,7 @@
 #include "blob_file_builder.h"
 
+#include "titan_stats.h"
+
 namespace rocksdb {
 namespace titandb {
 
@@ -8,7 +10,8 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
                                  WritableFileWriter* file)
     : cf_options_(cf_options),
       file_(file),
-      encoder_(cf_options_.blob_file_compression) {
+      encoder_(cf_options_.blob_file_compression),
+      stats_(db_options.titan_stats.get()) {
   BlobFileHeader header;
   std::string buffer;
   header.EncodeTo(&buffer);
@@ -39,6 +42,7 @@ Status BlobFileBuilder::Finish() {
   if (ok()) {
     // The Sync will be done in `BatchFinishFiles`
     status_ = file_->Flush();
+    AddStats(stats_, TitanInternalStats::SIZE_BLOB_FILE, file_->GetFileSize());
   }
   return status();
 }

@@ -31,6 +31,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       std::unique_ptr<WritableFile> f;
       s = db_->env_->NewWritableFile(name, &f, db_->env_options_);
       if (!s.ok()) return s;
+      AddStats(db_->stats_, TitanInternalStats::NUM_BLOB_FILE, 1);
       file.reset(new WritableFileWriter(std::move(f), name, db_->env_options_));
     }
 
@@ -79,7 +80,14 @@ class TitanDBImpl::FileManager : public BlobFileManager {
   Status BatchDeleteFiles(
       const std::vector<std::unique_ptr<BlobFileHandle>>& handles) override {
     Status s;
-    for (auto& handle : handles) s = db_->env_->DeleteFile(handle->GetName());
+    uint64_t file_size = 0;
+    for (auto& handle : handles) {
+      s = db_->env_->DeleteFile(handle->GetName());
+      file_size += handle->GetFile()->GetFileSize();
+    }
+    SubStats(db_->stats_, TitanInternalStats::NUM_BLOB_FILE, handles.size());
+    SubStats(db_->stats_, TitanInternalStats::SIZE_BLOB_FILE, file_size);
+
     {
       MutexLock l(&db_->mutex_);
       for (const auto& handle : handles)
@@ -212,6 +220,9 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
   if (s.ok()) {
     db_impl_ = reinterpret_cast<DBImpl*>(db_->GetRootDB());
+    if (stats_) {
+      stats_->Open(column_families, db_->DefaultColumnFamily()->GetID());
+    }
   }
   return s;
 }
@@ -621,7 +632,9 @@ void TitanDBImpl::OnCompactionCompleted(
       file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
     }
 
+    int64_t delta = 0;
     for (const auto& bfs : blob_files_size) {
+      delta += bfs.second;
       // blob file size < 0 means discardable size > 0
       if (bfs.second >= 0) {
         continue;
@@ -632,6 +645,11 @@ void TitanDBImpl::OnCompactionCompleted(
         continue;
       }
       file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
+    }
+    if (delta > 0) {
+      AddStats(stats_, TitanInternalStats::SIZE_BLOB_LIVE, delta);
+    } else {
+      SubStats(stats_, TitanInternalStats::SIZE_BLOB_LIVE, -delta);
     }
     bs->ComputeGCScore();
 

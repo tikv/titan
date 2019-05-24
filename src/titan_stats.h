@@ -1,8 +1,10 @@
 #pragma once
 
 #include "rocksdb/statistics.h"
+#include "titan/options.h"
 
 #include <atomic>
+#include <map>
 #include <string>
 #include <unordered_map>
 
@@ -14,20 +16,25 @@ namespace titandb {
 // data.
 class TitanInternalStats {
  public:
-  enum InternalStatsType {
+  enum StatsType {
     SIZE_BLOB_LIVE,
     NUM_BLOB_FILE,
     SIZE_BLOB_FILE,
     INTERNAL_STATS_ENUM_MAX,
   };
-  void ResetStats(InternalStatsType type) {
+  void Clear() {
+    for (int i = 0; i < INTERNAL_STATS_ENUM_MAX; i++) {
+      stats_[i].store(0);
+    }
+  }
+  void ResetStats(StatsType type) {
     stats_[type].store(0, std::memory_order_relaxed);
   }
-  void AddStats(InternalStatsType type, uint64_t value) {
+  void AddStats(StatsType type, uint64_t value) {
     auto& v = stats_[type];
     v.fetch_add(value, std::memory_order_relaxed);
   }
-  void SubStats(InternalStatsType type, uint64_t value) {
+  void SubStats(StatsType type, uint64_t value) {
     auto& v = stats_[type];
     v.fetch_sub(value, std::memory_order_relaxed);
   }
@@ -47,20 +54,22 @@ class TitanInternalStats {
     }
     return false;
   }
+
  private:
-  static const std::unordered_map<std::string, TitanInternalStats::InternalStatsType>
+  static const std::unordered_map<std::string, TitanInternalStats::StatsType>
       stats_type_string_map;
   std::atomic<uint64_t> stats_[INTERNAL_STATS_ENUM_MAX];
 };
 
 class TitanStats {
  public:
-  TitanStats(Statistics* stats)
-      : stats_(stats) {}
-  Status Open(std::map<uint32_t, TitanCFOptions> cf_options) {
-    for (auto& opts: cf_options) {
+  TitanStats(Statistics* stats) : stats_(stats) {}
+  Status Open(std::map<uint32_t, TitanCFOptions> cf_options,
+              uint32_t default_cf) {
+    for (auto& opts : cf_options) {
       internal_stats_[opts.first] = NewTitanInternalStats(opts.second);
     }
+    default_cf_ = default_cf;
     return Status::OK();
   }
   Statistics* statistics() { return stats_; }
@@ -72,11 +81,15 @@ class TitanStats {
       return p->second.get();
     }
   }
+  TitanInternalStats* internal_stats() { return internal_stats(default_cf_); }
+
  private:
-  Statistics* stats_;
+  Statistics* stats_ = nullptr;
+  uint32_t default_cf_ = 0;
   std::unordered_map<uint32_t, std::shared_ptr<TitanInternalStats>>
       internal_stats_;
-  std::shared_ptr<TitanInternalStats> NewTitanInternalStats(TitanCFOptions& opts) {
+  std::shared_ptr<TitanInternalStats> NewTitanInternalStats(
+      TitanCFOptions& opts) {
     return std::make_shared<TitanInternalStats>();
   }
 };
@@ -87,6 +100,35 @@ inline Statistics* statistics(TitanStats* stats) {
     return stats->statistics();
   } else {
     return nullptr;
+  }
+}
+
+inline void ResetStats(TitanStats* stats, TitanInternalStats::StatsType type) {
+  if (stats) {
+    auto p = stats->internal_stats();
+    if (p) {
+      p->ResetStats(type);
+    }
+  }
+}
+
+inline void AddStats(TitanStats* stats, TitanInternalStats::StatsType type,
+                     uint32_t value) {
+  if (stats) {
+    auto p = stats->internal_stats();
+    if (p) {
+      p->AddStats(type, value);
+    }
+  }
+}
+
+inline void SubStats(TitanStats* stats, TitanInternalStats::StatsType type,
+                     uint32_t value) {
+  if (stats) {
+    auto p = stats->internal_stats();
+    if (p) {
+      p->SubStats(type, value);
+    }
   }
 }
 

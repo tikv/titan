@@ -6,7 +6,7 @@
 #include "blob_format.h"
 #include "blob_gc.h"
 #include "rocksdb/options.h"
-#include "rocksdb/statistics.h"
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -30,7 +30,7 @@ class BlobStorage {
         cf_options_(_cf_options),
         file_cache_(_file_cache),
         destroyed_(false),
-        stats_(_db_options.statistics.get()) {}
+        stats_(_db_options.titan_stats.get()) {}
 
   ~BlobStorage() {
     for (auto& file : files_) {
@@ -116,7 +116,7 @@ class BlobStorage {
   // kept.
   bool destroyed_;
 
-  Statistics* stats_;
+  TitanStats* stats_;
 };
 
 }  // namespace titandb

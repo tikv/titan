@@ -62,6 +62,8 @@ class BlobFileBuilder {
 
   Status status_;
   BlobEncoder encoder_;
+
+  TitanStats* stats_;
 };
 
 }  // namespace titandb
