@@ -21,7 +21,7 @@ class TitanTableBuilder : public TableBuilder {
         cf_options_(cf_options),
         base_builder_(std::move(base_builder)),
         blob_manager_(blob_manager),
-        vset_(vset) {}
+        vset_(vset),
         stats_(db_options.statistics.get()) {}
 
   void Add(const Slice& key, const Slice& value) override;
