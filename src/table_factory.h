@@ -15,7 +15,8 @@ class TitanTableFactory : public TableFactory {
                     std::shared_ptr<BlobFileManager> blob_manager,
                     VersionSet* vset)
       : db_options_(db_options),
-        cf_options_(cf_options),
+        immutable_cf_options_(cf_options),
+        mutable_cf_options_(cf_options),
         base_factory_(cf_options.table_factory),
         blob_manager_(blob_manager),
         vset_(vset) {}
@@ -48,7 +49,11 @@ class TitanTableFactory : public TableFactory {
 
   void* GetOptions() override { return base_factory_->GetOptions(); }
 
-  TitanCFOptions* GetCFOptions() { return &cf_options_; }
+  void SetBlobRunMode(TitanBlobRunMode mode) {
+    MutableTitanCFOptions opts(mutable_cf_options_);
+    opts.blob_run_mode = mode;
+    mutable_cf_options_ = opts;
+  }
 
   bool IsDeleteRangeSupported() const override {
     return base_factory_->IsDeleteRangeSupported();
@@ -56,7 +61,8 @@ class TitanTableFactory : public TableFactory {
 
  private:
   TitanDBOptions db_options_;
-  TitanCFOptions cf_options_;
+  ImmutableTitanCFOptions immutable_cf_options_;
+  MutableTitanCFOptions mutable_cf_options_;
   std::shared_ptr<TableFactory> base_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
   VersionSet* vset_;

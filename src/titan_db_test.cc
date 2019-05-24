@@ -6,6 +6,7 @@
 #include "blob_file_reader.h"
 #include "db_impl.h"
 #include "db_iter.h"
+#include "rocksdb/utilities/debug.h"
 #include "titan/db.h"
 #include "titan_fault_injection_test_env.h"
 #include "util/filename.h"
@@ -608,37 +609,67 @@ TEST_F(TitanDBTest, BlobFileCorruptionErrorHandling) {
 #endif  // !NDEBUG
 
 TEST_F(TitanDBTest, BlobRunModeBasic) {
+  options_.disable_background_gc = true;
   Open();
-  const uint64_t kNumEntries = 100;
+
+  const uint64_t kNumEntries = 10000;
+  const uint64_t kMaxKeys = 100000;
+  std::unordered_map<std::string, std::string> opts;
   std::map<std::string, std::string> data;
+  std::vector<KeyVersion> version;
+  std::string begin_key;
+  std::string end_key;
+  uint64_t num_blob_files;
+
   for (uint64_t i = 1; i <= kNumEntries; i++) {
     Put(i, &data);
   }
+  begin_key = GenKey(1);
+  end_key = GenKey(kNumEntries);
   ASSERT_EQ(kNumEntries, data.size());
   VerifyDB(data);
   Flush();
+  auto blob = GetBlobStorage();
+  num_blob_files = blob.lock()->NumBlobFiles();
   VerifyDB(data);
 
-  std::unordered_map<std::string, std::string> opts;
   opts["blob-run-mode"] = "read-only";
   db_->SetOptions(opts);
   for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
     Put(i, &data);
   }
+  begin_key = GenKey(kNumEntries + 1);
+  end_key = GenKey(kNumEntries * 2);
   ASSERT_EQ(kNumEntries * 2, data.size());
   VerifyDB(data);
   Flush();
+  blob = GetBlobStorage();
+  ASSERT_EQ(num_blob_files, blob.lock()->NumBlobFiles());
   VerifyDB(data);
+  GetAllKeyVersions(db_, begin_key, end_key, kMaxKeys, &version);
+  for (auto v : version) {
+    ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeValue));
+  }
+  version.clear();
 
   opts["blob-run-mode"] = "fallback";
   db_->SetOptions(opts);
-  for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
+  for (uint64_t i = kNumEntries * 2 + 1; i <= kNumEntries * 3; i++) {
     Put(i, &data);
   }
-  ASSERT_EQ(kNumEntries * 2, data.size());
+  begin_key = GenKey(kNumEntries * 2 + 1);
+  end_key = GenKey(kNumEntries * 3);
+  ASSERT_EQ(kNumEntries * 3, data.size());
   VerifyDB(data);
   Flush();
+  blob = GetBlobStorage();
+  ASSERT_EQ(num_blob_files, blob.lock()->NumBlobFiles());
   VerifyDB(data);
+  GetAllKeyVersions(db_, begin_key, end_key, kMaxKeys, &version);
+  for (auto v : version) {
+    ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeValue));
+  }
+  version.clear();
 }
 
 }  // namespace titandb

@@ -495,7 +495,7 @@ Status TitanDBImpl::SetOptions(
       mode = pm->second;
     }
     auto table_factory = derived_table_factory_[column_family->GetID()];
-    table_factory->GetCFOptions()->blob_run_mode = mode;
+    table_factory->SetBlobRunMode(mode);
   }
   return db_->SetOptions(column_family, new_options);
 }

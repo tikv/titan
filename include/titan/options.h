@@ -51,6 +51,9 @@ struct TitanOptionsHelper {
 static auto& blob_run_mode_string_map =
     TitanOptionsHelper::blob_run_mode_string_map;
 
+struct ImmutableTitanCFOptions;
+struct MutableTitanCFOptions;
+
 struct TitanCFOptions : public ColumnFamilyOptions {
   // The smallest value to store in blob files. Value smaller than
   // this threshold will be inlined in base DB.
@@ -106,6 +109,8 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}
+  explicit TitanCFOptions(const ImmutableTitanCFOptions&,
+                          const MutableTitanCFOptions&);
 
   TitanCFOptions& operator=(const ColumnFamilyOptions& options) {
     *dynamic_cast<ColumnFamilyOptions*>(this) = options;
@@ -113,6 +118,38 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   }
 
   std::string ToString() const;
+};
+
+struct ImmutableTitanCFOptions {
+  uint64_t min_blob_size{4096};
+  CompressionType blob_file_compression{kNoCompression};
+  uint64_t blob_file_target_size{256 << 20};
+  std::shared_ptr<Cache> blob_cache;
+  uint64_t max_gc_batch_size{1 << 30};
+  uint64_t min_gc_batch_size{512 << 20};
+  float blob_file_discardable_ratio{0.5};
+  float sample_file_size_ratio{0.1};
+  uint64_t merge_small_file_threshold{8 << 20};
+
+  ImmutableTitanCFOptions() = default;
+  explicit ImmutableTitanCFOptions(const TitanCFOptions& opts)
+      : min_blob_size(opts.min_blob_size),
+        blob_file_compression(opts.blob_file_compression),
+        blob_file_target_size(opts.blob_file_target_size),
+        blob_cache(opts.blob_cache),
+        max_gc_batch_size(opts.max_gc_batch_size),
+        min_gc_batch_size(opts.min_gc_batch_size),
+        blob_file_discardable_ratio(opts.blob_file_discardable_ratio),
+        sample_file_size_ratio(opts.sample_file_size_ratio),
+        merge_small_file_threshold(opts.merge_small_file_threshold) {}
+};
+
+struct MutableTitanCFOptions {
+  TitanBlobRunMode blob_run_mode{TitanBlobRunMode::kNormal};
+
+  MutableTitanCFOptions() = default;
+  explicit MutableTitanCFOptions(const TitanCFOptions& opts)
+      : blob_run_mode(opts.blob_run_mode) {}
 };
 
 struct TitanOptions : public TitanDBOptions, public TitanCFOptions {
