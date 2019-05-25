@@ -608,6 +608,17 @@ TEST_F(TitanDBTest, BlobFileCorruptionErrorHandling) {
 }
 #endif  // !NDEBUG
 
+TEST_F(TitanDBTest, Options) {
+  Open();
+
+  std::unordered_map<std::string, std::string> opts;
+  opts["blob_run_mode"] = "read-only";
+  ASSERT_OK(db_->SetOptions(opts));
+
+  opts["disable_auto_compactions"] = "true";
+  ASSERT_OK(db_->SetOptions(opts));
+}
+
 TEST_F(TitanDBTest, BlobRunModeBasic) {
   options_.disable_background_gc = true;
   Open();
@@ -632,8 +643,17 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   auto blob = GetBlobStorage();
   num_blob_files = blob.lock()->NumBlobFiles();
   VerifyDB(data);
+  GetAllKeyVersions(db_, begin_key, end_key, kMaxKeys, &version);
+  for (auto v : version) {
+    if (data[v.user_key].size() >= options_.min_blob_size) {
+      ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeBlobIndex));
+    } else {
+      ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeValue));
+    }
+  }
+  version.clear();
 
-  opts["blob-run-mode"] = "read-only";
+  opts["blob_run_mode"] = "read-only";
   db_->SetOptions(opts);
   for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
     Put(i, &data);
@@ -652,7 +672,7 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   }
   version.clear();
 
-  opts["blob-run-mode"] = "fallback";
+  opts["blob_run_mode"] = "fallback";
   db_->SetOptions(opts);
   for (uint64_t i = kNumEntries * 2 + 1; i <= kNumEntries * 3; i++) {
     Put(i, &data);

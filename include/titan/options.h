@@ -121,17 +121,8 @@ struct TitanCFOptions : public ColumnFamilyOptions {
 };
 
 struct ImmutableTitanCFOptions {
-  uint64_t min_blob_size{4096};
-  CompressionType blob_file_compression{kNoCompression};
-  uint64_t blob_file_target_size{256 << 20};
-  std::shared_ptr<Cache> blob_cache;
-  uint64_t max_gc_batch_size{1 << 30};
-  uint64_t min_gc_batch_size{512 << 20};
-  float blob_file_discardable_ratio{0.5};
-  float sample_file_size_ratio{0.1};
-  uint64_t merge_small_file_threshold{8 << 20};
+  ImmutableTitanCFOptions() : ImmutableTitanCFOptions(TitanCFOptions()) {}
 
-  ImmutableTitanCFOptions() = default;
   explicit ImmutableTitanCFOptions(const TitanCFOptions& opts)
       : min_blob_size(opts.min_blob_size),
         blob_file_compression(opts.blob_file_compression),
@@ -142,14 +133,33 @@ struct ImmutableTitanCFOptions {
         blob_file_discardable_ratio(opts.blob_file_discardable_ratio),
         sample_file_size_ratio(opts.sample_file_size_ratio),
         merge_small_file_threshold(opts.merge_small_file_threshold) {}
+
+  uint64_t min_blob_size;
+
+  CompressionType blob_file_compression;
+
+  uint64_t blob_file_target_size;
+
+  std::shared_ptr<Cache> blob_cache;
+
+  uint64_t max_gc_batch_size;
+
+  uint64_t min_gc_batch_size;
+
+  float blob_file_discardable_ratio;
+
+  float sample_file_size_ratio;
+
+  uint64_t merge_small_file_threshold;
 };
 
 struct MutableTitanCFOptions {
-  TitanBlobRunMode blob_run_mode{TitanBlobRunMode::kNormal};
+  MutableTitanCFOptions() : MutableTitanCFOptions(TitanCFOptions()) {}
 
-  MutableTitanCFOptions() = default;
   explicit MutableTitanCFOptions(const TitanCFOptions& opts)
       : blob_run_mode(opts.blob_run_mode) {}
+
+  TitanBlobRunMode blob_run_mode;
 };
 
 struct TitanOptions : public TitanDBOptions, public TitanCFOptions {

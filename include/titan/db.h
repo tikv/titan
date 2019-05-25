@@ -106,10 +106,6 @@ class TitanDB : public StackableDB {
   Status SetOptions(ColumnFamilyHandle* column_family,
                     const std::unordered_map<std::string, std::string>&
                         new_options) override = 0;
-  Status SetOptions(const std::unordered_map<std::string, std::string>&
-                        new_options) override {
-    return SetOptions(DefaultColumnFamily(), new_options);
-  }
 };
 
 }  // namespace titandb

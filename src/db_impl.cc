@@ -175,10 +175,10 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       // While we need to preserve original table_factory for GetOptions.
       auto& original_table_factory = base_descs[i].options.table_factory;
       assert(original_table_factory != nullptr);
-      original_table_factory_[cf_id] = original_table_factory;
-      derived_table_factory_[cf_id] = std::make_shared<TitanTableFactory>(
+      base_table_factory_[cf_id] = original_table_factory;
+      titan_table_factory_[cf_id] = std::make_shared<TitanTableFactory>(
           db_options_, descs[i].options, blob_manager_, vset_.get());
-      base_descs[i].options.table_factory = derived_table_factory_[cf_id];
+      base_descs[i].options.table_factory = titan_table_factory_[cf_id];
       // Add TableProperties for collecting statistics GC
       base_descs[i].options.table_properties_collector_factories.emplace_back(
           std::make_shared<BlobFileSizeCollectorFactory>());
@@ -287,7 +287,7 @@ Status TitanDBImpl::CreateColumnFamilies(
     for (size_t i = 0; i < descs.size(); i++) {
       uint32_t cf_id = (*handles)[i]->GetID();
       column_families.emplace(cf_id, descs[i].options);
-      derived_table_factory_[cf_id] = derived_table_factory[i];
+      titan_table_factory_[cf_id] = derived_table_factory[i];
     }
     vset_->AddColumnFamilies(column_families);
   }
@@ -482,8 +482,8 @@ Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
   assert(column_family != nullptr);
   Options options = db_->GetOptions(column_family);
   uint32_t cf_id = column_family->GetID();
-  if (original_table_factory_.count(cf_id) > 0) {
-    options.table_factory = original_table_factory_.at(cf_id);
+  if (base_table_factory_.count(cf_id) > 0) {
+    options.table_factory = base_table_factory_.at(cf_id);
   } else {
     ROCKS_LOG_ERROR(
         db_options_.info_log,
@@ -497,8 +497,9 @@ Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
 Status TitanDBImpl::SetOptions(
     ColumnFamilyHandle* column_family,
     const std::unordered_map<std::string, std::string>& new_options) {
-  auto p = new_options.find("blob-run-mode");
-  if (p != new_options.end()) {
+  auto opts = new_options;
+  auto p = opts.find("blob_run_mode");
+  if (p != opts.end()) {
     TitanBlobRunMode mode = TitanBlobRunMode::kNormal;
     auto pm = blob_run_mode_string_map.find(p->second);
     if (pm == blob_run_mode_string_map.end()) {
@@ -507,10 +508,15 @@ Status TitanDBImpl::SetOptions(
     } else {
       mode = pm->second;
     }
-    auto table_factory = derived_table_factory_[column_family->GetID()];
+    auto table_factory = titan_table_factory_[column_family->GetID()];
     table_factory->SetBlobRunMode(mode);
+    opts.erase(p);
   }
-  return db_->SetOptions(column_family, new_options);
+  if (opts.size() > 0) {
+    return db_->SetOptions(column_family, opts);
+  } else {
+    return Status::OK();
+  }
 }
 
 void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {

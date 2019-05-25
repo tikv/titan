@@ -155,14 +155,14 @@ class TitanDBImpl : public TitanDB {
   Statistics* stats_;
 
   std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
-      original_table_factory_;
+      base_table_factory_;
   std::unordered_map<uint32_t, std::shared_ptr<TitanTableFactory>>
-      derived_table_factory_;
+      titan_table_factory_;
 
   // handle for purging obsolete blob files at fixed intervals
   std::unique_ptr<RepeatableThread> thread_purge_obsolete_;
 
-  std::shared_ptr<VersionSet> vset_;
+  std::unique_ptr<VersionSet> vset_;
   std::set<uint64_t> pending_outputs_;
   std::shared_ptr<BlobFileManager> blob_manager_;
 
