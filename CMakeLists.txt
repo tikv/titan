@@ -15,29 +15,9 @@ include_directories(${ROCKSDB_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
-set(SOURCES
-        src/blob_file_builder.cc
-        src/blob_file_cache.cc
-        src/blob_file_iterator.cc
-        src/blob_file_reader.cc
-        src/blob_file_size_collector.cc
-        src/base_db_listener.cc
-        src/blob_format.cc
-        src/blob_gc.cc
-        src/blob_gc_job.cc
-        src/blob_gc_picker.cc
-        src/blob_storage.cc
-        src/db.cc
-        src/db_impl.cc
-        src/db_impl_files.cc
-        src/db_impl_gc.cc
-        src/options.cc
-        src/table_builder.cc
-        src/table_factory.cc
-	src/titan_stats.cc
-        src/util.cc
-        src/version_edit.cc
-        src/version_set.cc)
+file(GLOB SOURCES src/*.cc)
+file(GLOB TEST_SOURCES src/*test.cc)
+list(REMOVE_ITEM SOURCES ${TEST_SOURCES})
 
 add_library(titan STATIC ${SOURCES})
 
