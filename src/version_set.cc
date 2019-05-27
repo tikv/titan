@@ -9,11 +9,12 @@ namespace titandb {
 
 const size_t kMaxFileCacheSize = 1024 * 1024;
 
-VersionSet::VersionSet(const TitanDBOptions& options)
+VersionSet::VersionSet(const TitanDBOptions& options, TitanStats* stats)
     : dirname_(options.dirname),
       env_(options.env),
       env_options_(options),
-      db_options_(options) {
+      db_options_(options),
+      stats_(stats) {
   auto file_cache_size = db_options_.max_open_files;
   if (file_cache_size < 0) {
     file_cache_size = kMaxFileCacheSize;
@@ -255,10 +256,10 @@ Status VersionSet::Apply(VersionEdit* edit) {
 void VersionSet::AddColumnFamilies(
     const std::map<uint32_t, TitanCFOptions>& column_families) {
   for (auto& cf : column_families) {
-    auto file_cache =
-        std::make_shared<BlobFileCache>(db_options_, cf.second, file_cache_);
-    auto blob_storage =
-        std::make_shared<BlobStorage>(db_options_, cf.second, file_cache);
+    auto file_cache = std::make_shared<BlobFileCache>(db_options_, cf.second,
+                                                      file_cache_, stats_);
+    auto blob_storage = std::make_shared<BlobStorage>(db_options_, cf.second,
+                                                      file_cache, stats_);
     column_families_.emplace(cf.first, blob_storage);
   }
 }

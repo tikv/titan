@@ -21,7 +21,7 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
   std::unique_ptr<TableBuilder> base_builder(
       base_factory_->NewTableBuilder(options, column_family_id, file));
   return new TitanTableBuilder(column_family_id, db_options_, cf_options_,
-                               std::move(base_builder), blob_manager_);
+                               std::move(base_builder), blob_manager_, stats_);
 }
 
 std::string TitanTableFactory::GetPrintableTableOptions() const {

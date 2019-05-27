@@ -17,14 +17,14 @@ namespace titandb {
 class TitanInternalStats {
  public:
   enum StatsType {
-    SIZE_BLOB_LIVE,
+    LIVE_BLOB_SIZE,
     NUM_BLOB_FILE,
-    SIZE_BLOB_FILE,
+    BLOB_FILE_SIZE,
     INTERNAL_STATS_ENUM_MAX,
   };
   void Clear() {
     for (int i = 0; i < INTERNAL_STATS_ENUM_MAX; i++) {
-      stats_[i].store(0);
+      stats_[i].store(0, std::memory_order_relaxed);
     }
   }
   void ResetStats(StatsType type) {
@@ -64,7 +64,7 @@ class TitanInternalStats {
 class TitanStats {
  public:
   TitanStats(Statistics* stats) : stats_(stats) {}
-  Status Open(std::map<uint32_t, TitanCFOptions> cf_options,
+  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options,
               uint32_t default_cf) {
     for (auto& opts : cf_options) {
       internal_stats_[opts.first] = NewTitanInternalStats(opts.second);
@@ -126,6 +126,36 @@ inline void SubStats(TitanStats* stats, TitanInternalStats::StatsType type,
                      uint32_t value) {
   if (stats) {
     auto p = stats->internal_stats();
+    if (p) {
+      p->SubStats(type, value);
+    }
+  }
+}
+
+inline void ResetStats(TitanStats* stats, uint32_t cf_id,
+                       TitanInternalStats::StatsType type) {
+  if (stats) {
+    auto p = stats->internal_stats(cf_id);
+    if (p) {
+      p->ResetStats(type);
+    }
+  }
+}
+
+inline void AddStats(TitanStats* stats, uint32_t cf_id,
+                     TitanInternalStats::StatsType type, uint32_t value) {
+  if (stats) {
+    auto p = stats->internal_stats(cf_id);
+    if (p) {
+      p->AddStats(type, value);
+    }
+  }
+}
+
+inline void SubStats(TitanStats* stats, uint32_t cf_id,
+                     TitanInternalStats::StatsType type, uint32_t value) {
+  if (stats) {
+    auto p = stats->internal_stats(cf_id);
     if (p) {
       p->SubStats(type, value);
     }

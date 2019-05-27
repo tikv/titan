@@ -22,7 +22,7 @@ class BlobFileTest : public testing::Test {
     options.dirname = dirname_;
     TitanDBOptions db_options(options);
     TitanCFOptions cf_options(options);
-    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)});
+    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     const int n = 100;
     std::vector<BlobHandle> handles(n);
@@ -35,7 +35,7 @@ class BlobFileTest : public testing::Test {
           new WritableFileWriter(std::move(f), file_name_, env_options_));
     }
     std::unique_ptr<BlobFileBuilder> builder(
-        new BlobFileBuilder(db_options, cf_options, file.get()));
+        new BlobFileBuilder(db_options, cf_options, file.get(), nullptr));
 
     for (int i = 0; i < n; i++) {
       auto key = std::to_string(i);
@@ -83,7 +83,7 @@ class BlobFileTest : public testing::Test {
     options.dirname = dirname_;
     TitanDBOptions db_options(options);
     TitanCFOptions cf_options(options);
-    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)});
+    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     const int n = 100;
     std::vector<BlobHandle> handles(n);
@@ -96,7 +96,7 @@ class BlobFileTest : public testing::Test {
           new WritableFileWriter(std::move(f), file_name_, env_options_));
     }
     std::unique_ptr<BlobFileBuilder> builder(
-        new BlobFileBuilder(db_options, cf_options, file.get()));
+        new BlobFileBuilder(db_options, cf_options, file.get(), nullptr));
 
     for (int i = 0; i < n; i++) {
       auto key = std::to_string(i);

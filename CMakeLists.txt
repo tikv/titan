@@ -34,10 +34,10 @@ set(SOURCES
         src/options.cc
         src/table_builder.cc
         src/table_factory.cc
+	src/titan_stats.cc
         src/util.cc
         src/version_edit.cc
-        src/version_set.cc
-        src/titan_stats.cc)
+        src/version_set.cc)
 
 add_library(titan STATIC ${SOURCES})
 

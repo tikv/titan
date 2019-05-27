@@ -100,12 +100,12 @@ class TitanDB : public StackableDB {
       CompactionJobInfo* compaction_job_info = nullptr) override = 0;
 
   struct Properties {
-    //  "rocksdb.titandb.size-blob-live" - returns total blob value size
+    //  "rocksdb.titandb.live-blob-size" - returns total blob value size
     //      referenced by LSM tree.
     static const std::string kSizeBlobLive;
     //  "rocksdb.titandb.num-blob-file" - returns total blob file size.
     static const std::string kNumBlobFile;
-    //  "rocksdb.titandb.size-blob-file" - returns total size of blob files.
+    //  "rocksdb.titandb.blob-file-size" - returns total size of blob files.
     static const std::string kSizeBlobFile;
   };
 

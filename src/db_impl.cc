@@ -31,7 +31,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       std::unique_ptr<WritableFile> f;
       s = db_->env_->NewWritableFile(name, &f, db_->env_options_);
       if (!s.ok()) return s;
-      AddStats(db_->stats_, TitanInternalStats::NUM_BLOB_FILE, 1);
+      AddStats(db_->stats_.get(), TitanInternalStats::NUM_BLOB_FILE, 1);
       file.reset(new WritableFileWriter(std::move(f), name, db_->env_options_));
     }
 
@@ -52,9 +52,9 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
-      RecordTick(statistics(db_->stats_), BLOB_DB_BLOB_FILE_SYNCED);
+      RecordTick(statistics(db_->stats_.get()), BLOB_DB_BLOB_FILE_SYNCED);
       {
-        StopWatch sync_sw(db_->env_, statistics(db_->stats_),
+        StopWatch sync_sw(db_->env_, statistics(db_->stats_.get()),
                           BLOB_DB_BLOB_FILE_SYNC_MICROS);
         s = file.second->GetFile()->Sync(false);
       }
@@ -85,8 +85,9 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       s = db_->env_->DeleteFile(handle->GetName());
       file_size += handle->GetFile()->GetFileSize();
     }
-    SubStats(db_->stats_, TitanInternalStats::NUM_BLOB_FILE, handles.size());
-    SubStats(db_->stats_, TitanInternalStats::SIZE_BLOB_FILE, file_size);
+    SubStats(db_->stats_.get(), TitanInternalStats::NUM_BLOB_FILE,
+             handles.size());
+    SubStats(db_->stats_.get(), TitanInternalStats::BLOB_FILE_SIZE, file_size);
 
     {
       MutexLock l(&db_->mutex_);
@@ -126,13 +127,15 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
       dbname_(dbname),
       env_(options.env),
       env_options_(options),
-      db_options_(options),
-      stats_(options.titan_stats.get()) {
+      db_options_(options) {
   if (db_options_.dirname.empty()) {
     db_options_.dirname = dbname_ + "/titandb";
   }
   dirname_ = db_options_.dirname;
-  vset_.reset(new VersionSet(db_options_));
+  if (db_options_.statistics != nullptr) {
+    stats_.reset(new TitanStats(db_options_.statistics.get()));
+  }
+  vset_.reset(new VersionSet(db_options_, stats_.get()));
   blob_manager_.reset(new FileManager(this));
 }
 
@@ -185,7 +188,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       assert(original_table_factory != nullptr);
       original_table_factory_[cf_id] = original_table_factory;
       base_descs[i].options.table_factory = std::make_shared<TitanTableFactory>(
-          db_options_, descs[i].options, blob_manager_);
+          db_options_, descs[i].options, blob_manager_, stats_.get());
       // Add TableProperties for collecting statistics GC
       base_descs[i].options.table_properties_collector_factories.emplace_back(
           std::make_shared<BlobFileSizeCollectorFactory>());
@@ -220,8 +223,8 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
   if (s.ok()) {
     db_impl_ = reinterpret_cast<DBImpl*>(db_->GetRootDB());
-    if (stats_) {
-      stats_->Open(column_families, db_->DefaultColumnFamily()->GetID());
+    if (stats_.get()) {
+      stats_->Initialize(column_families, db_->DefaultColumnFamily()->GetID());
     }
   }
   return s;
@@ -282,8 +285,8 @@ Status TitanDBImpl::CreateColumnFamilies(
   for (auto& desc : descs) {
     ColumnFamilyOptions options = desc.options;
     // Replaces the provided table factory with TitanTableFactory.
-    options.table_factory.reset(
-        new TitanTableFactory(db_options_, desc.options, blob_manager_));
+    options.table_factory.reset(new TitanTableFactory(
+        db_options_, desc.options, blob_manager_, stats_.get()));
     base_descs.emplace_back(desc.name, options);
   }
 
@@ -369,7 +372,7 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                         nullptr /*read_callback*/, &is_blob_index);
   if (!s.ok() || !is_blob_index) return s;
 
-  StopWatch get_sw(env_, statistics(stats_), BLOB_DB_GET_MICROS);
+  StopWatch get_sw(env_, statistics(stats_.get()), BLOB_DB_GET_MICROS);
 
   BlobIndex index;
   s = index.DecodeFrom(value);
@@ -384,10 +387,11 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   mutex_.Unlock();
 
   {
-    StopWatch read_sw(env_, statistics(stats_), BLOB_DB_BLOB_FILE_READ_MICROS);
+    StopWatch read_sw(env_, statistics(stats_.get()),
+                      BLOB_DB_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
-    RecordTick(statistics(stats_), BLOB_DB_NUM_KEYS_READ);
-    RecordTick(statistics(stats_), BLOB_DB_BLOB_FILE_BYTES_READ,
+    RecordTick(statistics(stats_.get()), BLOB_DB_NUM_KEYS_READ);
+    RecordTick(statistics(stats_.get()), BLOB_DB_BLOB_FILE_BYTES_READ,
                index.blob_handle.size);
   }
   if (s.IsCorruption()) {
@@ -462,7 +466,7 @@ Iterator* TitanDBImpl::NewIteratorImpl(
       options, cfd, options.snapshot->GetSequenceNumber(),
       nullptr /*read_callback*/, true /*allow_blob*/, true /*allow_refresh*/));
   return new TitanDBIterator(options, storage.lock().get(), snapshot,
-                             std::move(iter), env_, stats_);
+                             std::move(iter), env_, stats_.get());
 }
 
 Status TitanDBImpl::NewIterators(
@@ -512,7 +516,7 @@ bool TitanDBImpl::GetProperty(ColumnFamilyHandle* column_family,
                               const Slice& property, std::string* value) {
   assert(column_family != nullptr);
   bool s = false;
-  if (stats_ != nullptr) {
+  if (stats_.get() != nullptr) {
     auto stats = stats_->internal_stats(column_family->GetID());
     if (stats != nullptr) {
       s = stats->GetStringProperty(property, value);
@@ -647,9 +651,9 @@ void TitanDBImpl::OnCompactionCompleted(
       file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
     }
     if (delta > 0) {
-      AddStats(stats_, TitanInternalStats::SIZE_BLOB_LIVE, delta);
+      AddStats(stats_.get(), TitanInternalStats::LIVE_BLOB_SIZE, delta);
     } else {
-      SubStats(stats_, TitanInternalStats::SIZE_BLOB_LIVE, -delta);
+      SubStats(stats_.get(), TitanInternalStats::LIVE_BLOB_SIZE, -delta);
     }
     bs->ComputeGCScore();
 

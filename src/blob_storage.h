@@ -25,12 +25,12 @@ class BlobStorage {
 
   BlobStorage(const TitanDBOptions& _db_options,
               const TitanCFOptions& _cf_options,
-              std::shared_ptr<BlobFileCache> _file_cache)
+              std::shared_ptr<BlobFileCache> _file_cache, TitanStats* stats)
       : db_options_(_db_options),
         cf_options_(_cf_options),
         file_cache_(_file_cache),
         destroyed_(false),
-        stats_(_db_options.titan_stats.get()) {}
+        stats_(stats) {}
 
   ~BlobStorage() {
     for (auto& file : files_) {

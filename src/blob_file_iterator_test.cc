@@ -52,7 +52,7 @@ class BlobFileIteratorTest : public testing::Test {
   void NewBuiler() {
     TitanDBOptions db_options(titan_options_);
     TitanCFOptions cf_options(titan_options_);
-    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)});
+    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     {
       std::unique_ptr<WritableFile> f;
@@ -60,8 +60,8 @@ class BlobFileIteratorTest : public testing::Test {
       writable_file_.reset(
           new WritableFileWriter(std::move(f), file_name_, env_options_));
     }
-    builder_.reset(
-        new BlobFileBuilder(db_options, cf_options, writable_file_.get()));
+    builder_.reset(new BlobFileBuilder(db_options, cf_options,
+                                       writable_file_.get(), nullptr));
   }
 
   void AddKeyValue(const std::string& key, const std::string& value,

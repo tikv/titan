@@ -2,6 +2,7 @@
 
 #include "blob_format.h"
 #include "titan/options.h"
+#include "titan_stats.h"
 #include "util/file_reader_writer.h"
 
 namespace rocksdb {
@@ -37,7 +38,8 @@ class BlobFileBuilder {
   // is building in "*file". Does not close the file. It is up to the
   // caller to sync and close the file after calling Finish().
   BlobFileBuilder(const TitanDBOptions& db_options,
-                  const TitanCFOptions& cf_options, WritableFileWriter* file);
+                  const TitanCFOptions& cf_options, WritableFileWriter* file,
+                  TitanStats* stats);
 
   // Adds the record to the file and points the handle to it.
   void Add(const BlobRecord& record, BlobHandle* handle);

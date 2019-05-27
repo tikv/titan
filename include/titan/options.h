@@ -24,15 +24,13 @@ struct TitanDBOptions : public DBOptions {
   // Default: 1
   int32_t max_background_gc{1};
 
-  // If not null, collect metrics about Titan operations
-  //
-  // Default: nullptr
-  std::shared_ptr<TitanStats> titan_stats{nullptr};
-
   TitanDBOptions() = default;
-  explicit TitanDBOptions(const DBOptions& options);
+  explicit TitanDBOptions(const DBOptions& options) : DBOptions(options) {}
 
-  TitanDBOptions& operator=(const DBOptions& options);
+  TitanDBOptions& operator=(const DBOptions& options) {
+    *static_cast<DBOptions*>(this) = options;
+    return *this;
+  }
 };
 
 struct TitanCFOptions : public ColumnFamilyOptions {

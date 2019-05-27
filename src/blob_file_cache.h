@@ -13,7 +13,8 @@ class BlobFileCache {
  public:
   // Constructs a blob file cache to cache opened files.
   BlobFileCache(const TitanDBOptions& db_options,
-                const TitanCFOptions& cf_options, std::shared_ptr<Cache> cache);
+                const TitanCFOptions& cf_options, std::shared_ptr<Cache> cache,
+                TitanStats* stats);
 
   // Gets the blob record pointed by the handle in the specified file
   // number. The corresponding file size must be exactly "file_size"

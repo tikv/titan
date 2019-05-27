@@ -149,7 +149,9 @@ class TitanDBImpl : public TitanDB {
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
 
-  TitanStats* stats_;
+  // TitanStats is turned on only if statistics field of DBOptions
+  // is not null.
+  std::unique_ptr<TitanStats> stats_;
 
   std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
       original_table_factory_;

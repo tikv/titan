@@ -11,11 +11,13 @@ class TitanTableFactory : public TableFactory {
  public:
   TitanTableFactory(const TitanDBOptions& db_options,
                     const TitanCFOptions& cf_options,
-                    std::shared_ptr<BlobFileManager> blob_manager)
+                    std::shared_ptr<BlobFileManager> blob_manager,
+                    TitanStats* stats)
       : db_options_(db_options),
         cf_options_(cf_options),
         base_factory_(cf_options.table_factory),
-        blob_manager_(blob_manager) {}
+        blob_manager_(blob_manager),
+        stats_(stats) {}
 
   const char* Name() const override { return "TitanTable"; }
 
@@ -54,6 +56,7 @@ class TitanTableFactory : public TableFactory {
   TitanCFOptions cf_options_;
   std::shared_ptr<TableFactory> base_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
+  TitanStats* stats_;
 };
 
 }  // namespace titandb
