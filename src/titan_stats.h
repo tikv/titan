@@ -65,7 +65,7 @@ class TitanStats {
  public:
   TitanStats(Statistics* stats) : stats_(stats) {}
   Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options,
-              uint32_t default_cf) {
+                    uint32_t default_cf) {
     for (auto& opts : cf_options) {
       internal_stats_[opts.first] = NewTitanInternalStats(opts.second);
     }

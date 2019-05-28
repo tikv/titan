@@ -13,19 +13,19 @@ static const std::string live_blob_size = "live-blob-size";
 static const std::string num_blob_file = "num-blob-file";
 static const std::string blob_file_size = "blob-file-size";
 
-const std::string TitanDB::Properties::kSizeBlobLive =
+const std::string TitanDB::Properties::kLiveBlobSize =
     titandb_prefix + live_blob_size;
 const std::string TitanDB::Properties::kNumBlobFile =
     titandb_prefix + num_blob_file;
-const std::string TitanDB::Properties::kSizeBlobFile =
+const std::string TitanDB::Properties::kBlobFileSize =
     titandb_prefix + blob_file_size;
 
 const std::unordered_map<std::string, TitanInternalStats::StatsType>
     TitanInternalStats::stats_type_string_map = {
-        {TitanDB::Properties::kSizeBlobLive,
+        {TitanDB::Properties::kLiveBlobSize,
          TitanInternalStats::LIVE_BLOB_SIZE},
         {TitanDB::Properties::kNumBlobFile, TitanInternalStats::NUM_BLOB_FILE},
-        {TitanDB::Properties::kSizeBlobFile,
+        {TitanDB::Properties::kBlobFileSize,
          TitanInternalStats::BLOB_FILE_SIZE},
 };
 

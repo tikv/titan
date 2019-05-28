@@ -102,11 +102,11 @@ class TitanDB : public StackableDB {
   struct Properties {
     //  "rocksdb.titandb.live-blob-size" - returns total blob value size
     //      referenced by LSM tree.
-    static const std::string kSizeBlobLive;
+    static const std::string kLiveBlobSize;
     //  "rocksdb.titandb.num-blob-file" - returns total blob file size.
     static const std::string kNumBlobFile;
     //  "rocksdb.titandb.blob-file-size" - returns total size of blob files.
-    static const std::string kSizeBlobFile;
+    static const std::string kBlobFileSize;
   };
 
   bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
