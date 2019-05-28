@@ -36,8 +36,17 @@ std::string TitanCFOptions::ToString() const {
   snprintf(buf, sizeof(buf), "blob_file_target_size = %" PRIu64 "\n",
            blob_file_target_size);
   res += buf;
+  snprintf(buf, sizeof(buf), "blob_run_mode = %s\n",
+           blob_run_mode_to_string[blob_run_mode].c_str());
+  res += buf;
   return res;
 }
+
+std::map<TitanBlobRunMode, std::string>
+    TitanOptionsHelper::blob_run_mode_to_string = {
+        {TitanBlobRunMode::kNormal, "normal"},
+        {TitanBlobRunMode::kReadOnly, "read_only"},
+        {TitanBlobRunMode::kFallback, "fallback"}};
 
 std::unordered_map<std::string, TitanBlobRunMode>
     TitanOptionsHelper::blob_run_mode_string_map = {

@@ -49,6 +49,7 @@ class TitanTableFactory : public TableFactory {
 
   void* GetOptions() override { return base_factory_->GetOptions(); }
 
+  // REQUIRE: mutex held
   void SetBlobRunMode(TitanBlobRunMode mode) {
     MutableTitanCFOptions opts(mutable_cf_options_);
     opts.blob_run_mode = mode;

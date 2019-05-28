@@ -173,9 +173,9 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       db_->DestroyColumnFamilyHandle(handle);
       // Replaces the provided table factory with TitanTableFactory.
       // While we need to preserve original table_factory for GetOptions.
-      auto& original_table_factory = base_descs[i].options.table_factory;
-      assert(original_table_factory != nullptr);
-      base_table_factory_[cf_id] = original_table_factory;
+      auto& base_table_factory = base_descs[i].options.table_factory;
+      assert(base_table_factory != nullptr);
+      base_table_factory_[cf_id] = base_table_factory;
       titan_table_factory_[cf_id] = std::make_shared<TitanTableFactory>(
           db_options_, descs[i].options, blob_manager_, vset_.get());
       base_descs[i].options.table_factory = titan_table_factory_[cf_id];
@@ -269,13 +269,15 @@ Status TitanDBImpl::CreateColumnFamilies(
     const std::vector<TitanCFDescriptor>& descs,
     std::vector<ColumnFamilyHandle*>* handles) {
   std::vector<ColumnFamilyDescriptor> base_descs;
-  std::vector<std::shared_ptr<TitanTableFactory>> derived_table_factory;
+  std::vector<std::shared_ptr<TableFactory>> base_table_factory;
+  std::vector<std::shared_ptr<TitanTableFactory>> titan_table_factory;
   for (auto& desc : descs) {
     ColumnFamilyOptions options = desc.options;
     // Replaces the provided table factory with TitanTableFactory.
-    derived_table_factory.emplace_back(std::make_shared<TitanTableFactory>(
+    base_table_factory.emplace_back(options.table_factory);
+    titan_table_factory.emplace_back(std::make_shared<TitanTableFactory>(
         db_options_, desc.options, blob_manager_, vset_.get()));
-    options.table_factory = derived_table_factory.back();
+    options.table_factory = titan_table_factory.back();
     base_descs.emplace_back(desc.name, options);
   }
 
@@ -284,10 +286,14 @@ Status TitanDBImpl::CreateColumnFamilies(
 
   if (s.ok()) {
     std::map<uint32_t, TitanCFOptions> column_families;
-    for (size_t i = 0; i < descs.size(); i++) {
-      uint32_t cf_id = (*handles)[i]->GetID();
-      column_families.emplace(cf_id, descs[i].options);
-      titan_table_factory_[cf_id] = derived_table_factory[i];
+    {
+      MutexLock l(&mutex_);
+      for (size_t i = 0; i < descs.size(); i++) {
+        uint32_t cf_id = (*handles)[i]->GetID();
+        column_families.emplace(cf_id, descs[i].options);
+        base_table_factory_[cf_id] = base_table_factory[i];
+        titan_table_factory_[cf_id] = titan_table_factory[i];
+      }
     }
     vset_->AddColumnFamilies(column_families);
   }
@@ -302,6 +308,13 @@ Status TitanDBImpl::DropColumnFamilies(
   }
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
+    {
+      MutexLock l(&mutex_);
+      for (auto cf_id : column_families) {
+        base_table_factory_.erase(cf_id);
+        titan_table_factory_.erase(cf_id);
+      }
+    }
     SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
     s = vset_->DropColumnFamilies(column_families, obsolete_sequence);
   }
@@ -508,7 +521,8 @@ Status TitanDBImpl::SetOptions(
     } else {
       mode = pm->second;
     }
-    auto table_factory = titan_table_factory_[column_family->GetID()];
+    MutexLock l(&mutex_);
+    auto& table_factory = titan_table_factory_[column_family->GetID()];
     table_factory->SetBlobRunMode(mode);
     opts.erase(p);
   }

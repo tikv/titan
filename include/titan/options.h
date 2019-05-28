@@ -2,6 +2,7 @@
 
 #include "rocksdb/options.h"
 
+#include <map>
 #include <unordered_map>
 
 namespace rocksdb {
@@ -44,10 +45,13 @@ enum class TitanBlobRunMode {
 };
 
 struct TitanOptionsHelper {
+  static std::map<TitanBlobRunMode, std::string> blob_run_mode_to_string;
   static std::unordered_map<std::string, TitanBlobRunMode>
       blob_run_mode_string_map;
 };
 
+static auto& blob_run_mode_to_string =
+    TitanOptionsHelper::blob_run_mode_to_string;
 static auto& blob_run_mode_string_map =
     TitanOptionsHelper::blob_run_mode_string_map;
 
