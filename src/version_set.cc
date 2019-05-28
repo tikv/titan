@@ -10,8 +10,7 @@ namespace titandb {
 const size_t kMaxFileCacheSize = 1024 * 1024;
 
 VersionSet::VersionSet(const TitanDBOptions& options)
-    : mutex_(),
-      dirname_(options.dirname),
+    : dirname_(options.dirname),
       env_(options.env),
       env_options_(options),
       db_options_(options) {
@@ -193,7 +192,7 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
 }
 
 Status VersionSet::LogAndApply(VersionEdit* edit) {
-  WriteLock l(&mutex_);
+  MutexLock l(&mutex_);
   return LogAndApplyLocked(edit);
 }
 
@@ -261,7 +260,7 @@ Status VersionSet::Apply(VersionEdit* edit) {
 
 void VersionSet::AddColumnFamilies(
     const std::map<uint32_t, TitanCFOptions>& column_families) {
-  ReadLock l(&mutex_);
+  MutexLock l(&mutex_);
   for (auto& cf : column_families) {
     auto file_cache =
         std::make_shared<BlobFileCache>(db_options_, cf.second, file_cache_);
@@ -274,7 +273,7 @@ void VersionSet::AddColumnFamilies(
 Status VersionSet::DropColumnFamilies(
     const std::vector<uint32_t>& column_families,
     SequenceNumber obsolete_sequence) {
-  ReadLock l(&mutex_);
+  MutexLock l(&mutex_);
   Status s;
   for (auto& cf_id : column_families) {
     auto it = column_families_.find(cf_id);
@@ -299,7 +298,7 @@ Status VersionSet::DropColumnFamilies(
 }
 
 Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
-  WriteLock l(&mutex_);
+  MutexLock l(&mutex_);
   obsolete_columns_.erase(cf_id);
   auto it = column_families_.find(cf_id);
   if (it != column_families_.end()) {
@@ -316,7 +315,7 @@ Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
 
 void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                                   SequenceNumber oldest_sequence) {
-  WriteLock l(&mutex_);
+  MutexLock l(&mutex_);
   for (auto it = column_families_.begin(); it != column_families_.end();) {
     auto& cf_id = it->first;
     auto& blob_storage = it->second;
