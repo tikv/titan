@@ -107,5 +107,42 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   return s;
 }
 
+Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
+  {
+    MutexLock l(&mutex_);
+    bg_gc_scheduled_.fetch_add(1, std::memory_order_release);
+  }
+  // BackgroundCallGC
+  Status s;
+  LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
+  {
+    MutexLock l(&mutex_);
+    assert(bg_gc_scheduled_ > 0);
+
+    s = BackgroundGC(&log_buffer);
+
+    {
+      mutex_.Unlock();
+      log_buffer.FlushBufferToLog();
+      LogFlush(db_options_.info_log.get());
+      mutex_.Lock();
+    }
+
+    bg_gc_scheduled_--;
+    if (bg_gc_scheduled_ == 0) {
+      // signal if
+      // * bg_gc_scheduled_ == 0 -- need to wakeup ~TitanDBImpl
+      // If none of this is true, there is no need to signal since nobody is
+      // waiting for it
+      bg_cv_.SignalAll();
+    }
+    // IMPORTANT: there should be no code after calling SignalAll. This call may
+    // signal the DB destructor that it's OK to proceed with destruction. In
+    // that case, all DB variables will be dealloacated and referencing them
+    // will cause trouble.
+  }
+  return s;
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
