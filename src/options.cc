@@ -44,15 +44,15 @@ std::string TitanCFOptions::ToString() const {
 
 std::map<TitanBlobRunMode, std::string>
     TitanOptionsHelper::blob_run_mode_to_string = {
-        {TitanBlobRunMode::kNormal, "normal"},
-        {TitanBlobRunMode::kReadOnly, "read_only"},
-        {TitanBlobRunMode::kFallback, "fallback"}};
+        {TitanBlobRunMode::kNormal, "kNormal"},
+        {TitanBlobRunMode::kReadOnly, "kReadOnly"},
+        {TitanBlobRunMode::kFallback, "kFallback"}};
 
 std::unordered_map<std::string, TitanBlobRunMode>
     TitanOptionsHelper::blob_run_mode_string_map = {
-        {"normal", TitanBlobRunMode::kNormal},
-        {"read-only", TitanBlobRunMode::kReadOnly},
-        {"fallback", TitanBlobRunMode::kFallback}};
+        {"kNormal", TitanBlobRunMode::kNormal},
+        {"kReadOnly", TitanBlobRunMode::kReadOnly},
+        {"kFallback", TitanBlobRunMode::kFallback}};
 
 }  // namespace titandb
 }  // namespace rocksdb

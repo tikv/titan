@@ -495,6 +495,8 @@ Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
   assert(column_family != nullptr);
   Options options = db_->GetOptions(column_family);
   uint32_t cf_id = column_family->GetID();
+
+  MutexLock l(&mutex_);
   if (base_table_factory_.count(cf_id) > 0) {
     options.table_factory = base_table_factory_.at(cf_id);
   } else {
@@ -510,27 +512,34 @@ Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
 Status TitanDBImpl::SetOptions(
     ColumnFamilyHandle* column_family,
     const std::unordered_map<std::string, std::string>& new_options) {
+  Status s;
   auto opts = new_options;
   auto p = opts.find("blob_run_mode");
-  if (p != opts.end()) {
-    TitanBlobRunMode mode = TitanBlobRunMode::kNormal;
-    auto pm = blob_run_mode_string_map.find(p->second);
-    if (pm == blob_run_mode_string_map.end()) {
-      return Status::InvalidArgument("No blob-run-mode defined for " +
-                                     p->second);
-    } else {
-      mode = pm->second;
-    }
-    MutexLock l(&mutex_);
-    auto& table_factory = titan_table_factory_[column_family->GetID()];
-    table_factory->SetBlobRunMode(mode);
+  bool set_blob_run_mode = (p != opts.end());
+  std::string blob_run_mode_string;
+  if (set_blob_run_mode) {
+    blob_run_mode_string = p->second;
     opts.erase(p);
   }
   if (opts.size() > 0) {
-    return db_->SetOptions(column_family, opts);
-  } else {
-    return Status::OK();
+    s = db_->SetOptions(column_family, opts);
+    if (!s.ok()) {
+      return s;
+    }
   }
+  TitanBlobRunMode mode = TitanBlobRunMode::kNormal;
+  auto pm = blob_run_mode_string_map.find(blob_run_mode_string);
+  if (pm == blob_run_mode_string_map.end()) {
+    return Status::InvalidArgument("No blob_run_mode defined for " +
+                                   blob_run_mode_string);
+  } else {
+    mode = pm->second;
+  }
+  mutex_.Lock();
+  auto& table_factory = titan_table_factory_[column_family->GetID()];
+  mutex_.Unlock();
+  table_factory->SetBlobRunMode(mode);
+  return Status::OK();
 }
 
 void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {

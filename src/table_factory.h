@@ -49,11 +49,9 @@ class TitanTableFactory : public TableFactory {
 
   void* GetOptions() override { return base_factory_->GetOptions(); }
 
-  // REQUIRE: mutex held
   void SetBlobRunMode(TitanBlobRunMode mode) {
-    MutableTitanCFOptions opts(mutable_cf_options_);
-    opts.blob_run_mode = mode;
-    mutable_cf_options_ = opts;
+    MutexLock l(&mutex_);
+    mutable_cf_options_.blob_run_mode = mode;
   }
 
   bool IsDeleteRangeSupported() const override {
@@ -61,6 +59,8 @@ class TitanTableFactory : public TableFactory {
   }
 
  private:
+  port::Mutex mutex_;
+
   TitanDBOptions db_options_;
   ImmutableTitanCFOptions immutable_cf_options_;
   MutableTitanCFOptions mutable_cf_options_;

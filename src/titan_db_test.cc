@@ -612,7 +612,7 @@ TEST_F(TitanDBTest, Options) {
   Open();
 
   std::unordered_map<std::string, std::string> opts;
-  opts["blob_run_mode"] = "read-only";
+  opts["blob_run_mode"] = "kReadOnly";
   ASSERT_OK(db_->SetOptions(opts));
 
   opts["disable_auto_compactions"] = "true";
@@ -653,7 +653,7 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   }
   version.clear();
 
-  opts["blob_run_mode"] = "read-only";
+  opts["blob_run_mode"] = "kReadOnly";
   db_->SetOptions(opts);
   for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
     Put(i, &data);

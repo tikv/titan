@@ -139,7 +139,7 @@ class TitanDBImpl : public TitanDB {
   // while the unlock sequence must be Base DB mutex.Unlock() ->
   // Titan.mutex_.Unlock() Only if we all obey these sequence, we can prevent
   // potential dead lock.
-  port::Mutex mutex_;
+  mutable port::Mutex mutex_;
   // This condition variable is signaled on these conditions:
   // * whenever bg_gc_scheduled_ goes down to 0
   port::CondVar bg_cv_;
