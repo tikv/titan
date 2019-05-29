@@ -20,6 +20,7 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
     WritableFileWriter* file) const {
   std::unique_ptr<TableBuilder> base_builder(
       base_factory_->NewTableBuilder(options, column_family_id, file));
+  MutexLock l(&mutex_);
   return new TitanTableBuilder(
       column_family_id, db_options_,
       TitanCFOptions(immutable_cf_options_, mutable_cf_options_),
@@ -27,6 +28,7 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
 }
 
 std::string TitanTableFactory::GetPrintableTableOptions() const {
+  MutexLock l(&mutex_);
   return base_factory_->GetPrintableTableOptions() +
          TitanCFOptions(immutable_cf_options_, mutable_cf_options_).ToString();
 }

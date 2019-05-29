@@ -59,7 +59,7 @@ class TitanTableFactory : public TableFactory {
   }
 
  private:
-  port::Mutex mutex_;
+  mutable port::Mutex mutex_;
 
   TitanDBOptions db_options_;
   ImmutableTitanCFOptions immutable_cf_options_;
