@@ -535,10 +535,11 @@ Status TitanDBImpl::SetOptions(
   } else {
     mode = pm->second;
   }
-  mutex_.Lock();
-  auto& table_factory = titan_table_factory_[column_family->GetID()];
-  mutex_.Unlock();
-  table_factory->SetBlobRunMode(mode);
+  {
+    MutexLock l(&mutex_);
+    auto& table_factory = titan_table_factory_[column_family->GetID()];
+    table_factory->SetBlobRunMode(mode);
+  }
   return Status::OK();
 }
 
