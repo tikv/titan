@@ -119,7 +119,49 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
     MutexLock l(&mutex_);
     assert(bg_gc_scheduled_ > 0);
 
-    s = BackgroundGC(&log_buffer);
+    // BackgroudGC
+    StopWatch gc_sw(env_, stats_, BLOB_DB_GC_MICROS);
+
+    std::unique_ptr<BlobGC> blob_gc;
+    std::unique_ptr<ColumnFamilyHandle> cfh;
+
+    auto bs = vset_->GetBlobStorage(column_family_id).lock().get();
+    const auto& cf_options = bs->cf_options();
+    std::shared_ptr<BlobGCPicker> blob_gc_picker =
+        std::make_shared<BasicBlobGCPicker>(db_options_, cf_options);
+    blob_gc = blob_gc_picker->PickBlobGC(bs);
+
+    if (blob_gc) {
+      cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
+      assert(column_family_id == cfh->GetID());
+      blob_gc->SetColumnFamily(cfh.get());
+    }
+
+    if (UNLIKELY(!blob_gc)) {
+      ROCKS_LOG_BUFFER(&log_buffer, "Titan GC nothing to do");
+    } else {
+      BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
+                            env_options_, blob_manager_.get(), vset_.get(),
+                            &log_buffer, &shuting_down_);
+      s = blob_gc_job.Prepare();
+
+      if (s.ok()) {
+        mutex_.Unlock();
+        s = blob_gc_job.Run();
+        mutex_.Lock();
+      }
+
+      if (s.ok()) {
+        s = blob_gc_job.Finish();
+      }
+
+      blob_gc->ReleaseGcFiles();
+    }
+
+    if (!s.ok()) {
+      ROCKS_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
+                     s.ToString().c_str());
+    }
 
     {
       mutex_.Unlock();
@@ -130,16 +172,8 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
 
     bg_gc_scheduled_--;
     if (bg_gc_scheduled_ == 0) {
-      // signal if
-      // * bg_gc_scheduled_ == 0 -- need to wakeup ~TitanDBImpl
-      // If none of this is true, there is no need to signal since nobody is
-      // waiting for it
       bg_cv_.SignalAll();
     }
-    // IMPORTANT: there should be no code after calling SignalAll. This call may
-    // signal the DB destructor that it's OK to proceed with destruction. In
-    // that case, all DB variables will be dealloacated and referencing them
-    // will cause trouble.
   }
   return s;
 }
