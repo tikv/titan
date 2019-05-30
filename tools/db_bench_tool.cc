@@ -2022,10 +2022,7 @@ class Benchmark {
   class ErrorHandlerListener : public EventListener {
    public:
     ErrorHandlerListener()
-        : mutex_(),
-          cv_(&mutex_),
-          no_auto_recovery_(false),
-          recovery_complete_(false) {}
+        : cv_(&mutex_), no_auto_recovery_(false), recovery_complete_(false) {}
 
     ~ErrorHandlerListener() {}
 

@@ -112,9 +112,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
 
 TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
                          const std::string& dbname)
-    : TitanDB(),
-      mutex_(),
-      bg_cv_(&mutex_),
+    : bg_cv_(&mutex_),
       dbname_(dbname),
       env_(options.env),
       env_options_(options),

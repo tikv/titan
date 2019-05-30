@@ -623,7 +623,7 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   options_.disable_background_gc = true;
   Open();
 
-  const uint64_t kNumEntries = 10000;
+  const uint64_t kNumEntries = 1000;
   const uint64_t kMaxKeys = 100000;
   std::unordered_map<std::string, std::string> opts;
   std::map<std::string, std::string> data;

@@ -81,6 +81,7 @@ class VersionSet {
 
   Status Apply(VersionEdit* edit);
 
+  // REQUIRE: mutex is held
   Status LogAndApplyLocked(VersionEdit* edit);
 
   port::Mutex mutex_;

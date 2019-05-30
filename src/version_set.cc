@@ -10,8 +10,7 @@ namespace titandb {
 const size_t kMaxFileCacheSize = 1024 * 1024;
 
 VersionSet::VersionSet(const TitanDBOptions& options)
-    : mutex_(),
-      dirname_(options.dirname),
+    : dirname_(options.dirname),
       env_(options.env),
       env_options_(options),
       db_options_(options) {
@@ -199,6 +198,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit) {
 
 Status VersionSet::LogAndApplyLocked(VersionEdit* edit) {
   // TODO(@huachao): write manifest file unlocked
+  mutex_.AssertHeld();
   std::string record;
   edit->SetNextFileNumber(next_file_number_.load());
   edit->EncodeTo(&record);
