@@ -174,14 +174,10 @@ TEST_F(TitanThreadSafetyTest, Basic) {
     {
       MutexLock l(&mutex_);
       handles[name] = handle;
-      ref_count[name] = 0;
+      ref_count[name] = job_count;
     }
     for (uint32_t job = 0; job < job_count; job++) {
       threads.emplace_back([&, job, handle, name] {
-        {
-          MutexLock l(&mutex_);
-          ref_count[name]++;
-        }
         for (uint32_t k = 0; k < param_.repeat; k++) {
           jobs[job](handle);
         }
