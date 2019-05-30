@@ -18,8 +18,10 @@ class TitanInternalStats {
  public:
   enum StatsType {
     LIVE_BLOB_SIZE,
-    NUM_BLOB_FILE,
-    BLOB_FILE_SIZE,
+    NUM_LIVE_BLOB_FILE,
+    NUM_OBSOLETE_BLOB_FILE,
+    LIVE_BLOB_FILE_SIZE,
+    OBSOLETE_BLOB_FILE_SIZE,
     INTERNAL_STATS_ENUM_MAX,
   };
   void Clear() {
@@ -113,7 +115,7 @@ inline void ResetStats(TitanStats* stats, TitanInternalStats::StatsType type) {
 }
 
 inline void AddStats(TitanStats* stats, TitanInternalStats::StatsType type,
-                     uint32_t value) {
+                     uint64_t value) {
   if (stats) {
     auto p = stats->internal_stats();
     if (p) {
@@ -123,7 +125,7 @@ inline void AddStats(TitanStats* stats, TitanInternalStats::StatsType type,
 }
 
 inline void SubStats(TitanStats* stats, TitanInternalStats::StatsType type,
-                     uint32_t value) {
+                     uint64_t value) {
   if (stats) {
     auto p = stats->internal_stats();
     if (p) {
@@ -143,7 +145,7 @@ inline void ResetStats(TitanStats* stats, uint32_t cf_id,
 }
 
 inline void AddStats(TitanStats* stats, uint32_t cf_id,
-                     TitanInternalStats::StatsType type, uint32_t value) {
+                     TitanInternalStats::StatsType type, uint64_t value) {
   if (stats) {
     auto p = stats->internal_stats(cf_id);
     if (p) {
@@ -153,7 +155,7 @@ inline void AddStats(TitanStats* stats, uint32_t cf_id,
 }
 
 inline void SubStats(TitanStats* stats, uint32_t cf_id,
-                     TitanInternalStats::StatsType type, uint32_t value) {
+                     TitanInternalStats::StatsType type, uint64_t value) {
   if (stats) {
     auto p = stats->internal_stats(cf_id);
     if (p) {

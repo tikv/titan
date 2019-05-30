@@ -20,14 +20,16 @@ class BlobStorage {
     this->file_cache_ = bs.file_cache_;
     this->db_options_ = bs.db_options_;
     this->cf_options_ = bs.cf_options_;
+    this->cf_id_ = bs.cf_id_;
     this->stats_ = bs.stats_;
   }
 
   BlobStorage(const TitanDBOptions& _db_options,
-              const TitanCFOptions& _cf_options,
+              const TitanCFOptions& _cf_options, uint32_t cf_id,
               std::shared_ptr<BlobFileCache> _file_cache, TitanStats* stats)
       : db_options_(_db_options),
         cf_options_(_cf_options),
+        cf_id_(cf_id),
         file_cache_(_file_cache),
         destroyed_(false),
         stats_(stats) {}
@@ -100,6 +102,7 @@ class BlobStorage {
 
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
+  uint32_t cf_id_;
 
   // Read Write Mutex, which protects the `files_` structures
   mutable port::RWMutex mutex_;

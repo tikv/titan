@@ -103,10 +103,16 @@ class TitanDB : public StackableDB {
     //  "rocksdb.titandb.live-blob-size" - returns total blob value size
     //      referenced by LSM tree.
     static const std::string kLiveBlobSize;
-    //  "rocksdb.titandb.num-blob-file" - returns total blob file size.
-    static const std::string kNumBlobFile;
-    //  "rocksdb.titandb.blob-file-size" - returns total size of blob files.
-    static const std::string kBlobFileSize;
+    //  "rocksdb.titandb.num-live-blob-file" - returns total blob file count.
+    static const std::string kNumLiveBlobFile;
+    //  "rocksdb.titandb.num-obsolete-blob-file" - return obsolete blob file.
+    static const std::string kNumObsoleteBlobFile;
+    //  "rocksdb.titandb.live-blob-file-size" - returns total size of live blob
+    //      files.
+    static const std::string kLiveBlobFileSize;
+    //  "rocksdb.titandb.obsolete-blob-file-size" - returns size of obsolete
+    //      blob files.
+    static const std::string kObsoleteBlobFileSize;
   };
 
   bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,

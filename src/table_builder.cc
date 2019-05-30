@@ -36,8 +36,8 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
   if (!blob_builder_) {
     status_ = blob_manager_->NewFile(&blob_handle_);
     if (!ok()) return;
-    blob_builder_.reset(new BlobFileBuilder(db_options_, cf_options_,
-                                            blob_handle_->GetFile(), stats_));
+    blob_builder_.reset(
+        new BlobFileBuilder(db_options_, cf_options_, blob_handle_->GetFile()));
   }
 
   RecordTick(statistics(stats_), BLOB_DB_NUM_KEYS_WRITTEN);

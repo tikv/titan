@@ -7,11 +7,10 @@ namespace titandb {
 
 BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
                                  const TitanCFOptions& cf_options,
-                                 WritableFileWriter* file, TitanStats* stats)
+                                 WritableFileWriter* file)
     : cf_options_(cf_options),
       file_(file),
-      encoder_(cf_options_.blob_file_compression),
-      stats_(stats) {
+      encoder_(cf_options_.blob_file_compression) {
   BlobFileHeader header;
   std::string buffer;
   header.EncodeTo(&buffer);
@@ -42,7 +41,6 @@ Status BlobFileBuilder::Finish() {
   if (ok()) {
     // The Sync will be done in `BatchFinishFiles`
     status_ = file_->Flush();
-    AddStats(stats_, TitanInternalStats::BLOB_FILE_SIZE, file_->GetFileSize());
   }
   return status();
 }

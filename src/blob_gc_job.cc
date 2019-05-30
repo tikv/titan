@@ -292,7 +292,7 @@ Status BlobGCJob::DoRunGC() {
       }
       blob_file_builder = unique_ptr<BlobFileBuilder>(
           new BlobFileBuilder(db_options_, blob_gc_->titan_cf_options(),
-                              blob_file_handle->GetFile(), stats_));
+                              blob_file_handle->GetFile()));
       file_size = 0;
     }
     assert(blob_file_handle);

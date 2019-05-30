@@ -31,7 +31,6 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       std::unique_ptr<WritableFile> f;
       s = db_->env_->NewWritableFile(name, &f, db_->env_options_);
       if (!s.ok()) return s;
-      AddStats(db_->stats_.get(), TitanInternalStats::NUM_BLOB_FILE, 1);
       file.reset(new WritableFileWriter(std::move(f), name, db_->env_options_));
     }
 
@@ -85,10 +84,6 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       s = db_->env_->DeleteFile(handle->GetName());
       file_size += handle->GetFile()->GetFileSize();
     }
-    SubStats(db_->stats_.get(), TitanInternalStats::NUM_BLOB_FILE,
-             handles.size());
-    SubStats(db_->stats_.get(), TitanInternalStats::BLOB_FILE_SIZE, file_size);
-
     {
       MutexLock l(&db_->mutex_);
       for (const auto& handle : handles)
@@ -636,13 +631,14 @@ void TitanDBImpl::OnCompactionCompleted(
       file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
     }
 
-    int64_t delta = 0;
+    uint64_t delta = 0;
     for (const auto& bfs : blob_files_size) {
       delta += bfs.second;
       // blob file size < 0 means discardable size > 0
       if (bfs.second >= 0) {
         continue;
       }
+      delta += -bfs.second;
       auto file = bs->FindFile(bfs.first).lock();
       if (!file) {
         // file has been gc out
@@ -650,11 +646,8 @@ void TitanDBImpl::OnCompactionCompleted(
       }
       file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
     }
-    if (delta > 0) {
-      AddStats(stats_.get(), TitanInternalStats::LIVE_BLOB_SIZE, delta);
-    } else {
-      SubStats(stats_.get(), TitanInternalStats::LIVE_BLOB_SIZE, -delta);
-    }
+    SubStats(stats_.get(), compaction_job_info.cf_id,
+             TitanInternalStats::LIVE_BLOB_SIZE, delta);
     bs->ComputeGCScore();
 
     AddToGCQueue(compaction_job_info.cf_id);

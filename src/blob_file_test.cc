@@ -35,7 +35,7 @@ class BlobFileTest : public testing::Test {
           new WritableFileWriter(std::move(f), file_name_, env_options_));
     }
     std::unique_ptr<BlobFileBuilder> builder(
-        new BlobFileBuilder(db_options, cf_options, file.get(), nullptr));
+        new BlobFileBuilder(db_options, cf_options, file.get()));
 
     for (int i = 0; i < n; i++) {
       auto key = std::to_string(i);
@@ -96,7 +96,7 @@ class BlobFileTest : public testing::Test {
           new WritableFileWriter(std::move(f), file_name_, env_options_));
     }
     std::unique_ptr<BlobFileBuilder> builder(
-        new BlobFileBuilder(db_options, cf_options, file.get(), nullptr));
+        new BlobFileBuilder(db_options, cf_options, file.get()));
 
     for (int i = 0; i < n; i++) {
       auto key = std::to_string(i);

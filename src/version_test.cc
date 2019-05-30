@@ -54,10 +54,10 @@ class VersionTest : public testing::Test {
     for (uint32_t id = 0; id < 10; id++) {
       std::shared_ptr<BlobStorage> storage;
       storage.reset(
-          new BlobStorage(db_options_, cf_options_, file_cache_, nullptr));
+          new BlobStorage(db_options_, cf_options_, id, file_cache_, nullptr));
       column_families_.emplace(id, storage);
       storage.reset(
-          new BlobStorage(db_options_, cf_options_, file_cache_, nullptr));
+          new BlobStorage(db_options_, cf_options_, id, file_cache_, nullptr));
       vset_->column_families_.emplace(id, storage);
     }
   }

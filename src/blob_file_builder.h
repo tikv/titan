@@ -38,8 +38,7 @@ class BlobFileBuilder {
   // is building in "*file". Does not close the file. It is up to the
   // caller to sync and close the file after calling Finish().
   BlobFileBuilder(const TitanDBOptions& db_options,
-                  const TitanCFOptions& cf_options, WritableFileWriter* file,
-                  TitanStats* stats);
+                  const TitanCFOptions& cf_options, WritableFileWriter* file);
 
   // Adds the record to the file and points the handle to it.
   void Add(const BlobRecord& record, BlobHandle* handle);
@@ -64,8 +63,6 @@ class BlobFileBuilder {
 
   Status status_;
   BlobEncoder encoder_;
-
-  TitanStats* stats_;
 };
 
 }  // namespace titandb

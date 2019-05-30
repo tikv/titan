@@ -22,7 +22,7 @@ class BlobGCPickerTest : public testing::Test {
                                const TitanCFOptions& titan_cf_options) {
     auto blob_file_cache = std::make_shared<BlobFileCache>(
         titan_db_options, titan_cf_options, NewLRUCache(128), nullptr);
-    blob_storage_.reset(new BlobStorage(titan_db_options, titan_cf_options,
+    blob_storage_.reset(new BlobStorage(titan_db_options, titan_cf_options, 0,
                                         blob_file_cache, nullptr));
     basic_blob_gc_picker_.reset(
         new BasicBlobGCPicker(titan_db_options, titan_cf_options));

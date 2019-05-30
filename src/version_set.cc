@@ -258,8 +258,8 @@ void VersionSet::AddColumnFamilies(
   for (auto& cf : column_families) {
     auto file_cache = std::make_shared<BlobFileCache>(db_options_, cf.second,
                                                       file_cache_, stats_);
-    auto blob_storage = std::make_shared<BlobStorage>(db_options_, cf.second,
-                                                      file_cache, stats_);
+    auto blob_storage = std::make_shared<BlobStorage>(
+        db_options_, cf.second, cf.first, file_cache, stats_);
     column_families_.emplace(cf.first, blob_storage);
   }
 }
