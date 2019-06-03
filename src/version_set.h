@@ -32,26 +32,30 @@ class VersionSet {
 
   // Applies *edit on the current version to form a new version that is
   // both saved to the manifest and installed as the new current version.
+  // REQUIRES: mutex is held
   Status LogAndApply(VersionEdit* edit);
 
   // Adds some column families with the specified options.
+  // REQUIRES: mutex is held
   void AddColumnFamilies(
       const std::map<uint32_t, TitanCFOptions>& column_families);
 
   // Drops some column families. The obsolete files will be deleted in
   // background when they will not be accessed anymore.
+  // REQUIRES: mutex is held
   Status DropColumnFamilies(const std::vector<uint32_t>& handles,
                             SequenceNumber obsolete_sequence);
 
   // Destroy the column family. Only after this is called, the obsolete files
   // of the dropped column family can be physical deleted.
+  // REQUIRES: mutex is held
   Status DestroyColumnFamily(uint32_t cf_id);
 
   // Allocates a new file number.
   uint64_t NewFileNumber() { return next_file_number_.fetch_add(1); }
 
+  // REQUIRES: mutex is held
   std::weak_ptr<BlobStorage> GetBlobStorage(uint32_t cf_id) {
-    MutexLock l(&mutex_);
     auto it = column_families_.find(cf_id);
     if (it != column_families_.end()) {
       return it->second;
@@ -59,11 +63,12 @@ class VersionSet {
     return std::weak_ptr<BlobStorage>();
   }
 
+  // REQUIRES: mutex is held
   void GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                         SequenceNumber oldest_sequence);
 
+  // REQUIRES: mutex is held
   void MarkAllFilesForGC() {
-    MutexLock l(&mutex_);
     for (auto& cf : column_families_) {
       cf.second->MarkAllFilesForGC();
     }
@@ -80,11 +85,6 @@ class VersionSet {
   Status WriteSnapshot(log::Writer* log);
 
   Status Apply(VersionEdit* edit);
-
-  // REQUIRE: mutex is held
-  Status LogAndApplyLocked(VersionEdit* edit);
-
-  port::Mutex mutex_;
 
   std::string dirname_;
   Env* env_;

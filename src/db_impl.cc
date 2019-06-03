@@ -67,9 +67,9 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       edit.AddBlobFile(file.first);
     }
 
-    s = db_->vset_->LogAndApply(&edit);
     {
       MutexLock l(&db_->mutex_);
+      s = db_->vset_->LogAndApply(&edit);
       for (const auto& file : files)
         db_->pending_outputs_.erase(file.second->GetNumber());
     }
@@ -175,7 +175,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       assert(base_table_factory != nullptr);
       base_table_factory_[cf_id] = base_table_factory;
       titan_table_factory_[cf_id] = std::make_shared<TitanTableFactory>(
-          db_options_, descs[i].options, blob_manager_, vset_.get());
+          db_options_, descs[i].options, blob_manager_, &mutex_, vset_.get());
       base_descs[i].options.table_factory = titan_table_factory_[cf_id];
       // Add TableProperties for collecting statistics GC
       base_descs[i].options.table_properties_collector_factories.emplace_back(
@@ -274,7 +274,7 @@ Status TitanDBImpl::CreateColumnFamilies(
     // Replaces the provided table factory with TitanTableFactory.
     base_table_factory.emplace_back(options.table_factory);
     titan_table_factory.emplace_back(std::make_shared<TitanTableFactory>(
-        db_options_, desc.options, blob_manager_, vset_.get()));
+        db_options_, desc.options, blob_manager_, &mutex_, vset_.get()));
     options.table_factory = titan_table_factory.back();
     base_descs.emplace_back(desc.name, options);
   }
@@ -292,8 +292,8 @@ Status TitanDBImpl::CreateColumnFamilies(
         base_table_factory_[cf_id] = base_table_factory[i];
         titan_table_factory_[cf_id] = titan_table_factory[i];
       }
+      vset_->AddColumnFamilies(column_families);
     }
-    vset_->AddColumnFamilies(column_families);
   }
   return s;
 }
@@ -306,12 +306,10 @@ Status TitanDBImpl::DropColumnFamilies(
   }
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
-    {
-      MutexLock l(&mutex_);
-      for (auto cf_id : column_families) {
-        base_table_factory_.erase(cf_id);
-        titan_table_factory_.erase(cf_id);
-      }
+    MutexLock l(&mutex_);
+    for (auto cf_id : column_families) {
+      base_table_factory_.erase(cf_id);
+      titan_table_factory_.erase(cf_id);
     }
     SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
     s = vset_->DropColumnFamilies(column_families, obsolete_sequence);
@@ -325,6 +323,7 @@ Status TitanDBImpl::DestroyColumnFamilyHandle(
   Status s = db_impl_->DestroyColumnFamilyHandle(column_family);
 
   if (s.ok()) {
+    MutexLock l(&mutex_);
     // it just changes some marks and doesn't delete blob files physically.
     vset_->DestroyColumnFamily(cf_id);
   }
@@ -381,7 +380,9 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   BlobRecord record;
   PinnableSlice buffer;
 
+  mutex_.Lock();
   auto storage = vset_->GetBlobStorage(handle->GetID()).lock();
+  mutex_.Unlock();
 
   {
     StopWatch read_sw(env_, stats_, BLOB_DB_BLOB_FILE_READ_MICROS);
@@ -453,7 +454,9 @@ Iterator* TitanDBImpl::NewIteratorImpl(
     std::shared_ptr<ManagedSnapshot> snapshot) {
   auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
 
+  mutex_.Lock();
   auto storage = vset_->GetBlobStorage(handle->GetID());
+  mutex_.Unlock();
 
   std::unique_ptr<ArenaWrappedDBIter> iter(db_impl_->NewIteratorImpl(
       options, cfd, options.snapshot->GetSequenceNumber(),
@@ -561,13 +564,14 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
   for (const auto f : blob_files_size) {
     outputs.insert(f.first);
   }
-  auto blob_storage = vset_->GetBlobStorage(flush_job_info.cf_id).lock();
-  if (!blob_storage) {
-    fprintf(stderr, "Column family id:%u Not Found\n", flush_job_info.cf_id);
-    abort();
-  }
+
   {
     MutexLock l(&mutex_);
+    auto blob_storage = vset_->GetBlobStorage(flush_job_info.cf_id).lock();
+    if (!blob_storage) {
+      fprintf(stderr, "Column family id:%u Not Found\n", flush_job_info.cf_id);
+      abort();
+    }
     for (const auto& file_number : outputs) {
       auto file = blob_storage->FindFile(file_number).lock();
       // This file maybe output of a gc job, and it's been gced out.
@@ -630,14 +634,14 @@ void TitanDBImpl::OnCompactionCompleted(
   calc_bfs(compaction_job_info.input_files, -1, false);
   calc_bfs(compaction_job_info.output_files, 1, true);
 
-  auto bs = vset_->GetBlobStorage(compaction_job_info.cf_id).lock();
-  if (!bs) {
-    fprintf(stderr, "Column family id:%u Not Found\n",
-            compaction_job_info.cf_id);
-    return;
-  }
   {
     MutexLock l(&mutex_);
+    auto bs = vset_->GetBlobStorage(compaction_job_info.cf_id).lock();
+    if (!bs) {
+      fprintf(stderr, "Column family id:%u Not Found\n",
+              compaction_job_info.cf_id);
+      return;
+    }
     for (const auto& o : outputs) {
       auto file = bs->FindFile(o).lock();
       if (!file) {

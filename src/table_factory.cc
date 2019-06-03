@@ -21,10 +21,12 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
   std::unique_ptr<TableBuilder> base_builder(
       base_factory_->NewTableBuilder(options, column_family_id, file));
   MutexLock l(&mutex_);
+  MutexLock db_l(db_mutex_);
   return new TitanTableBuilder(
       column_family_id, db_options_,
       TitanCFOptions(immutable_cf_options_, mutable_cf_options_),
-      std::move(base_builder), blob_manager_, vset_);
+      std::move(base_builder), blob_manager_,
+      vset_->GetBlobStorage(column_family_id));
 }
 
 std::string TitanTableFactory::GetPrintableTableOptions() const {

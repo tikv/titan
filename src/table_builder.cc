@@ -14,8 +14,6 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
 
   if (ikey.type == kTypeBlobIndex &&
       cf_options_.blob_run_mode == TitanBlobRunMode::kFallback) {
-    assert(vset_ != nullptr);
-
     // we ingest value from blob file
     Slice copy = value;
     BlobIndex index;
@@ -27,7 +25,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     BlobRecord record;
     PinnableSlice buffer;
 
-    auto storage = vset_->GetBlobStorage(cf_id_).lock();
+    auto storage = blob_storage_.lock();
     assert(storage != nullptr);
 
     ReadOptions options;  // dummy option

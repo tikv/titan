@@ -13,12 +13,13 @@ class TitanTableFactory : public TableFactory {
   TitanTableFactory(const TitanDBOptions& db_options,
                     const TitanCFOptions& cf_options,
                     std::shared_ptr<BlobFileManager> blob_manager,
-                    VersionSet* vset)
+                    port::Mutex* db_mutex, VersionSet* vset)
       : db_options_(db_options),
         immutable_cf_options_(cf_options),
         mutable_cf_options_(cf_options),
         base_factory_(cf_options.table_factory),
         blob_manager_(blob_manager),
+        db_mutex_(db_mutex),
         vset_(vset) {}
 
   const char* Name() const override { return "TitanTable"; }
@@ -66,6 +67,7 @@ class TitanTableFactory : public TableFactory {
   MutableTitanCFOptions mutable_cf_options_;
   std::shared_ptr<TableFactory> base_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
+  port::Mutex* db_mutex_;
   VersionSet* vset_;
 };
 

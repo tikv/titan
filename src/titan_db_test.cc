@@ -120,6 +120,7 @@ class TitanDBTest : public testing::Test {
     if (cf_handle == nullptr) {
       cf_handle = db_->DefaultColumnFamily();
     }
+    MutexLock l(&db_impl_->mutex_);
     return db_impl_->vset_->GetBlobStorage(cf_handle->GetID());
   }
 

@@ -15,13 +15,13 @@ class TitanTableBuilder : public TableBuilder {
                     const TitanCFOptions& cf_options,
                     std::unique_ptr<TableBuilder> base_builder,
                     std::shared_ptr<BlobFileManager> blob_manager,
-                    VersionSet* vset)
+                    std::weak_ptr<BlobStorage> blob_storage)
       : cf_id_(cf_id),
         db_options_(db_options),
         cf_options_(cf_options),
         base_builder_(std::move(base_builder)),
         blob_manager_(blob_manager),
-        vset_(vset),
+        blob_storage_(blob_storage),
         stats_(db_options.statistics.get()) {}
 
   void Add(const Slice& key, const Slice& value) override;
@@ -53,7 +53,7 @@ class TitanTableBuilder : public TableBuilder {
   std::unique_ptr<BlobFileHandle> blob_handle_;
   std::shared_ptr<BlobFileManager> blob_manager_;
   std::unique_ptr<BlobFileBuilder> blob_builder_;
-  VersionSet* vset_;
+  std::weak_ptr<BlobStorage> blob_storage_;
 
   Statistics* stats_;
 };
