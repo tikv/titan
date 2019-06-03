@@ -5,8 +5,6 @@
 namespace rocksdb {
 namespace titandb {
 
-class TitanStats;
-
 struct TitanDBOptions : public DBOptions {
   // The directory to store data specific to TitanDB alongside with
   // the base DB.

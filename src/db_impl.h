@@ -71,6 +71,10 @@ class TitanDBImpl : public TitanDB {
   bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
                    std::string* value) override;
 
+  using TitanDB::GetIntProperty;
+  bool GetIntProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                      uint64_t* value) override;
+
   void OnFlushCompleted(const FlushJobInfo& flush_job_info);
 
   void OnCompactionCompleted(const CompactionJobInfo& compaction_job_info);

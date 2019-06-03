@@ -83,7 +83,6 @@ class TitanStats {
       return p->second.get();
     }
   }
-  TitanInternalStats* internal_stats() { return internal_stats(default_cf_); }
 
  private:
   Statistics* stats_ = nullptr;
@@ -102,35 +101,6 @@ inline Statistics* statistics(TitanStats* stats) {
     return stats->statistics();
   } else {
     return nullptr;
-  }
-}
-
-inline void ResetStats(TitanStats* stats, TitanInternalStats::StatsType type) {
-  if (stats) {
-    auto p = stats->internal_stats();
-    if (p) {
-      p->ResetStats(type);
-    }
-  }
-}
-
-inline void AddStats(TitanStats* stats, TitanInternalStats::StatsType type,
-                     uint64_t value) {
-  if (stats) {
-    auto p = stats->internal_stats();
-    if (p) {
-      p->AddStats(type, value);
-    }
-  }
-}
-
-inline void SubStats(TitanStats* stats, TitanInternalStats::StatsType type,
-                     uint64_t value) {
-  if (stats) {
-    auto p = stats->internal_stats();
-    if (p) {
-      p->SubStats(type, value);
-    }
   }
 }
 

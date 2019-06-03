@@ -524,6 +524,23 @@ bool TitanDBImpl::GetProperty(ColumnFamilyHandle* column_family,
   }
 }
 
+bool TitanDBImpl::GetIntProperty(ColumnFamilyHandle* column_family,
+                                 const Slice& property, uint64_t* value) {
+  assert(column_family != nullptr);
+  bool s = false;
+  if (stats_.get() != nullptr) {
+    auto stats = stats_->internal_stats(column_family->GetID());
+    if (stats != nullptr) {
+      s = stats->GetIntProperty(property, value);
+    }
+  }
+  if (s) {
+    return s;
+  } else {
+    return db_impl_->GetIntProperty(column_family, property, value);
+  }
+}
+
 void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
   const auto& tps = flush_job_info.table_properties;
   auto ucp_iter = tps.user_collected_properties.find(
@@ -633,16 +650,17 @@ void TitanDBImpl::OnCompactionCompleted(
 
     uint64_t delta = 0;
     for (const auto& bfs : blob_files_size) {
-      delta += bfs.second;
       // blob file size < 0 means discardable size > 0
       if (bfs.second >= 0) {
         continue;
       }
-      delta += -bfs.second;
       auto file = bs->FindFile(bfs.first).lock();
       if (!file) {
         // file has been gc out
         continue;
+      }
+      if (!file->is_obsolete()) {
+        delta += -bfs.second;
       }
       file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
     }

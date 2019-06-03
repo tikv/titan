@@ -120,6 +120,12 @@ class TitanDB : public StackableDB {
   bool GetProperty(const Slice& property, std::string* value) override {
     return GetProperty(DefaultColumnFamily(), property, value);
   }
+
+  bool GetIntProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                      uint64_t* value) override = 0;
+  bool GetIntProperty(const Slice& property, uint64_t* value) override {
+    return GetIntProperty(DefaultColumnFamily(), property, value);
+  }
 };
 
 }  // namespace titandb

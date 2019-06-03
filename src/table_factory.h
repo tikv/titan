@@ -3,6 +3,7 @@
 #include "blob_file_manager.h"
 #include "rocksdb/table.h"
 #include "titan/options.h"
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
