@@ -25,7 +25,7 @@ Status BlobStorage::NewPrefetcher(uint64_t file_number,
 }
 
 std::weak_ptr<BlobFileMeta> BlobStorage::FindFile(uint64_t file_number) const {
-  ReadLock rl(&mutex_);
+  MutexLock l(&mutex_);
   auto it = files_.find(file_number);
   if (it != files_.end()) {
     assert(file_number == it->second->file_number());
@@ -36,20 +36,20 @@ std::weak_ptr<BlobFileMeta> BlobStorage::FindFile(uint64_t file_number) const {
 
 void BlobStorage::ExportBlobFiles(
     std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const {
-  ReadLock rl(&mutex_);
+  MutexLock l(&mutex_);
   for (auto& kv : files_) {
     ret.emplace(kv.first, std::weak_ptr<BlobFileMeta>(kv.second));
   }
 }
 
 void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
-  WriteLock wl(&mutex_);
+  MutexLock l(&mutex_);
   files_.emplace(std::make_pair(file->file_number(), file));
 }
 
 void BlobStorage::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file,
                                    SequenceNumber obsolete_sequence) {
-  WriteLock wl(&mutex_);
+  MutexLock l(&mutex_);
   obsolete_files_.push_back(
       std::make_pair(file->file_number(), obsolete_sequence));
   file->FileStateTransit(BlobFileMeta::FileEvent::kDelete);
@@ -57,7 +57,7 @@ void BlobStorage::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file,
 
 void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                                    SequenceNumber oldest_sequence) {
-  WriteLock wl(&mutex_);
+  MutexLock l(&mutex_);
 
   for (auto it = obsolete_files_.begin(); it != obsolete_files_.end();) {
     auto& file_number = it->first;
@@ -89,22 +89,20 @@ void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
 
 void BlobStorage::ComputeGCScore() {
   // TODO: no need to recompute all everytime
+  MutexLock l(&mutex_);
   gc_score_.clear();
 
-  {
-    ReadLock rl(&mutex_);
-    for (auto& file : files_) {
-      if (file.second->is_obsolete()) {
-        continue;
-      }
-      gc_score_.push_back({});
-      auto& gcs = gc_score_.back();
-      gcs.file_number = file.first;
-      if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
-        gcs.score = 1;
-      } else {
-        gcs.score = file.second->GetDiscardableRatio();
-      }
+  for (auto& file : files_) {
+    if (file.second->is_obsolete()) {
+      continue;
+    }
+    gc_score_.push_back({});
+    auto& gcs = gc_score_.back();
+    gcs.file_number = file.first;
+    if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
+      gcs.score = 1;
+    } else {
+      gcs.score = file.second->GetDiscardableRatio();
     }
   }
 
