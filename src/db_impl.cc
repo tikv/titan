@@ -66,9 +66,10 @@ class TitanDBImpl::FileManager : public BlobFileManager {
                      file.first->file_number());
       edit.AddBlobFile(file.first);
     }
-    s = db_->vset_->LogAndApply(&edit);
+
     {
       MutexLock l(&db_->mutex_);
+      s = db_->vset_->LogAndApply(&edit);
       for (const auto& file : files)
         db_->pending_outputs_.erase(file.second->GetNumber());
     }
@@ -111,7 +112,9 @@ class TitanDBImpl::FileManager : public BlobFileManager {
 
 TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
                          const std::string& dbname)
-    : bg_cv_(&mutex_),
+    : TitanDB(),
+      mutex_(),
+      bg_cv_(&mutex_),
       dbname_(dbname),
       env_(options.env),
       env_options_(options),
@@ -281,6 +284,7 @@ Status TitanDBImpl::CreateColumnFamilies(
     for (size_t i = 0; i < descs.size(); i++) {
       column_families.emplace((*handles)[i]->GetID(), descs[i].options);
     }
+    MutexLock l(&mutex_);
     vset_->AddColumnFamilies(column_families);
   }
   return s;
@@ -294,6 +298,7 @@ Status TitanDBImpl::DropColumnFamilies(
   }
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
+    MutexLock l(&mutex_);
     SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
     s = vset_->DropColumnFamilies(column_families, obsolete_sequence);
   }
@@ -306,6 +311,7 @@ Status TitanDBImpl::DestroyColumnFamilyHandle(
   Status s = db_impl_->DestroyColumnFamilyHandle(column_family);
 
   if (s.ok()) {
+    MutexLock l(&mutex_);
     // it just changes some marks and doesn't delete blob files physically.
     vset_->DestroyColumnFamily(cf_id);
   }
@@ -362,14 +368,16 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   BlobRecord record;
   PinnableSlice buffer;
 
+  mutex_.Lock();
   auto storage = vset_->GetBlobStorage(handle->GetID()).lock();
+  mutex_.Unlock();
+
   {
     StopWatch read_sw(env_, stats_, BLOB_DB_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
     RecordTick(stats_, BLOB_DB_NUM_KEYS_READ);
     RecordTick(stats_, BLOB_DB_BLOB_FILE_BYTES_READ, index.blob_handle.size);
   }
-
   if (s.IsCorruption()) {
     ROCKS_LOG_DEBUG(db_options_.info_log,
                     "Key:%s Snapshot:%" PRIu64 " GetBlobFile err:%s\n",
@@ -509,13 +517,13 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
     outputs.insert(f.first);
   }
 
-  auto blob_storage = vset_->GetBlobStorage(flush_job_info.cf_id).lock();
-  if (!blob_storage) {
-    fprintf(stderr, "Column family id:%u Not Found", flush_job_info.cf_id);
-    abort();
-  }
   {
     MutexLock l(&mutex_);
+    auto blob_storage = vset_->GetBlobStorage(flush_job_info.cf_id).lock();
+    if (!blob_storage) {
+      fprintf(stderr, "Column family id:%u Not Found\n", flush_job_info.cf_id);
+      abort();
+    }
     for (const auto& file_number : outputs) {
       auto file = blob_storage->FindFile(file_number).lock();
       // This file maybe output of a gc job, and it's been gced out.
@@ -578,14 +586,14 @@ void TitanDBImpl::OnCompactionCompleted(
   calc_bfs(compaction_job_info.input_files, -1, false);
   calc_bfs(compaction_job_info.output_files, 1, true);
 
-  auto bs = vset_->GetBlobStorage(compaction_job_info.cf_id).lock();
-  if (!bs) {
-    fprintf(stderr, "Column family id:%u Not Found\n",
-            compaction_job_info.cf_id);
-    return;
-  }
   {
     MutexLock l(&mutex_);
+    auto bs = vset_->GetBlobStorage(compaction_job_info.cf_id).lock();
+    if (!bs) {
+      fprintf(stderr, "Column family id:%u Not Found\n",
+              compaction_job_info.cf_id);
+      return;
+    }
     for (const auto& o : outputs) {
       auto file = bs->FindFile(o).lock();
       if (!file) {

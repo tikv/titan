@@ -27,8 +27,11 @@ class BlobGCJob {
 
   ~BlobGCJob();
 
+  // REQUIRE: mutex held
   Status Prepare();
+  // REQUIRE: mutex not held
   Status Run();
+  // REQUIRE: mutex held
   Status Finish();
 
  private:

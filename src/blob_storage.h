@@ -53,7 +53,7 @@ class BlobStorage {
   std::weak_ptr<BlobFileMeta> FindFile(uint64_t file_number) const;
 
   std::size_t NumBlobFiles() const {
-    MutexLock l(&mutex_);
+    ReadLock rl(&mutex_);
     return files_.size();
   }
 
@@ -61,26 +61,23 @@ class BlobStorage {
       std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
   void MarkAllFilesForGC() {
-    MutexLock l(&mutex_);
+    WriteLock wl(&mutex_);
     for (auto& file : files_) {
       file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
     }
   }
 
   void MarkDestroyed() {
-    MutexLock l(&mutex_);
+    WriteLock wl(&mutex_);
     destroyed_ = true;
   }
 
   bool MaybeRemove() const {
-    MutexLock l(&mutex_);
+    ReadLock rl(&mutex_);
     return destroyed_ && obsolete_files_.empty();
   }
 
-  const std::vector<GCScore> gc_score() const {
-    MutexLock l(&mutex_);
-    return gc_score_;
-  }
+  const std::vector<GCScore> gc_score() { return gc_score_; }
 
   void ComputeGCScore();
 
@@ -105,7 +102,7 @@ class BlobStorage {
   TitanCFOptions cf_options_;
 
   // Read Write Mutex, which protects the `files_` structures
-  mutable port::Mutex mutex_;
+  mutable port::RWMutex mutex_;
 
   // Only BlobStorage OWNS BlobFileMeta
   std::unordered_map<uint64_t, std::shared_ptr<BlobFileMeta>> files_;
