@@ -79,6 +79,7 @@ class TitanDBImpl : public TitanDB {
   friend class BlobGCJobTest;
   friend class BaseDbListener;
   friend class TitanDBTest;
+  friend class TitanThreadSafetyTest;
 
   Status GetImpl(const ReadOptions& options, ColumnFamilyHandle* handle,
                  const Slice& key, PinnableSlice* value);
@@ -112,6 +113,7 @@ class TitanDBImpl : public TitanDB {
   static void BGWorkGC(void* db);
   void BackgroundCallGC();
   Status BackgroundGC(LogBuffer* log_buffer);
+  Status TEST_StartGC(uint32_t column_family_id);
 
   void PurgeObsoleteFiles();
 
