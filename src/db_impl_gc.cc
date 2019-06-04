@@ -92,17 +92,14 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
                           env_options_, blob_manager_.get(), vset_.get(),
                           log_buffer, &shuting_down_, stats_.get());
     s = blob_gc_job.Prepare();
-
     if (s.ok()) {
       mutex_.Unlock();
       s = blob_gc_job.Run();
       mutex_.Lock();
     }
-
     if (s.ok()) {
       s = blob_gc_job.Finish();
     }
-
     blob_gc->ReleaseGcFiles();
   }
 
