@@ -1,10 +1,12 @@
 #include <inttypes.h>
 #include <options/cf_options.h>
+#include <unordered_map>
 
 #include "blob_file_iterator.h"
 #include "blob_file_reader.h"
 #include "db_impl.h"
 #include "db_iter.h"
+#include "rocksdb/utilities/debug.h"
 #include "titan/db.h"
 #include "titan_fault_injection_test_env.h"
 #include "util/filename.h"
@@ -36,7 +38,11 @@ class TitanDBTest : public testing::Test {
     DeleteDir(env_, dbname_);
   }
 
-  ~TitanDBTest() { Close(); }
+  ~TitanDBTest() {
+    Close();
+    DeleteDir(env_, options_.dirname);
+    DeleteDir(env_, dbname_);
+  }
 
   void Open() {
     if (cf_names_.empty()) {
@@ -118,6 +124,7 @@ class TitanDBTest : public testing::Test {
     if (cf_handle == nullptr) {
       cf_handle = db_->DefaultColumnFamily();
     }
+    MutexLock l(&db_impl_->mutex_);
     return db_impl_->vset_->GetBlobStorage(cf_handle->GetID());
   }
 
@@ -605,6 +612,90 @@ TEST_F(TitanDBTest, BlobFileCorruptionErrorHandling) {
   SyncPoint::GetInstance()->ClearAllCallBacks();
 }
 #endif  // !NDEBUG
+
+TEST_F(TitanDBTest, Options) {
+  Open();
+
+  std::unordered_map<std::string, std::string> opts;
+  opts["blob_run_mode"] = "kReadOnly";
+  ASSERT_OK(db_->SetOptions(opts));
+
+  opts["disable_auto_compactions"] = "true";
+  ASSERT_OK(db_->SetOptions(opts));
+}
+
+TEST_F(TitanDBTest, BlobRunModeBasic) {
+  options_.disable_background_gc = true;
+  Open();
+
+  const uint64_t kNumEntries = 1000;
+  const uint64_t kMaxKeys = 100000;
+  std::unordered_map<std::string, std::string> opts;
+  std::map<std::string, std::string> data;
+  std::vector<KeyVersion> version;
+  std::string begin_key;
+  std::string end_key;
+  uint64_t num_blob_files;
+
+  for (uint64_t i = 1; i <= kNumEntries; i++) {
+    Put(i, &data);
+  }
+  begin_key = GenKey(1);
+  end_key = GenKey(kNumEntries);
+  ASSERT_EQ(kNumEntries, data.size());
+  VerifyDB(data);
+  Flush();
+  auto blob = GetBlobStorage();
+  num_blob_files = blob.lock()->NumBlobFiles();
+  VerifyDB(data);
+  GetAllKeyVersions(db_, begin_key, end_key, kMaxKeys, &version);
+  for (auto v : version) {
+    if (data[v.user_key].size() >= options_.min_blob_size) {
+      ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeBlobIndex));
+    } else {
+      ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeValue));
+    }
+  }
+  version.clear();
+
+  opts["blob_run_mode"] = "kReadOnly";
+  db_->SetOptions(opts);
+  for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
+    Put(i, &data);
+  }
+  begin_key = GenKey(kNumEntries + 1);
+  end_key = GenKey(kNumEntries * 2);
+  ASSERT_EQ(kNumEntries * 2, data.size());
+  VerifyDB(data);
+  Flush();
+  blob = GetBlobStorage();
+  ASSERT_EQ(num_blob_files, blob.lock()->NumBlobFiles());
+  VerifyDB(data);
+  GetAllKeyVersions(db_, begin_key, end_key, kMaxKeys, &version);
+  for (auto v : version) {
+    ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeValue));
+  }
+  version.clear();
+
+  opts["blob_run_mode"] = "fallback";
+  db_->SetOptions(opts);
+  for (uint64_t i = kNumEntries * 2 + 1; i <= kNumEntries * 3; i++) {
+    Put(i, &data);
+  }
+  begin_key = GenKey(kNumEntries * 2 + 1);
+  end_key = GenKey(kNumEntries * 3);
+  ASSERT_EQ(kNumEntries * 3, data.size());
+  VerifyDB(data);
+  Flush();
+  blob = GetBlobStorage();
+  ASSERT_EQ(num_blob_files, blob.lock()->NumBlobFiles());
+  VerifyDB(data);
+  GetAllKeyVersions(db_, begin_key, end_key, kMaxKeys, &version);
+  for (auto v : version) {
+    ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeValue));
+  }
+  version.clear();
+}
 
 }  // namespace titandb
 }  // namespace rocksdb

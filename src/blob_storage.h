@@ -6,6 +6,7 @@
 #include "blob_format.h"
 #include "blob_gc.h"
 #include "rocksdb/options.h"
+#include "rocksdb/statistics.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -19,6 +20,7 @@ class BlobStorage {
     this->file_cache_ = bs.file_cache_;
     this->db_options_ = bs.db_options_;
     this->cf_options_ = bs.cf_options_;
+    this->stats_ = bs.stats_;
   }
 
   BlobStorage(const TitanDBOptions& _db_options,
@@ -27,7 +29,8 @@ class BlobStorage {
       : db_options_(_db_options),
         cf_options_(_cf_options),
         file_cache_(_file_cache),
-        destroyed_(false) {}
+        destroyed_(false),
+        stats_(_db_options.statistics.get()) {}
 
   ~BlobStorage() {
     for (auto& file : files_) {
@@ -50,7 +53,7 @@ class BlobStorage {
   std::weak_ptr<BlobFileMeta> FindFile(uint64_t file_number) const;
 
   std::size_t NumBlobFiles() const {
-    ReadLock rl(&mutex_);
+    MutexLock l(&mutex_);
     return files_.size();
   }
 
@@ -58,23 +61,26 @@ class BlobStorage {
       std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
   void MarkAllFilesForGC() {
-    WriteLock wl(&mutex_);
+    MutexLock l(&mutex_);
     for (auto& file : files_) {
       file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
     }
   }
 
   void MarkDestroyed() {
-    WriteLock wl(&mutex_);
+    MutexLock l(&mutex_);
     destroyed_ = true;
   }
 
   bool MaybeRemove() const {
-    ReadLock rl(&mutex_);
+    MutexLock l(&mutex_);
     return destroyed_ && obsolete_files_.empty();
   }
 
-  const std::vector<GCScore> gc_score() { return gc_score_; }
+  const std::vector<GCScore> gc_score() {
+    MutexLock l(&mutex_);
+    return gc_score_;
+  }
 
   void ComputeGCScore();
 
@@ -98,8 +104,7 @@ class BlobStorage {
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
 
-  // Read Write Mutex, which protects the `files_` structures
-  mutable port::RWMutex mutex_;
+  mutable port::Mutex mutex_;
 
   // Only BlobStorage OWNS BlobFileMeta
   std::unordered_map<uint64_t, std::shared_ptr<BlobFileMeta>> files_;
@@ -112,6 +117,8 @@ class BlobStorage {
   // in-memory data structure can be destroyed. Physical files may still be
   // kept.
   bool destroyed_;
+
+  Statistics* stats_;
 };
 
 }  // namespace titandb

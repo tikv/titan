@@ -3,9 +3,12 @@
 namespace rocksdb {
 namespace titandb {
 
-BlobFileBuilder::BlobFileBuilder(const TitanCFOptions& options,
+BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
+                                 const TitanCFOptions& cf_options,
                                  WritableFileWriter* file)
-    : options_(options), file_(file), encoder_(options_.blob_file_compression) {
+    : cf_options_(cf_options),
+      file_(file),
+      encoder_(cf_options_.blob_file_compression) {
   BlobFileHeader header;
   std::string buffer;
   header.EncodeTo(&buffer);
@@ -34,6 +37,7 @@ Status BlobFileBuilder::Finish() {
 
   status_ = file_->Append(buffer);
   if (ok()) {
+    // The Sync will be done in `BatchFinishFiles`
     status_ = file_->Flush();
   }
   return status();

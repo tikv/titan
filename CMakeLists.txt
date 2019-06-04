@@ -15,28 +15,9 @@ include_directories(${ROCKSDB_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
-set(SOURCES
-        src/blob_file_builder.cc
-        src/blob_file_cache.cc
-        src/blob_file_iterator.cc
-        src/blob_file_reader.cc
-        src/blob_file_size_collector.cc
-        src/base_db_listener.cc
-        src/blob_format.cc
-        src/blob_gc.cc
-        src/blob_gc_job.cc
-        src/blob_gc_picker.cc
-        src/blob_storage.cc
-        src/db.cc
-        src/db_impl.cc
-        src/db_impl_files.cc
-        src/db_impl_gc.cc
-        src/options.cc
-        src/table_builder.cc
-        src/table_factory.cc
-        src/util.cc
-        src/version_edit.cc
-        src/version_set.cc)
+file(GLOB SOURCES src/*.cc)
+file(GLOB TEST_SOURCES src/*test.cc)
+list(REMOVE_ITEM SOURCES ${TEST_SOURCES})
 
 add_library(titan STATIC ${SOURCES})
 
@@ -71,6 +52,7 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         blob_gc_job_test
         blob_gc_picker_test
         table_builder_test
+        thread_safety_test
         titan_db_test
         util_test
         version_test)
