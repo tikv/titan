@@ -120,6 +120,7 @@ class TitanDBImpl : public TitanDB {
   static void BGWorkGC(void* db);
   void BackgroundCallGC();
   Status BackgroundGC(LogBuffer* log_buffer);
+  Status TEST_StartGC(uint32_t column_family_id);
 
   void PurgeObsoleteFiles();
 
