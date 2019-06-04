@@ -36,7 +36,11 @@ class TitanDBTest : public testing::Test {
     DeleteDir(env_, dbname_);
   }
 
-  ~TitanDBTest() { Close(); }
+  ~TitanDBTest() {
+    Close();
+    DeleteDir(env_, options_.dirname);
+    DeleteDir(env_, dbname_);
+  }
 
   void Open() {
     if (cf_names_.empty()) {
