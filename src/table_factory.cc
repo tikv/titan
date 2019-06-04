@@ -20,12 +20,25 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
     WritableFileWriter* file) const {
   std::unique_ptr<TableBuilder> base_builder(
       base_factory_->NewTableBuilder(options, column_family_id, file));
-  return new TitanTableBuilder(column_family_id, db_options_, cf_options_,
-                               std::move(base_builder), blob_manager_, stats_);
+  TitanCFOptions cf_options;
+  {
+    MutexLock l(&mutex_);
+    cf_options = TitanCFOptions(immutable_cf_options_, mutable_cf_options_);
+  }
+  std::weak_ptr<BlobStorage> blob_storage;
+  {
+    MutexLock l(db_mutex_);
+    blob_storage = vset_->GetBlobStorage(column_family_id);
+  }
+  return new TitanTableBuilder(column_family_id, db_options_, cf_options,
+                               std::move(base_builder), blob_manager_,
+                               blob_storage, stats_);
 }
 
 std::string TitanTableFactory::GetPrintableTableOptions() const {
-  return base_factory_->GetPrintableTableOptions() + cf_options_.ToString();
+  MutexLock l(&mutex_);
+  return base_factory_->GetPrintableTableOptions() +
+         TitanCFOptions(immutable_cf_options_, mutable_cf_options_).ToString();
 }
 
 }  // namespace titandb

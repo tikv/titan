@@ -41,10 +41,13 @@ class BlobGCJobTest : public testing::Test {
   }
   ~BlobGCJobTest() {}
 
+  std::weak_ptr<BlobStorage> GetBlobStorage(uint32_t cf_id) {
+    MutexLock l(mutex_);
+    return version_set_->GetBlobStorage(cf_id);
+  }
+
   void CheckBlobNumber(int expected) {
-    auto b =
-        version_set_->GetBlobStorage(base_db_->DefaultColumnFamily()->GetID())
-            .lock();
+    auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
     ASSERT_EQ(expected, b->files_.size());
   }
 
@@ -184,9 +187,7 @@ class BlobGCJobTest : public testing::Test {
       db_->Delete(WriteOptions(), GenKey(i));
     }
     Flush();
-    auto b =
-        version_set_->GetBlobStorage(base_db_->DefaultColumnFamily()->GetID())
-            .lock();
+    auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
     ASSERT_EQ(b->files_.size(), 1);
     auto old = b->files_.begin()->first;
     //    for (auto& f : b->files_) {
@@ -202,8 +203,7 @@ class BlobGCJobTest : public testing::Test {
       ASSERT_TRUE(iter->key().compare(Slice(GenKey(i))) == 0);
     }
     RunGC();
-    b = version_set_->GetBlobStorage(base_db_->DefaultColumnFamily()->GetID())
-            .lock();
+    b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
     ASSERT_EQ(b->files_.size(), 1);
     auto new1 = b->files_.begin()->first;
     ASSERT_TRUE(old != new1);

@@ -99,6 +99,14 @@ class TitanDB : public StackableDB {
       std::vector<std::string>* const output_file_names = nullptr,
       CompactionJobInfo* compaction_job_info = nullptr) override = 0;
 
+  using rocksdb::StackableDB::GetOptions;
+  Options GetOptions(ColumnFamilyHandle* column_family) const override = 0;
+
+  using rocksdb::StackableDB::SetOptions;
+  Status SetOptions(ColumnFamilyHandle* column_family,
+                    const std::unordered_map<std::string, std::string>&
+                        new_options) override = 0;
+
   struct Properties {
     //  "rocksdb.titandb.live-blob-size" - returns total blob value size
     //      referenced by LSM tree.

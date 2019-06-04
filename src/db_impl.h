@@ -3,6 +3,7 @@
 #include "blob_file_manager.h"
 #include "db/db_impl.h"
 #include "rocksdb/statistics.h"
+#include "table_factory.h"
 #include "titan/db.h"
 #include "util/repeatable_thread.h"
 #include "version_set.h"
@@ -66,6 +67,11 @@ class TitanDBImpl : public TitanDB {
 
   using TitanDB::GetOptions;
   Options GetOptions(ColumnFamilyHandle* column_family) const override;
+
+  using TitanDB::SetOptions;
+  Status SetOptions(
+      ColumnFamilyHandle* column_family,
+      const std::unordered_map<std::string, std::string>& new_options) override;
 
   using TitanDB::GetProperty;
   bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
@@ -143,7 +149,7 @@ class TitanDBImpl : public TitanDB {
   // while the unlock sequence must be Base DB mutex.Unlock() ->
   // Titan.mutex_.Unlock() Only if we all obey these sequence, we can prevent
   // potential dead lock.
-  port::Mutex mutex_;
+  mutable port::Mutex mutex_;
   // This condition variable is signaled on these conditions:
   // * whenever bg_gc_scheduled_ goes down to 0
   port::CondVar bg_cv_;
@@ -160,7 +166,9 @@ class TitanDBImpl : public TitanDB {
   std::unique_ptr<TitanStats> stats_;
 
   std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
-      original_table_factory_;
+      base_table_factory_;
+  std::unordered_map<uint32_t, std::shared_ptr<TitanTableFactory>>
+      titan_table_factory_;
 
   // handle for purging obsolete blob files at fixed intervals
   std::unique_ptr<RepeatableThread> thread_purge_obsolete_;
