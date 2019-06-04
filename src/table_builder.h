@@ -16,8 +16,7 @@ class TitanTableBuilder : public TableBuilder {
                     const TitanCFOptions& cf_options,
                     std::unique_ptr<TableBuilder> base_builder,
                     std::shared_ptr<BlobFileManager> blob_manager,
-                    std::weak_ptr<BlobStorage> blob_storage,
-                    TitanStats* stats)
+                    std::weak_ptr<BlobStorage> blob_storage, TitanStats* stats)
       : cf_id_(cf_id),
         db_options_(db_options),
         cf_options_(cf_options),

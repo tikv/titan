@@ -14,8 +14,7 @@ class TitanTableFactory : public TableFactory {
   TitanTableFactory(const TitanDBOptions& db_options,
                     const TitanCFOptions& cf_options,
                     std::shared_ptr<BlobFileManager> blob_manager,
-                    port::Mutex* db_mutex, VersionSet* vset,
-                    TitanStats* stats)
+                    port::Mutex* db_mutex, VersionSet* vset, TitanStats* stats)
       : db_options_(db_options),
         immutable_cf_options_(cf_options),
         mutable_cf_options_(cf_options),

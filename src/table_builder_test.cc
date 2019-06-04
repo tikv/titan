@@ -80,11 +80,11 @@ class TableBuilderTest : public testing::Test {
         blob_name_(BlobFileName(tmpdir_, kTestFileNumber)) {
     db_options_.dirname = tmpdir_;
     cf_options_.min_blob_size = kMinBlobSize;
-    vset_.reset(new VersionSet(db_options_));
+    vset_.reset(new VersionSet(db_options_, nullptr));
     blob_manager_.reset(new FileManager(db_options_));
-    table_factory_.reset(new TitanTableFactory(
-        db_options_, cf_options_, blob_manager_, &mutex_, vset_.get(),
-        nullptr));
+    table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                               blob_manager_, &mutex_,
+                                               vset_.get(), nullptr));
   }
 
   ~TableBuilderTest() {
