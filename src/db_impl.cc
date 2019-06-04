@@ -118,7 +118,6 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
     db_options_.dirname = dbname_ + "/titandb";
   }
   dirname_ = db_options_.dirname;
-  vset_.reset(new VersionSet(db_options_));
   blob_manager_.reset(new FileManager(this));
 }
 
@@ -182,11 +181,12 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   }
   if (!s.ok()) return s;
 
-  s = vset_->Open(column_families);
-  if (!s.ok()) return s;
-
   // Add EventListener to collect statistics for GC
   db_options_.listeners.emplace_back(std::make_shared<BaseDbListener>(this));
+
+  vset_.reset(new VersionSet(db_options_));
+  s = vset_->Open(column_families);
+  if (!s.ok()) return s;
 
   static bool has_init_background_threads = false;
   if (!has_init_background_threads) {

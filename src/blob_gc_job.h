@@ -53,7 +53,6 @@ class BlobGCJob {
       blob_file_builders_;
   std::vector<std::pair<WriteBatch, GarbageCollectionWriteCallback>>
       rewrite_batches_;
-  InternalKeyComparator* cmp_{nullptr};
 
   std::atomic_bool* shuting_down_{nullptr};
 
