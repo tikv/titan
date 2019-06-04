@@ -12,19 +12,45 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     return;
   }
 
-  if (ikey.type != kTypeValue || value.size() < cf_options_.min_blob_size) {
+  if (ikey.type == kTypeBlobIndex &&
+      cf_options_.blob_run_mode == TitanBlobRunMode::kFallback) {
+    // we ingest value from blob file
+    Slice copy = value;
+    BlobIndex index;
+    status_ = index.DecodeFrom(&copy);
+    if (!ok()) {
+      return;
+    }
+
+    BlobRecord record;
+    PinnableSlice buffer;
+
+    auto storage = blob_storage_.lock();
+    assert(storage != nullptr);
+
+    ReadOptions options;  // dummy option
+    status_ = storage->Get(options, index, &record, &buffer);
+    if (ok()) {
+      ikey.type = kTypeValue;
+      std::string index_key;
+      AppendInternalKey(&index_key, ikey);
+      base_builder_->Add(index_key, record.value);
+    }
+  } else if (ikey.type == kTypeValue &&
+             value.size() >= cf_options_.min_blob_size &&
+             cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
+    // we write to blob file and insert index
+    std::string index_value;
+    AddBlob(ikey.user_key, value, &index_value);
+    if (ok()) {
+      ikey.type = kTypeBlobIndex;
+      std::string index_key;
+      AppendInternalKey(&index_key, ikey);
+      base_builder_->Add(index_key, index_value);
+    }
+  } else {
     base_builder_->Add(key, value);
-    return;
   }
-
-  std::string index_value;
-  AddBlob(ikey.user_key, value, &index_value);
-  if (!ok()) return;
-
-  ikey.type = kTypeBlobIndex;
-  std::string index_key;
-  AppendInternalKey(&index_key, ikey);
-  base_builder_->Add(index_key, index_value);
 }
 
 void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,

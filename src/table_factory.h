@@ -3,6 +3,7 @@
 #include "blob_file_manager.h"
 #include "rocksdb/table.h"
 #include "titan/options.h"
+#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -11,11 +12,15 @@ class TitanTableFactory : public TableFactory {
  public:
   TitanTableFactory(const TitanDBOptions& db_options,
                     const TitanCFOptions& cf_options,
-                    std::shared_ptr<BlobFileManager> blob_manager)
+                    std::shared_ptr<BlobFileManager> blob_manager,
+                    port::Mutex* db_mutex, VersionSet* vset)
       : db_options_(db_options),
-        cf_options_(cf_options),
+        immutable_cf_options_(cf_options),
+        mutable_cf_options_(cf_options),
         base_factory_(cf_options.table_factory),
-        blob_manager_(blob_manager) {}
+        blob_manager_(blob_manager),
+        db_mutex_(db_mutex),
+        vset_(vset) {}
 
   const char* Name() const override { return "TitanTable"; }
 
@@ -45,15 +50,25 @@ class TitanTableFactory : public TableFactory {
 
   void* GetOptions() override { return base_factory_->GetOptions(); }
 
+  void SetBlobRunMode(TitanBlobRunMode mode) {
+    MutexLock l(&mutex_);
+    mutable_cf_options_.blob_run_mode = mode;
+  }
+
   bool IsDeleteRangeSupported() const override {
     return base_factory_->IsDeleteRangeSupported();
   }
 
  private:
+  mutable port::Mutex mutex_;
+
   TitanDBOptions db_options_;
-  TitanCFOptions cf_options_;
+  ImmutableTitanCFOptions immutable_cf_options_;
+  MutableTitanCFOptions mutable_cf_options_;
   std::shared_ptr<TableFactory> base_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
+  port::Mutex* db_mutex_;
+  VersionSet* vset_;
 };
 
 }  // namespace titandb
