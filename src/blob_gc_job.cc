@@ -89,22 +89,19 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
 
 BlobGCJob::~BlobGCJob() {
   // flush metrics
-  RecordTick(statistics(stats_), BLOB_DB_BYTES_READ,
-             metrics_.blob_db_bytes_read);
-  RecordTick(statistics(stats_), BLOB_DB_BYTES_WRITTEN,
-             metrics_.blob_db_bytes_written);
-  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_KEYS_OVERWRITTEN,
+  RecordTick(stats_, BLOB_DB_BYTES_READ, metrics_.blob_db_bytes_read);
+  RecordTick(stats_, BLOB_DB_BYTES_WRITTEN, metrics_.blob_db_bytes_written);
+  RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN,
              metrics_.blob_db_gc_num_keys_overwritten);
-  RecordTick(statistics(stats_), BLOB_DB_GC_BYTES_OVERWRITTEN,
+  RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
              metrics_.blob_db_gc_bytes_overwritten);
-  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_KEYS_RELOCATED,
+  RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED,
              metrics_.blob_db_gc_num_keys_relocated);
-  RecordTick(statistics(stats_), BLOB_DB_GC_BYTES_RELOCATED,
+  RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
              metrics_.blob_db_gc_bytes_relocated);
-  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_NEW_FILES,
+  RecordTick(stats_, BLOB_DB_GC_NUM_NEW_FILES,
              metrics_.blob_db_gc_num_new_files);
-  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_FILES,
-             metrics_.blob_db_gc_num_files);
+  RecordTick(stats_, BLOB_DB_GC_NUM_FILES, metrics_.blob_db_gc_num_files);
 }
 
 Status BlobGCJob::Prepare() { return Status::OK(); }

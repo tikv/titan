@@ -97,10 +97,27 @@ class TitanStats {
 
 // Utility functions
 inline Statistics* statistics(TitanStats* stats) {
-  if (stats) {
-    return stats->statistics();
-  } else {
-    return nullptr;
+  return (stats) ? stats->statistics() : nullptr;
+}
+
+inline void RecordTick(TitanStats* stats, uint32_t ticker_type,
+                       uint64_t count = 1) {
+  if (stats && stats->statistics()) {
+    stats->statistics()->recordTick(ticker_type, count);
+  }
+}
+
+inline void MeasureTime(TitanStats* stats, uint32_t histogram_type,
+                        uint64_t time) {
+  if (stats && stats->statistics()) {
+    stats->statistics()->measureTime(histogram_type, time);
+  }
+}
+
+inline void SetTickerCount(TitanStats* stats, uint32_t ticker_type,
+                           uint64_t count) {
+  if (stats && stats->statistics()) {
+    stats->statistics()->setTickerCount(ticker_type, count);
   }
 }
 

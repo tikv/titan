@@ -40,9 +40,10 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
         new BlobFileBuilder(db_options_, cf_options_, blob_handle_->GetFile()));
   }
 
-  RecordTick(statistics(stats_), BLOB_DB_NUM_KEYS_WRITTEN);
-  MeasureTime(statistics(stats_), BLOB_DB_KEY_SIZE, key.size());
-  MeasureTime(statistics(stats_), BLOB_DB_VALUE_SIZE, value.size());
+  RecordTick(stats_, BLOB_DB_NUM_KEYS_WRITTEN);
+  MeasureTime(stats_, BLOB_DB_KEY_SIZE, key.size());
+  MeasureTime(stats_, BLOB_DB_VALUE_SIZE, value.size());
+  AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE, value.size());
 
   BlobIndex index;
   BlobRecord record;
@@ -50,8 +51,7 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
   record.value = value;
   index.file_number = blob_handle_->GetNumber();
   blob_builder_->Add(record, &index.blob_handle);
-  RecordTick(statistics(stats_), BLOB_DB_BLOB_FILE_BYTES_WRITTEN,
-             index.blob_handle.size);
+  RecordTick(stats_, BLOB_DB_BLOB_FILE_BYTES_WRITTEN, index.blob_handle.size);
   if (ok()) {
     index.EncodeTo(index_value);
   }

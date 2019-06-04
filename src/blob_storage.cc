@@ -45,8 +45,6 @@ void BlobStorage::ExportBlobFiles(
 void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   WriteLock wl(&mutex_);
   files_.emplace(std::make_pair(file->file_number(), file));
-  AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
-           file->file_size());
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
            file->file_size());
   AddStats(stats_, cf_id_, TitanInternalStats::NUM_LIVE_BLOB_FILE, 1);
