@@ -70,18 +70,18 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
     uint32_t column_family_id = PopFirstFromGCQueue();
 
     auto bs = vset_->GetBlobStorage(column_family_id).lock().get();
-    if (bs == nullptr) {  // column family already dropped
-      continue;
-    }
-    const auto& cf_options = bs->cf_options();
-    std::shared_ptr<BlobGCPicker> blob_gc_picker =
-        std::make_shared<BasicBlobGCPicker>(db_options_, cf_options);
-    blob_gc = blob_gc_picker->PickBlobGC(bs);
+    if (bs) {
+      const auto& cf_options = bs->cf_options();
+      std::shared_ptr<BlobGCPicker> blob_gc_picker =
+          std::make_shared<BasicBlobGCPicker>(db_options_, cf_options);
+      blob_gc = blob_gc_picker->PickBlobGC(bs);
 
-    if (blob_gc) {
-      cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
-      assert(column_family_id == cfh->GetID());
-      blob_gc->SetColumnFamily(cfh.get());
+      if (blob_gc) {
+        cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
+        assert(column_family_id == cfh->GetID());
+        blob_gc->SetColumnFamily(cfh.get());
+      }
+      break;
     }
   }
 
