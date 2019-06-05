@@ -7,7 +7,7 @@
 #include <inttypes.h>
 
 #include "db/db_iter.h"
-#include "rocksdb/statistics.h"
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -17,7 +17,7 @@ class TitanDBIterator : public Iterator {
   TitanDBIterator(const ReadOptions& options, BlobStorage* storage,
                   std::shared_ptr<ManagedSnapshot> snap,
                   std::unique_ptr<ArenaWrappedDBIter> iter, Env* env,
-                  Statistics* stats)
+                  TitanStats* stats)
       : options_(options),
         storage_(storage),
         snap_(snap),
@@ -39,7 +39,7 @@ class TitanDBIterator : public Iterator {
   void SeekToFirst() override {
     iter_->SeekToFirst();
     if (Check()) {
-      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
@@ -48,7 +48,7 @@ class TitanDBIterator : public Iterator {
   void SeekToLast() override {
     iter_->SeekToLast();
     if (Check()) {
-      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
@@ -57,7 +57,7 @@ class TitanDBIterator : public Iterator {
   void Seek(const Slice& target) override {
     iter_->Seek(target);
     if (Check()) {
-      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
@@ -66,7 +66,7 @@ class TitanDBIterator : public Iterator {
   void SeekForPrev(const Slice& target) override {
     iter_->SeekForPrev(target);
     if (Check()) {
-      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
@@ -76,7 +76,7 @@ class TitanDBIterator : public Iterator {
     assert(Valid());
     iter_->Next();
     if (Check()) {
-      StopWatch next_sw(env_, stats_, BLOB_DB_NEXT_MICROS);
+      StopWatch next_sw(env_, statistics(stats_), BLOB_DB_NEXT_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_NEXT);
     }
@@ -86,7 +86,7 @@ class TitanDBIterator : public Iterator {
     assert(Valid());
     iter_->Prev();
     if (Check()) {
-      StopWatch prev_sw(env_, stats_, BLOB_DB_PREV_MICROS);
+      StopWatch prev_sw(env_, statistics(stats_), BLOB_DB_PREV_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_PREV);
     }
@@ -153,7 +153,7 @@ class TitanDBIterator : public Iterator {
   std::map<uint64_t, std::unique_ptr<BlobFilePrefetcher>> files_;
 
   Env* env_;
-  Statistics* stats_;
+  TitanStats* stats_;
 };
 
 }  // namespace titandb

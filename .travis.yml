@@ -32,6 +32,7 @@ matrix:
 
 install:
   - git clone --depth=1 --branch=tikv-3.0 https://github.com/pingcap/rocksdb.git
+  - export CTEST_OUTPUT_ON_FAILURE=1
   - if [ "${COMPILER}" == gcc7 ]; then
       CC=gcc-7;
       CXX=g++-7;

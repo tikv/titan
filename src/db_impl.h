@@ -73,6 +73,14 @@ class TitanDBImpl : public TitanDB {
       ColumnFamilyHandle* column_family,
       const std::unordered_map<std::string, std::string>& new_options) override;
 
+  using TitanDB::GetProperty;
+  bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                   std::string* value) override;
+
+  using TitanDB::GetIntProperty;
+  bool GetIntProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                      uint64_t* value) override;
+
   void OnFlushCompleted(const FlushJobInfo& flush_job_info);
 
   void OnCompactionCompleted(const CompactionJobInfo& compaction_job_info);
@@ -153,8 +161,9 @@ class TitanDBImpl : public TitanDB {
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
 
-  // statistics object sharing with RocksDB
-  Statistics* stats_;
+  // TitanStats is turned on only if statistics field of DBOptions
+  // is not null.
+  std::unique_ptr<TitanStats> stats_;
 
   std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
       base_table_factory_;

@@ -106,6 +106,34 @@ class TitanDB : public StackableDB {
   Status SetOptions(ColumnFamilyHandle* column_family,
                     const std::unordered_map<std::string, std::string>&
                         new_options) override = 0;
+
+  struct Properties {
+    //  "rocksdb.titandb.live-blob-size" - returns total blob value size
+    //      referenced by LSM tree.
+    static const std::string kLiveBlobSize;
+    //  "rocksdb.titandb.num-live-blob-file" - returns total blob file count.
+    static const std::string kNumLiveBlobFile;
+    //  "rocksdb.titandb.num-obsolete-blob-file" - return obsolete blob file.
+    static const std::string kNumObsoleteBlobFile;
+    //  "rocksdb.titandb.live-blob-file-size" - returns total size of live blob
+    //      files.
+    static const std::string kLiveBlobFileSize;
+    //  "rocksdb.titandb.obsolete-blob-file-size" - returns size of obsolete
+    //      blob files.
+    static const std::string kObsoleteBlobFileSize;
+  };
+
+  bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                   std::string* value) override = 0;
+  bool GetProperty(const Slice& property, std::string* value) override {
+    return GetProperty(DefaultColumnFamily(), property, value);
+  }
+
+  bool GetIntProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                      uint64_t* value) override = 0;
+  bool GetIntProperty(const Slice& property, uint64_t* value) override {
+    return GetIntProperty(DefaultColumnFamily(), property, value);
+  }
 };
 
 }  // namespace titandb

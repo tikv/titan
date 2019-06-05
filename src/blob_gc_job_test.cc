@@ -116,7 +116,7 @@ class BlobGCJobTest : public testing::Test {
 
       BlobGCJob blob_gc_job(blob_gc.get(), base_db_, mutex_, tdb_->db_options_,
                             tdb_->env_, EnvOptions(), tdb_->blob_manager_.get(),
-                            version_set_, &log_buffer, nullptr);
+                            version_set_, &log_buffer, nullptr, nullptr);
 
       s = blob_gc_job.Prepare();
       ASSERT_OK(s);
@@ -170,7 +170,7 @@ class BlobGCJobTest : public testing::Test {
     blob_gc.SetColumnFamily(cfh);
     BlobGCJob blob_gc_job(&blob_gc, base_db_, mutex_, TitanDBOptions(),
                           Env::Default(), EnvOptions(), nullptr, version_set_,
-                          nullptr, nullptr);
+                          nullptr, nullptr, nullptr);
     ASSERT_FALSE(blob_gc_job.DiscardEntry(key, blob_index));
     DestroyDB();
   }

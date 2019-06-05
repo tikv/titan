@@ -4,6 +4,7 @@
 #include "blob_format.h"
 #include "rocksdb/options.h"
 #include "titan/options.h"
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -12,7 +13,8 @@ class BlobFileCache {
  public:
   // Constructs a blob file cache to cache opened files.
   BlobFileCache(const TitanDBOptions& db_options,
-                const TitanCFOptions& cf_options, std::shared_ptr<Cache> cache);
+                const TitanCFOptions& cf_options, std::shared_ptr<Cache> cache,
+                TitanStats* stats);
 
   // Gets the blob record pointed by the handle in the specified file
   // number. The corresponding file size must be exactly "file_size"
@@ -41,7 +43,7 @@ class BlobFileCache {
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
   std::shared_ptr<Cache> cache_;
-  Statistics* stats_;
+  TitanStats* stats_;
 };
 
 }  // namespace titandb

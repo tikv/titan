@@ -8,7 +8,7 @@ namespace titandb {
 class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
  public:
   GarbageCollectionWriteCallback(ColumnFamilyHandle* cfh, std::string&& _key,
-                                 BlobIndex&& blob_index, Statistics* stats)
+                                 BlobIndex&& blob_index)
       : cfh_(cfh), key_(std::move(_key)), blob_index_(blob_index) {
     assert(!key_.empty());
   }
@@ -73,7 +73,7 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
                      const EnvOptions& env_options,
                      BlobFileManager* blob_file_manager,
                      VersionSet* version_set, LogBuffer* log_buffer,
-                     std::atomic_bool* shuting_down)
+                     std::atomic_bool* shuting_down, TitanStats* stats)
     : blob_gc_(blob_gc),
       base_db_(db),
       base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)),
@@ -85,7 +85,7 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
       version_set_(version_set),
       log_buffer_(log_buffer),
       shuting_down_(shuting_down),
-      stats_(db_options_.statistics.get()) {}
+      stats_(stats) {}
 
 BlobGCJob::~BlobGCJob() {
   // flush metrics
@@ -311,7 +311,7 @@ Status BlobGCJob::DoRunGC() {
 
     // Store WriteBatch for rewriting new Key-Index pairs to LSM
     GarbageCollectionWriteCallback callback(cfh, blob_record.key.ToString(),
-                                            std::move(blob_index), stats_);
+                                            std::move(blob_index));
     callback.value = index_entry;
     rewrite_batches_.emplace_back(
         std::make_pair(WriteBatch(), std::move(callback)));

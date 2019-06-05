@@ -29,7 +29,7 @@ struct TitanDBOptions : public DBOptions {
   explicit TitanDBOptions(const DBOptions& options) : DBOptions(options) {}
 
   TitanDBOptions& operator=(const DBOptions& options) {
-    *dynamic_cast<DBOptions*>(this) = options;
+    *static_cast<DBOptions*>(this) = options;
     return *this;
   }
 };

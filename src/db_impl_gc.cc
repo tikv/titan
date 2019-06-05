@@ -60,7 +60,7 @@ void TitanDBImpl::BackgroundCallGC() {
 
 Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   mutex_.AssertHeld();
-  StopWatch gc_sw(env_, stats_, BLOB_DB_GC_MICROS);
+  StopWatch gc_sw(env_, statistics(stats_.get()), BLOB_DB_GC_MICROS);
 
   std::unique_ptr<BlobGC> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;
@@ -68,17 +68,19 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
 
   if (!gc_queue_.empty()) {
     uint32_t column_family_id = PopFirstFromGCQueue();
-
     auto bs = vset_->GetBlobStorage(column_family_id).lock().get();
-    const auto& cf_options = bs->cf_options();
-    std::shared_ptr<BlobGCPicker> blob_gc_picker =
-        std::make_shared<BasicBlobGCPicker>(db_options_, cf_options);
-    blob_gc = blob_gc_picker->PickBlobGC(bs);
 
-    if (blob_gc) {
-      cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
-      assert(column_family_id == cfh->GetID());
-      blob_gc->SetColumnFamily(cfh.get());
+    if (bs) {
+      const auto& cf_options = bs->cf_options();
+      std::shared_ptr<BlobGCPicker> blob_gc_picker =
+          std::make_shared<BasicBlobGCPicker>(db_options_, cf_options);
+      blob_gc = blob_gc_picker->PickBlobGC(bs);
+
+      if (blob_gc) {
+        cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
+        assert(column_family_id == cfh->GetID());
+        blob_gc->SetColumnFamily(cfh.get());
+      }
     }
   }
 
@@ -90,7 +92,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   } else {
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
                           env_options_, blob_manager_.get(), vset_.get(),
-                          log_buffer, &shuting_down_);
+                          log_buffer, &shuting_down_, stats_.get());
     s = blob_gc_job.Prepare();
     if (s.ok()) {
       mutex_.Unlock();
@@ -126,7 +128,7 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
     assert(bg_gc_scheduled_ > 0);
 
     // BackgroudGC
-    StopWatch gc_sw(env_, stats_, BLOB_DB_GC_MICROS);
+    StopWatch gc_sw(env_, statistics(stats_.get()), BLOB_DB_GC_MICROS);
 
     std::unique_ptr<BlobGC> blob_gc;
     std::unique_ptr<ColumnFamilyHandle> cfh;
@@ -148,7 +150,7 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
     } else {
       BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
                             env_options_, blob_manager_.get(), vset_.get(),
-                            &log_buffer, &shuting_down_);
+                            &log_buffer, &shuting_down_, stats_.get());
       s = blob_gc_job.Prepare();
 
       if (s.ok()) {

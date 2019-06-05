@@ -32,7 +32,7 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
   }
   return new TitanTableBuilder(column_family_id, db_options_, cf_options,
                                std::move(base_builder), blob_manager_,
-                               blob_storage);
+                               blob_storage, stats_);
 }
 
 std::string TitanTableFactory::GetPrintableTableOptions() const {

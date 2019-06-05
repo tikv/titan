@@ -51,9 +51,9 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
-      RecordTick(db_->stats_, BLOB_DB_BLOB_FILE_SYNCED);
+      RecordTick(statistics(db_->stats_.get()), BLOB_DB_BLOB_FILE_SYNCED);
       {
-        StopWatch sync_sw(db_->env_, db_->stats_,
+        StopWatch sync_sw(db_->env_, statistics(db_->stats_.get()),
                           BLOB_DB_BLOB_FILE_SYNC_MICROS);
         s = file.second->GetFile()->Sync(false);
       }
@@ -79,7 +79,11 @@ class TitanDBImpl::FileManager : public BlobFileManager {
   Status BatchDeleteFiles(
       const std::vector<std::unique_ptr<BlobFileHandle>>& handles) override {
     Status s;
-    for (auto& handle : handles) s = db_->env_->DeleteFile(handle->GetName());
+    uint64_t file_size = 0;
+    for (auto& handle : handles) {
+      s = db_->env_->DeleteFile(handle->GetName());
+      file_size += handle->GetFile()->GetFileSize();
+    }
     {
       MutexLock l(&db_->mutex_);
       for (const auto& handle : handles)
@@ -116,13 +120,15 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
       dbname_(dbname),
       env_(options.env),
       env_options_(options),
-      db_options_(options),
-      stats_(options.statistics.get()) {
+      db_options_(options) {
   if (db_options_.dirname.empty()) {
     db_options_.dirname = dbname_ + "/titandb";
   }
   dirname_ = db_options_.dirname;
-  vset_.reset(new VersionSet(db_options_));
+  if (db_options_.statistics != nullptr) {
+    stats_.reset(new TitanStats(db_options_.statistics.get()));
+  }
+  vset_.reset(new VersionSet(db_options_, stats_.get()));
   blob_manager_.reset(new FileManager(this));
 }
 
@@ -175,7 +181,8 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       assert(base_table_factory != nullptr);
       base_table_factory_[cf_id] = base_table_factory;
       titan_table_factory_[cf_id] = std::make_shared<TitanTableFactory>(
-          db_options_, descs[i].options, blob_manager_, &mutex_, vset_.get());
+          db_options_, descs[i].options, blob_manager_, &mutex_, vset_.get(),
+          stats_.get());
       base_descs[i].options.table_factory = titan_table_factory_[cf_id];
       // Add TableProperties for collecting statistics GC
       base_descs[i].options.table_properties_collector_factories.emplace_back(
@@ -211,6 +218,9 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
   if (s.ok()) {
     db_impl_ = reinterpret_cast<DBImpl*>(db_->GetRootDB());
+    if (stats_.get()) {
+      stats_->Initialize(column_families, db_->DefaultColumnFamily()->GetID());
+    }
   }
   return s;
 }
@@ -274,7 +284,8 @@ Status TitanDBImpl::CreateColumnFamilies(
     // Replaces the provided table factory with TitanTableFactory.
     base_table_factory.emplace_back(options.table_factory);
     titan_table_factory.emplace_back(std::make_shared<TitanTableFactory>(
-        db_options_, desc.options, blob_manager_, &mutex_, vset_.get()));
+        db_options_, desc.options, blob_manager_, &mutex_, vset_.get(),
+        stats_.get()));
     options.table_factory = titan_table_factory.back();
     base_descs.emplace_back(desc.name, options);
   }
@@ -370,7 +381,7 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                         nullptr /*read_callback*/, &is_blob_index);
   if (!s.ok() || !is_blob_index) return s;
 
-  StopWatch get_sw(env_, stats_, BLOB_DB_GET_MICROS);
+  StopWatch get_sw(env_, statistics(stats_.get()), BLOB_DB_GET_MICROS);
 
   BlobIndex index;
   s = index.DecodeFrom(value);
@@ -385,10 +396,12 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   mutex_.Unlock();
 
   {
-    StopWatch read_sw(env_, stats_, BLOB_DB_BLOB_FILE_READ_MICROS);
+    StopWatch read_sw(env_, statistics(stats_.get()),
+                      BLOB_DB_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
-    RecordTick(stats_, BLOB_DB_NUM_KEYS_READ);
-    RecordTick(stats_, BLOB_DB_BLOB_FILE_BYTES_READ, index.blob_handle.size);
+    RecordTick(statistics(stats_.get()), BLOB_DB_NUM_KEYS_READ);
+    RecordTick(statistics(stats_.get()), BLOB_DB_BLOB_FILE_BYTES_READ,
+               index.blob_handle.size);
   }
   if (s.IsCorruption()) {
     ROCKS_LOG_DEBUG(db_options_.info_log,
@@ -462,7 +475,7 @@ Iterator* TitanDBImpl::NewIteratorImpl(
       options, cfd, options.snapshot->GetSequenceNumber(),
       nullptr /*read_callback*/, true /*allow_blob*/, true /*allow_refresh*/));
   return new TitanDBIterator(options, storage.lock().get(), snapshot,
-                             std::move(iter), env_, stats_);
+                             std::move(iter), env_, stats_.get());
 }
 
 Status TitanDBImpl::NewIterators(
@@ -542,6 +555,40 @@ Status TitanDBImpl::SetOptions(
     table_factory->SetBlobRunMode(mode);
   }
   return Status::OK();
+}
+
+bool TitanDBImpl::GetProperty(ColumnFamilyHandle* column_family,
+                              const Slice& property, std::string* value) {
+  assert(column_family != nullptr);
+  bool s = false;
+  if (stats_.get() != nullptr) {
+    auto stats = stats_->internal_stats(column_family->GetID());
+    if (stats != nullptr) {
+      s = stats->GetStringProperty(property, value);
+    }
+  }
+  if (s) {
+    return s;
+  } else {
+    return db_impl_->GetProperty(column_family, property, value);
+  }
+}
+
+bool TitanDBImpl::GetIntProperty(ColumnFamilyHandle* column_family,
+                                 const Slice& property, uint64_t* value) {
+  assert(column_family != nullptr);
+  bool s = false;
+  if (stats_.get() != nullptr) {
+    auto stats = stats_->internal_stats(column_family->GetID());
+    if (stats != nullptr) {
+      s = stats->GetIntProperty(property, value);
+    }
+  }
+  if (s) {
+    return s;
+  } else {
+    return db_impl_->GetIntProperty(column_family, property, value);
+  }
 }
 
 void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
@@ -651,6 +698,7 @@ void TitanDBImpl::OnCompactionCompleted(
       file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
     }
 
+    uint64_t delta = 0;
     for (const auto& bfs : blob_files_size) {
       // blob file size < 0 means discardable size > 0
       if (bfs.second >= 0) {
@@ -661,8 +709,13 @@ void TitanDBImpl::OnCompactionCompleted(
         // file has been gc out
         continue;
       }
+      if (!file->is_obsolete()) {
+        delta += -bfs.second;
+      }
       file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
     }
+    SubStats(stats_.get(), compaction_job_info.cf_id,
+             TitanInternalStats::LIVE_BLOB_SIZE, delta);
     bs->ComputeGCScore();
 
     AddToGCQueue(compaction_job_info.cf_id);

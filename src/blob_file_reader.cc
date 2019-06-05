@@ -1,4 +1,5 @@
 #include "blob_file_reader.h"
+#include "titan_stats.h"
 
 #include "util/crc32c.h"
 #include "util/filename.h"
@@ -48,7 +49,7 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
                             std::unique_ptr<RandomAccessFileReader> file,
                             uint64_t file_size,
                             std::unique_ptr<BlobFileReader>* result,
-                            Statistics* stats) {
+                            TitanStats* stats) {
   if (file_size < BlobFileFooter::kEncodedLength) {
     return Status::Corruption("file is too short to be a blob file");
   }
@@ -68,7 +69,7 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
 
 BlobFileReader::BlobFileReader(const TitanCFOptions& options,
                                std::unique_ptr<RandomAccessFileReader> file,
-                               Statistics* stats)
+                               TitanStats* stats)
     : options_(options),
       file_(std::move(file)),
       cache_(options.blob_cache),

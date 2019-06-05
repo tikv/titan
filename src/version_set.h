@@ -13,6 +13,7 @@
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "titan/options.h"
+#include "titan_stats.h"
 #include "util/mutexlock.h"
 #include "version_edit.h"
 
@@ -21,7 +22,7 @@ namespace titandb {
 
 class VersionSet {
  public:
-  explicit VersionSet(const TitanDBOptions& options);
+  explicit VersionSet(const TitanDBOptions& options, TitanStats* stats);
 
   // Sets up the storage specified in "options.dirname".
   // If the manifest doesn't exist, it will create one.
@@ -91,6 +92,8 @@ class VersionSet {
   EnvOptions env_options_;
   TitanDBOptions db_options_;
   std::shared_ptr<Cache> file_cache_;
+
+  TitanStats* stats_;
 
   std::vector<std::string> obsolete_manifests_;
 
