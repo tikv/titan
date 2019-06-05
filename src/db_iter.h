@@ -34,34 +34,46 @@ class TitanDBIterator : public Iterator {
 
   void SeekToFirst() override {
     iter_->SeekToFirst();
-    GetBlobValue();
+    while (!GetBlobValue()) {
+      iter_->Next();
+    }
   }
 
   void SeekToLast() override {
     iter_->SeekToLast();
-    GetBlobValue();
+    while (!GetBlobValue()) {
+      iter_->Prev();
+    }
   }
 
   void Seek(const Slice& target) override {
     iter_->Seek(target);
-    GetBlobValue();
+    while (!GetBlobValue()) {
+      iter_->Next();
+    }
   }
 
   void SeekForPrev(const Slice& target) override {
     iter_->SeekForPrev(target);
-    GetBlobValue();
+    while (!GetBlobValue()) {
+      iter_->Prev();
+    }
   }
 
   void Next() override {
     assert(Valid());
     iter_->Next();
-    GetBlobValue();
+    while (!GetBlobValue()) {
+      iter_->Next();
+    }
   }
 
   void Prev() override {
     assert(Valid());
     iter_->Prev();
-    GetBlobValue();
+    while (!GetBlobValue()) {
+      iter_->Prev();
+    }
   }
 
   Slice key() const override {
@@ -76,10 +88,11 @@ class TitanDBIterator : public Iterator {
   }
 
  private:
-  void GetBlobValue() {
+  // return value: false means key has been deleted, we need to skipped it.	
+  bool GetBlobValue() {
     if (!iter_->Valid() || !iter_->IsBlob()) {
       status_ = iter_->status();
-      return;
+      return true;
     }
     assert(iter_->status().ok());
 
@@ -96,17 +109,23 @@ class TitanDBIterator : public Iterator {
       std::unique_ptr<BlobFilePrefetcher> prefetcher;
       status_ = storage_->NewPrefetcher(index.file_number, &prefetcher);
       if (status_.IsCorruption()) {
+        // If use `DeleteFilesInRanges`, we may encounter this failure,	
+        // because `DeleteFilesInRanges` may expose an old key which	
+        // corresponding blob file has already been GCed out, so we	
+        // cannot abort here.
         fprintf(stderr,
                 "key:%s GetBlobValue err:%s with sequence number:%" PRIu64 "\n",
                 iter_->key().ToString(true).c_str(), status_.ToString().c_str(),
                 options_.snapshot->GetSequenceNumber());
+        return false;
       }
-      if (!status_.ok()) return;
+      if (!status_.ok()) return true;
       it = files_.emplace(index.file_number, std::move(prefetcher)).first;
     }
 
     buffer_.Reset();
     status_ = it->second->Get(options_, index.blob_handle, &record_, &buffer_);
+    return true;
   }
 
   Status status_;

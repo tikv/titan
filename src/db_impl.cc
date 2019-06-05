@@ -363,7 +363,7 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
 
   s = storage->Get(options, index, &record, &buffer);
   if (s.IsCorruption()) {
-    ROCKS_LOG_DEBUG(db_options_.info_log, "Key:%s Snapshot:%" PRIu64 " GetBlobFile err:%s\n",
+    ROCKS_LOG_ERROR(db_options_.info_log, "Key:%s Snapshot:%" PRIu64 " GetBlobFile err:%s\n",
                     key.ToString(true).c_str(),
                     options.snapshot->GetSequenceNumber(),
                     s.ToString().c_str());
