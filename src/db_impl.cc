@@ -367,6 +367,7 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                     key.ToString(true).c_str(),
                     options.snapshot->GetSequenceNumber(),
                     s.ToString().c_str());
+    return Status::NotFound();
   }
   if (s.ok()) {
     value->Reset();
