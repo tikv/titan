@@ -66,10 +66,10 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   std::unique_ptr<ColumnFamilyHandle> cfh;
   Status s;
 
-  while (!gc_queue_.empty()) {
+  if (!gc_queue_.empty()) {
     uint32_t column_family_id = PopFirstFromGCQueue();
-
     auto bs = vset_->GetBlobStorage(column_family_id).lock().get();
+
     if (bs) {
       const auto& cf_options = bs->cf_options();
       std::shared_ptr<BlobGCPicker> blob_gc_picker =
@@ -81,7 +81,6 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
         assert(column_family_id == cfh->GetID());
         blob_gc->SetColumnFamily(cfh.get());
       }
-      break;
     }
   }
 
