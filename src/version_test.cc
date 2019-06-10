@@ -78,9 +78,11 @@ class VersionTest : public testing::Test {
   }
 
   void BuildAndCheck(std::vector<VersionEdit> edits) {
+    EditCollector collector;
     for (auto& edit : edits) {
-      ASSERT_OK(vset_->Apply(&edit));
+      collector.AddEdit(&edit);
     }
+    ASSERT_OK(vset_->Apply(&collector));
     for (auto& it : vset_->column_families_) {
       auto& storage = column_families_[it.first];
       // ignore obsolete file

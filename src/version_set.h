@@ -85,7 +85,7 @@ class VersionSet {
 
   Status WriteSnapshot(log::Writer* log);
 
-  Status Apply(VersionEdit* edit);
+  Status Apply(EditCollector* collector);
 
   std::string dirname_;
   Env* env_;

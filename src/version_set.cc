@@ -76,11 +76,12 @@ Status VersionSet::Recover() {
                        0 /*initial_offset*/, 0);
     Slice record;
     std::string scratch;
+    EditCollector collector;
     while (reader.ReadRecord(&record, &scratch) && s.ok()) {
       VersionEdit edit;
       s = DecodeInto(record, &edit);
       if (!s.ok()) return s;
-      s = Apply(&edit);
+      s = collector.AddEdit(&edit);
       if (!s.ok()) return s;
       if (edit.has_next_file_number_) {
         assert(edit.next_file_number_ >= next_file_number);
@@ -88,6 +89,8 @@ Status VersionSet::Recover() {
         has_next_file_number = true;
       }
     }
+    s = Apply(&collector);
+    if (!s.ok()) return s;
   }
 
   if (!has_next_file_number) {
@@ -204,52 +207,65 @@ Status VersionSet::LogAndApply(VersionEdit* edit) {
   }
   if (!s.ok()) return s;
 
-  return Apply(edit);
+  EditCollector collector;
+  collector.AddEdit(edit);
+  return Apply(&collector);
 }
 
-Status VersionSet::Apply(VersionEdit* edit) {
-  auto cf_id = edit->column_family_id_;
-  auto it = column_families_.find(cf_id);
-  if (it == column_families_.end()) {
-    // TODO: support OpenForReadOnly which doesn't open DB with all column
-    // family so there are maybe some invalid column family, but we can't just
-    // skip it otherwise blob files of the non-open column families will be
-    // regarded as obsolete and deleted.
-    return Status::OK();
-  }
-  auto& files = it->second->files_;
-
-  for (auto& file : edit->deleted_files_) {
-    auto number = file.first;
-    auto blob_it = files.find(number);
-    if (blob_it == files.end()) {
-      fprintf(stderr, "blob file %" PRIu64 " doesn't exist before\n", number);
-      abort();
-    } else if (blob_it->second->is_obsolete()) {
-      fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n",
-              number);
-      abort();
+Status VersionSet::Apply(EditCollector* collector) {
+  for (auto& cf : collector->column_families_) {
+    auto cf_id = cf.first;
+    auto it = column_families_.find(cf_id);
+    if (it == column_families_.end()) {
+      // TODO: support OpenForReadOnly which doesn't open DB with all column
+      // family so there are maybe some invalid column family, but we can't just
+      // skip it otherwise blob files of the non-open column families will be
+      // regarded as obsolete and deleted.
+      continue;
     }
-    it->second->MarkFileObsolete(blob_it->second, file.second);
-  }
+    auto& files = it->second->files_;
 
-  for (auto& file : edit->added_files_) {
-    auto number = file->file_number();
-    auto blob_it = files.find(number);
-    if (blob_it != files.end()) {
-      if (blob_it->second->is_obsolete()) {
-        fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n",
-                number);
-      } else {
-        fprintf(stderr, "blob file %" PRIu64 " has been added before\n",
-                number);
+    for (auto& file : cf.second.deleted_files_) {
+      auto number = file.first;
+      auto blob_it = files.find(number);
+      if (blob_it == files.end()) {
+        ROCKS_LOG_ERROR(db_options_.info_log,
+                        "blob file %" PRIu64 " doesn't exist before\n", number);
+        return Status::Corruption(
+            "blob file doesn't exist before");
+      } else if (blob_it->second->is_obsolete()) {
+        ROCKS_LOG_ERROR(db_options_.info_log,
+                        "blob file %" PRIu64 " has been deleted already\n",
+                        number);
+        return Status::Corruption(
+            "blob file has been deleted already");
       }
-      abort();
+      it->second->MarkFileObsolete(blob_it->second, file.second);
     }
-    it->second->AddBlobFile(file);
-  }
 
-  it->second->ComputeGCScore();
+    for (auto& file : cf.second.added_files_) {
+      auto number = file.first;
+      auto blob_it = files.find(number);
+      if (blob_it != files.end()) {
+        if (blob_it->second->is_obsolete()) {
+          ROCKS_LOG_ERROR(db_options_.info_log,
+                          "blob file %" PRIu64 " has been deleted before\n",
+                          number);
+          return Status::Corruption(
+              "blob file has been deleted before");
+        } else {
+          ROCKS_LOG_ERROR(db_options_.info_log,
+                          "blob file %" PRIu64 " has been added before\n",
+                          number);
+          return Status::Corruption(
+              "blob file has been added before");
+        }
+      }
+      it->second->AddBlobFile(file.second);
+    }
+
+    it->second->ComputeGCScore();
+  }
   return Status::OK();
 }
 
