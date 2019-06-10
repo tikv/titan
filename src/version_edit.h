@@ -73,8 +73,7 @@ class EditCollector {
     Status AddFile(const std::shared_ptr<BlobFileMeta>& file) {
       auto number = file->file_number();
       if (added_files_.find(number) != added_files_.end()) {
-        return Status::Corruption(
-            "blob file has been added before");
+        return Status::Corruption("blob file has been added before");
       }
       added_files_.emplace(number, file);
       return Status::OK();

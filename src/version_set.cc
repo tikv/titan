@@ -231,14 +231,12 @@ Status VersionSet::Apply(EditCollector* collector) {
       if (blob_it == files.end()) {
         ROCKS_LOG_ERROR(db_options_.info_log,
                         "blob file %" PRIu64 " doesn't exist before\n", number);
-        return Status::Corruption(
-            "blob file doesn't exist before");
+        return Status::Corruption("blob file doesn't exist before");
       } else if (blob_it->second->is_obsolete()) {
         ROCKS_LOG_ERROR(db_options_.info_log,
                         "blob file %" PRIu64 " has been deleted already\n",
                         number);
-        return Status::Corruption(
-            "blob file has been deleted already");
+        return Status::Corruption("blob file has been deleted already");
       }
       it->second->MarkFileObsolete(blob_it->second, file.second);
     }
@@ -251,14 +249,12 @@ Status VersionSet::Apply(EditCollector* collector) {
           ROCKS_LOG_ERROR(db_options_.info_log,
                           "blob file %" PRIu64 " has been deleted before\n",
                           number);
-          return Status::Corruption(
-              "blob file has been deleted before");
+          return Status::Corruption("blob file has been deleted before");
         } else {
           ROCKS_LOG_ERROR(db_options_.info_log,
                           "blob file %" PRIu64 " has been added before\n",
                           number);
-          return Status::Corruption(
-              "blob file has been added before");
+          return Status::Corruption("blob file has been added before");
         }
       }
       it->second->AddBlobFile(file.second);
