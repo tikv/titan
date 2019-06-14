@@ -254,10 +254,12 @@ TEST_F(TitanThreadSafetyTest, SetBlobRunMode) {
     });
     threads.emplace_back([&] {
       std::unordered_map<std::string, std::string> opts;
-      while (num_entries.load() < total_entries / 4) {}
+      while (num_entries.load() < total_entries / 4) {
+      }
       opts["blob_run_mode"] = "kReadOnly";
       ASSERT_OK(db_->SetOptions(opts));
-      while (num_entries.load() < total_entries / 2) {}
+      while (num_entries.load() < total_entries / 2) {
+      }
       opts["blob_run_mode"] = "kFallback";
       ASSERT_OK(db_->SetOptions(opts));
     });
