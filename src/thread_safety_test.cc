@@ -17,12 +17,12 @@ namespace titandb {
 
 struct ThreadParam {
   ThreadParam() = default;
-  ThreadParam(uint32_t _concurrency, uint32_t _repeat, bool _sync)
-      : concurrency(_concurrency), repeat(_repeat), sync(_sync) {}
+  ThreadParam(uint32_t _num_columns, uint32_t _repeat, bool _sync)
+      : num_columns(_num_columns), repeat(_repeat), sync(_sync) {}
   ThreadParam(const ThreadParam& rhs)
-      : concurrency(rhs.concurrency), repeat(rhs.repeat), sync(rhs.sync) {}
+      : num_columns(rhs.num_columns), repeat(rhs.repeat), sync(rhs.sync) {}
 
-  uint32_t concurrency{4};
+  uint32_t num_columns{4};
 
   uint32_t repeat{10};
 
@@ -81,6 +81,18 @@ class TitanThreadSafetyTest : public testing::Test {
     std::string key = GenKey(k);
     std::string value = GenValue(k);
     ASSERT_OK(db_->Put(wopts, handle, key, value));
+  }
+
+  void VerifyPartialCF(ColumnFamilyHandle* handle,
+                       const std::map<std::string, std::string>& data,
+                       ReadOptions ropts = ReadOptions()) {
+    db_impl_->PurgeObsoleteFiles();
+
+    for (auto& kv : data) {
+      std::string value;
+      ASSERT_OK(db_->Get(ropts, handle, kv.first, &value));
+      ASSERT_EQ(value, kv.second);
+    }
   }
 
   void VerifyCF(ColumnFamilyHandle* handle,
@@ -164,9 +176,9 @@ TEST_F(TitanThreadSafetyTest, Basic) {
         GC(handle);
       }};
   uint32_t job_count = jobs.size();
-  unfinished_worker_.store(job_count * param_.concurrency,
+  unfinished_worker_.store(job_count * param_.num_columns,
                            std::memory_order_relaxed);
-  for (uint32_t col = 0; col < param_.concurrency; col++) {
+  for (uint32_t col = 0; col < param_.num_columns; col++) {
     std::string name = std::to_string(col);
     TitanCFDescriptor desc(name, options_);
     ColumnFamilyHandle* handle = nullptr;
@@ -205,6 +217,55 @@ TEST_F(TitanThreadSafetyTest, Basic) {
   }
   std::for_each(threads.begin(), threads.end(),
                 std::mem_fn(&port::Thread::join));
+}
+
+TEST_F(TitanThreadSafetyTest, SetBlobRunMode) {
+  Open();
+  const uint64_t kNumEntries = 10000;
+  std::vector<port::Thread> threads;
+  uint64_t total_entries = kNumEntries * param_.repeat;
+  std::atomic<uint64_t> num_entries(0);
+
+  std::atomic<uint32_t> finished_run(0);
+  std::vector<std::map<std::string, std::string>> data(param_.repeat);
+  std::string name = "main";
+  TitanCFDescriptor desc(name, options_);
+  ColumnFamilyHandle* handle = nullptr;
+  ASSERT_OK(db_->CreateColumnFamily(desc, &handle));
+  for (uint32_t k = 0; k < param_.repeat; k++) {
+    threads.emplace_back([&, k] {
+      for (uint64_t i = 0; i < kNumEntries; i++) {
+        PutCF(handle, k * kNumEntries + i);
+        PutMap(data[k], k * kNumEntries + i);
+        num_entries.fetch_add(1);
+      }
+      finished_run.fetch_add(1);
+    });
+    threads.emplace_back([&] {
+      while (finished_run.load() < param_.repeat - 1) {
+        uint32_t run = finished_run.load();
+        for (uint32_t i = 0; i < run; i++) {
+          VerifyPartialCF(handle, data[i]);
+        }
+      }
+      for (uint32_t i = 0; i < param_.repeat; i++) {
+        VerifyPartialCF(handle, data[i]);
+      }
+    });
+    threads.emplace_back([&] {
+      std::unordered_map<std::string, std::string> opts;
+      while (num_entries.load() < total_entries / 4) {}
+      opts["blob_run_mode"] = "kReadOnly";
+      ASSERT_OK(db_->SetOptions(opts));
+      while (num_entries.load() < total_entries / 2) {}
+      opts["blob_run_mode"] = "kFallback";
+      ASSERT_OK(db_->SetOptions(opts));
+    });
+  }
+  std::for_each(threads.begin(), threads.end(),
+                std::mem_fn(&port::Thread::join));
+  ASSERT_OK(db_->DropColumnFamily(handle));
+  db_->DestroyColumnFamilyHandle(handle);
 }
 
 }  // namespace titandb

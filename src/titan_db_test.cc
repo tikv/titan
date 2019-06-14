@@ -659,7 +659,7 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   version.clear();
 
   opts["blob_run_mode"] = "kReadOnly";
-  db_->SetOptions(opts);
+  ASSERT_OK(db_->SetOptions(opts));
   for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
     Put(i, &data);
   }
@@ -677,8 +677,8 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   }
   version.clear();
 
-  opts["blob_run_mode"] = "fallback";
-  db_->SetOptions(opts);
+  opts["blob_run_mode"] = "kFallback";
+  ASSERT_OK(db_->SetOptions(opts));
   for (uint64_t i = kNumEntries * 2 + 1; i <= kNumEntries * 3; i++) {
     Put(i, &data);
   }
