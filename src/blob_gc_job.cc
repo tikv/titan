@@ -287,7 +287,7 @@ Status BlobGCJob::DoRunGC() {
       if (!s.ok()) {
         break;
       }
-      blob_file_builder = unique_ptr<BlobFileBuilder>(
+      blob_file_builder = std::unique_ptr<BlobFileBuilder>(
           new BlobFileBuilder(db_options_, blob_gc_->titan_cf_options(),
                               blob_file_handle->GetFile()));
       file_size = 0;
@@ -339,7 +339,8 @@ Status BlobGCJob::DoRunGC() {
   return s;
 }
 
-Status BlobGCJob::BuildIterator(unique_ptr<BlobFileMergeIterator>* result) {
+Status BlobGCJob::BuildIterator(
+    std::unique_ptr<BlobFileMergeIterator>* result) {
   Status s;
   const auto& inputs = blob_gc_->sampled_inputs();
   assert(!inputs.empty());
