@@ -161,13 +161,13 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
   }
 
   // TODO: add do sample count metrics
-
+  auto records_size = file->file_size() - BlobFileHeader::kEncodedLength - BlobFileFooter::kEncodedLength;
   Status s;
   uint64_t sample_size_window = static_cast<uint64_t>(
-      file->file_size() * blob_gc_->titan_cf_options().sample_file_size_ratio);
-  Random64 random64(file->file_size());
+      records_size * blob_gc_->titan_cf_options().sample_file_size_ratio);
+  Random64 random64(records_size);
   uint64_t sample_begin_offset =
-      random64.Uniform(file->file_size() - sample_size_window);
+      random64.Uniform(records_size - sample_size_window) + BlobFileHeader::kEncodedLength;
 
   std::unique_ptr<RandomAccessFileReader> file_reader;
   const int readahead = 256 << 10;
@@ -184,11 +184,11 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
   // TODO(@DorianZheng) sample_begin_offset maybe out of data block size, need
   // more elegant solution
   if (iter.status().IsInvalidArgument()) {
-    iter.IterateForPrev(0);
+    iter.IterateForPrev(BlobFileHeader::kEncodedLength);
   }
   if (!iter.status().ok()) {
     fprintf(stderr,
-            "IterateForPrev faile, file number[%lu] size[%lu] status[%s]\n",
+            "IterateForPrev failed, file number[%lu] size[%lu] status[%s]\n",
             static_cast<size_t>(file->file_number()),
             static_cast<size_t>(file->file_size()),
             iter.status().ToString().c_str());

@@ -77,6 +77,51 @@ class TitanDB : public StackableDB {
   Status DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) override =
       0;
 
+  using StackableDB::Get;
+  Status Get(const ReadOptions& options,
+                     ColumnFamilyHandle* column_family, const Slice& key,
+                     PinnableSlice* value) override {
+        
+    return Get(TitanReadOptions(options), column_family, key, value);
+  }
+  virtual Status Get(const TitanReadOptions& options,
+                     ColumnFamilyHandle* column_family, const Slice& key,
+                     PinnableSlice* value) = 0;
+
+  using StackableDB::MultiGet;
+  std::vector<Status> MultiGet(
+      const ReadOptions& options,
+      const std::vector<ColumnFamilyHandle*>& column_family,
+      const std::vector<Slice>& keys,
+      std::vector<std::string>* values) override {
+    return MultiGet(TitanReadOptions(options), column_family, keys, values);
+  }
+  virtual std::vector<Status> MultiGet(
+      const TitanReadOptions& options,
+      const std::vector<ColumnFamilyHandle*>& column_family,
+      const std::vector<Slice>& keys,
+      std::vector<std::string>* values) = 0;
+
+  using StackableDB::NewIterator;
+  Iterator* NewIterator(const ReadOptions& opts,
+                                ColumnFamilyHandle* column_family) override {
+    return NewIterator(TitanReadOptions(opts), column_family);
+  }
+  virtual Iterator* NewIterator(const TitanReadOptions& opts,
+                                ColumnFamilyHandle* column_family) = 0;
+
+  using StackableDB::NewIterators;
+  Status NewIterators(
+      const ReadOptions& options,
+      const std::vector<ColumnFamilyHandle*>& column_families,
+      std::vector<Iterator*>* iterators) override {
+    return NewIterators(TitanReadOptions(options), column_families, iterators);
+  }
+  virtual Status NewIterators(
+      const TitanReadOptions& options,
+      const std::vector<ColumnFamilyHandle*>& column_families,
+      std::vector<Iterator*>* iterators) = 0;
+
   using StackableDB::Merge;
   Status Merge(const WriteOptions&, ColumnFamilyHandle*, const Slice& /*key*/,
                const Slice& /*value*/) override {

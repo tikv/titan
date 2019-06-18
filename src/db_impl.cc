@@ -134,14 +134,11 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
 
 TitanDBImpl::~TitanDBImpl() { Close(); }
 
-// how often to schedule delete obsolete blob files periods
-static constexpr uint32_t kDeleteObsoleteFilesPeriodSecs = 10;  // 10s
-
 void TitanDBImpl::StartBackgroundTasks() {
   if (!thread_purge_obsolete_) {
     thread_purge_obsolete_.reset(new rocksdb::RepeatableThread(
         [this]() { TitanDBImpl::PurgeObsoleteFiles(); }, "titanbg", env_,
-        kDeleteObsoleteFilesPeriodSecs * 1000 * 1000));
+        db_options_.purge_obsolete_files_period * 1000 * 1000));
   }
 }
 
@@ -361,18 +358,19 @@ Status TitanDBImpl::CompactFiles(
   return s;
 }
 
-Status TitanDBImpl::Get(const ReadOptions& options, ColumnFamilyHandle* handle,
-                        const Slice& key, PinnableSlice* value) {
+Status TitanDBImpl::Get(const TitanReadOptions& options,
+                        ColumnFamilyHandle* handle, const Slice& key,
+                        PinnableSlice* value) {
   if (options.snapshot) {
     return GetImpl(options, handle, key, value);
   }
-  ReadOptions ro(options);
+  TitanReadOptions ro(options);
   ManagedSnapshot snapshot(this);
   ro.snapshot = snapshot.snapshot();
   return GetImpl(ro, handle, key, value);
 }
 
-Status TitanDBImpl::GetImpl(const ReadOptions& options,
+Status TitanDBImpl::GetImpl(const TitanReadOptions& options,
                             ColumnFamilyHandle* handle, const Slice& key,
                             PinnableSlice* value) {
   Status s;
@@ -404,7 +402,7 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                index.blob_handle.size);
   }
   if (s.IsCorruption()) {
-    ROCKS_LOG_DEBUG(db_options_.info_log,
+    ROCKS_LOG_ERROR(db_options_.info_log,
                     "Key:%s Snapshot:%" PRIu64 " GetBlobFile err:%s\n",
                     key.ToString(true).c_str(),
                     options.snapshot->GetSequenceNumber(),
@@ -418,21 +416,23 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
 }
 
 std::vector<Status> TitanDBImpl::MultiGet(
-    const ReadOptions& options, const std::vector<ColumnFamilyHandle*>& handles,
+    const TitanReadOptions& options,
+    const std::vector<ColumnFamilyHandle*>& handles,
     const std::vector<Slice>& keys, std::vector<std::string>* values) {
   auto options_copy = options;
   options_copy.total_order_seek = true;
   if (options_copy.snapshot) {
     return MultiGetImpl(options_copy, handles, keys, values);
   }
-  ReadOptions ro(options_copy);
+  TitanReadOptions ro(options_copy);
   ManagedSnapshot snapshot(this);
   ro.snapshot = snapshot.snapshot();
   return MultiGetImpl(ro, handles, keys, values);
 }
 
 std::vector<Status> TitanDBImpl::MultiGetImpl(
-    const ReadOptions& options, const std::vector<ColumnFamilyHandle*>& handles,
+    const TitanReadOptions& options,
+    const std::vector<ColumnFamilyHandle*>& handles,
     const std::vector<Slice>& keys, std::vector<std::string>* values) {
   std::vector<Status> res;
   res.resize(keys.size());
@@ -448,22 +448,22 @@ std::vector<Status> TitanDBImpl::MultiGetImpl(
   return res;
 }
 
-Iterator* TitanDBImpl::NewIterator(const ReadOptions& options,
+Iterator* TitanDBImpl::NewIterator(const TitanReadOptions& options,
                                    ColumnFamilyHandle* handle) {
-  ReadOptions options_copy = options;
+  TitanReadOptions options_copy = options;
   options_copy.total_order_seek = true;
   std::shared_ptr<ManagedSnapshot> snapshot;
   if (options_copy.snapshot) {
     return NewIteratorImpl(options_copy, handle, snapshot);
   }
-  ReadOptions ro(options_copy);
+  TitanReadOptions ro(options_copy);
   snapshot.reset(new ManagedSnapshot(this));
   ro.snapshot = snapshot->snapshot();
   return NewIteratorImpl(ro, handle, snapshot);
 }
 
 Iterator* TitanDBImpl::NewIteratorImpl(
-    const ReadOptions& options, ColumnFamilyHandle* handle,
+    const TitanReadOptions& options, ColumnFamilyHandle* handle,
     std::shared_ptr<ManagedSnapshot> snapshot) {
   auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
 
@@ -479,9 +479,10 @@ Iterator* TitanDBImpl::NewIteratorImpl(
 }
 
 Status TitanDBImpl::NewIterators(
-    const ReadOptions& options, const std::vector<ColumnFamilyHandle*>& handles,
+    const TitanReadOptions& options,
+    const std::vector<ColumnFamilyHandle*>& handles,
     std::vector<Iterator*>* iterators) {
-  ReadOptions ro(options);
+  TitanReadOptions ro(options);
   ro.total_order_seek = true;
   std::shared_ptr<ManagedSnapshot> snapshot;
   if (!ro.snapshot) {

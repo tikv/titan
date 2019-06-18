@@ -14,7 +14,7 @@ namespace titandb {
 
 class TitanDBIterator : public Iterator {
  public:
-  TitanDBIterator(const ReadOptions& options, BlobStorage* storage,
+  TitanDBIterator(const TitanReadOptions& options, BlobStorage* storage,
                   std::shared_ptr<ManagedSnapshot> snap,
                   std::unique_ptr<ArenaWrappedDBIter> iter, Env* env,
                   TitanStats* stats)
@@ -98,14 +98,14 @@ class TitanDBIterator : public Iterator {
   }
 
   Slice value() const override {
-    assert(Valid());
+    assert(Valid() && !options_.key_only);
     if (!iter_->IsBlob()) return iter_->value();
     return record_.value;
   }
 
  private:
   bool Check() {
-    if (!iter_->Valid() || !iter_->IsBlob()) {
+    if (!iter_->Valid() || !iter_->IsBlob() || options_.key_only) {
       status_ = iter_->status();
       return false;
     }
@@ -128,6 +128,10 @@ class TitanDBIterator : public Iterator {
       std::unique_ptr<BlobFilePrefetcher> prefetcher;
       status_ = storage_->NewPrefetcher(index.file_number, &prefetcher);
       if (status_.IsCorruption()) {
+        // If use `DeleteFilesInRanges`, we may encounter this failure,
+        // because `DeleteFilesInRanges` may expose an old key whose
+        // corresponding blob file has already been GCed out, so we
+        // cannot abort here.
         fprintf(stderr,
                 "key:%s GetBlobValue err:%s with sequence number:%" PRIu64 "\n",
                 iter_->key().ToString(true).c_str(), status_.ToString().c_str(),
@@ -146,7 +150,7 @@ class TitanDBIterator : public Iterator {
   BlobRecord record_;
   PinnableSlice buffer_;
 
-  ReadOptions options_;
+  TitanReadOptions options_;
   BlobStorage* storage_;
   std::shared_ptr<ManagedSnapshot> snap_;
   std::unique_ptr<ArenaWrappedDBIter> iter_;

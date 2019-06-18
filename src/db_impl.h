@@ -44,20 +44,21 @@ class TitanDBImpl : public TitanDB {
   Status CloseImpl();
 
   using TitanDB::Get;
-  Status Get(const ReadOptions& options, ColumnFamilyHandle* handle,
+  Status Get(const TitanReadOptions& options, ColumnFamilyHandle* handle,
              const Slice& key, PinnableSlice* value) override;
 
   using TitanDB::MultiGet;
-  std::vector<Status> MultiGet(const ReadOptions& options,
+  std::vector<Status> MultiGet(const TitanReadOptions& options,
                                const std::vector<ColumnFamilyHandle*>& handles,
                                const std::vector<Slice>& keys,
                                std::vector<std::string>* values) override;
 
   using TitanDB::NewIterator;
-  Iterator* NewIterator(const ReadOptions& options,
+  Iterator* NewIterator(const TitanReadOptions& options,
                         ColumnFamilyHandle* handle) override;
 
-  Status NewIterators(const ReadOptions& options,
+  using TitanDB::NewIterators;
+  Status NewIterators(const TitanReadOptions& options,
                       const std::vector<ColumnFamilyHandle*>& handles,
                       std::vector<Iterator*>* iterators) override;
 
@@ -95,15 +96,15 @@ class TitanDBImpl : public TitanDB {
   friend class TitanDBTest;
   friend class TitanThreadSafetyTest;
 
-  Status GetImpl(const ReadOptions& options, ColumnFamilyHandle* handle,
+  Status GetImpl(const TitanReadOptions& options, ColumnFamilyHandle* handle,
                  const Slice& key, PinnableSlice* value);
 
   std::vector<Status> MultiGetImpl(
-      const ReadOptions& options,
+      const TitanReadOptions& options,
       const std::vector<ColumnFamilyHandle*>& handles,
       const std::vector<Slice>& keys, std::vector<std::string>* values);
 
-  Iterator* NewIteratorImpl(const ReadOptions& options,
+  Iterator* NewIteratorImpl(const TitanReadOptions& options,
                             ColumnFamilyHandle* handle,
                             std::shared_ptr<ManagedSnapshot> snapshot);
 
