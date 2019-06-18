@@ -1,8 +1,8 @@
 #include "blob_gc_job.h"
 
 #include "blob_gc_picker.h"
-#include "rocksdb/convenience.h"
 #include "db_impl.h"
+#include "rocksdb/convenience.h"
 #include "util/testharness.h"
 
 namespace rocksdb {
@@ -145,7 +145,7 @@ class BlobGCJobTest : public testing::Test {
         }
         mutex_->Lock();
       }
-      
+
       if (s.ok()) {
         s = blob_gc_job.Finish();
         ASSERT_OK(s);
@@ -325,7 +325,7 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   ASSERT_EQ(value, "0");
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
   ASSERT_EQ(value, "1");
-  
+
   SstFileWriter sst_file_writer(EnvOptions(), options_);
   std::string sst_file = options_.dirname + "/for_ingest.sst";
   ASSERT_OK(sst_file_writer.Open(sst_file));
@@ -346,7 +346,8 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   std::string key3 = GenKey(3);
   Slice start = Slice(key0);
   Slice end = Slice(key3);
-  ASSERT_OK(DeleteFilesInRange(base_db_, db_->DefaultColumnFamily(), &start, &end));
+  ASSERT_OK(
+      DeleteFilesInRange(base_db_, db_->DefaultColumnFamily(), &start, &end));
   TitanReadOptions opts;
   auto* iter = db_->NewIterator(opts, db_->DefaultColumnFamily());
   iter->SeekToFirst();

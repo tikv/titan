@@ -161,13 +161,15 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
   }
 
   // TODO: add do sample count metrics
-  auto records_size = file->file_size() - BlobFileHeader::kEncodedLength - BlobFileFooter::kEncodedLength;
+  auto records_size = file->file_size() - BlobFileHeader::kEncodedLength -
+                      BlobFileFooter::kEncodedLength;
   Status s;
   uint64_t sample_size_window = static_cast<uint64_t>(
       records_size * blob_gc_->titan_cf_options().sample_file_size_ratio);
   Random64 random64(records_size);
   uint64_t sample_begin_offset =
-      random64.Uniform(records_size - sample_size_window) + BlobFileHeader::kEncodedLength;
+      random64.Uniform(records_size - sample_size_window) +
+      BlobFileHeader::kEncodedLength;
 
   std::unique_ptr<RandomAccessFileReader> file_reader;
   const int readahead = 256 << 10;
