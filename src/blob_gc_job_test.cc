@@ -341,8 +341,6 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   ASSERT_EQ(value, "1");
 
   RunGC(true);
-  ASSERT_OK(db_->Put(WriteOptions(), GenKey(5), GenValue(5)));
-  RunGC();
 
   std::string key0 = GenKey(0);
   std::string key3 = GenKey(3);
