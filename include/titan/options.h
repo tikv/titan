@@ -93,12 +93,12 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // The ratio of how much discardable size of a blob file can be GC.
   //
   // Default: 0.5
-  float blob_file_discardable_ratio{0.5};
+  double blob_file_discardable_ratio{0.5};
 
   // The ratio of how much size of a blob file need to be sample before GC.
   //
   // Default: 0.1
-  float sample_file_size_ratio{0.1};
+  double sample_file_size_ratio{0.1};
 
   // The blob file size less than this option will be mark GC.
   //
@@ -150,9 +150,9 @@ struct ImmutableTitanCFOptions {
 
   uint64_t min_gc_batch_size;
 
-  float blob_file_discardable_ratio;
+  double blob_file_discardable_ratio;
 
-  float sample_file_size_ratio;
+  double sample_file_size_ratio;
 
   uint64_t merge_small_file_threshold;
 };
