@@ -222,17 +222,19 @@ TEST_F(TitanThreadSafetyTest, Basic) {
 TEST_F(TitanThreadSafetyTest, SetBlobRunMode) {
   Open();
   const uint64_t kNumEntries = 10000;
-  std::vector<port::Thread> threads;
   uint64_t total_entries = kNumEntries * param_.repeat;
   std::atomic<uint64_t> num_entries(0);
-
   std::atomic<uint32_t> finished_run(0);
+  std::vector<port::Thread> threads;
+
   std::vector<std::map<std::string, std::string>> data(param_.repeat);
   std::string name = "main";
   TitanCFDescriptor desc(name, options_);
   ColumnFamilyHandle* handle = nullptr;
   ASSERT_OK(db_->CreateColumnFamily(desc, &handle));
+
   for (uint32_t k = 0; k < param_.repeat; k++) {
+    // write worker
     threads.emplace_back([&, k] {
       for (uint64_t i = 0; i < kNumEntries; i++) {
         PutCF(handle, k * kNumEntries + i);
@@ -241,6 +243,7 @@ TEST_F(TitanThreadSafetyTest, SetBlobRunMode) {
       }
       finished_run.fetch_add(1);
     });
+    // read worker
     threads.emplace_back([&] {
       while (finished_run.load() < param_.repeat - 1) {
         uint32_t run = finished_run.load();
@@ -252,13 +255,24 @@ TEST_F(TitanThreadSafetyTest, SetBlobRunMode) {
         VerifyPartialCF(handle, data[i]);
       }
     });
+    // GC and Compaction
+    threads.emplace_back([&] {
+      while (num_entries.load() < total_entries) {
+        if (num_entries.load() % 2 == 0) {
+          GC(handle);
+        } else {
+          CompactRangeOptions copts;
+          ASSERT_OK(db_->CompactRange(copts, nullptr, nullptr));
+        }
+      }
+    });
     threads.emplace_back([&] {
       std::unordered_map<std::string, std::string> opts;
-      while (num_entries.load() < total_entries / 4) {
+      while (num_entries.load() < total_entries / 8) {
       }
       opts["blob_run_mode"] = "kReadOnly";
       ASSERT_OK(db_->SetOptions(opts));
-      while (num_entries.load() < total_entries / 2) {
+      while (num_entries.load() < total_entries / 4) {
       }
       opts["blob_run_mode"] = "kFallback";
       ASSERT_OK(db_->SetOptions(opts));
