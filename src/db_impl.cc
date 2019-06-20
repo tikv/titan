@@ -697,8 +697,11 @@ void TitanDBImpl::OnCompactionCompleted(
     MutexLock l(&mutex_);
     auto bs = vset_->GetBlobStorage(compaction_job_info.cf_id).lock();
     if (!bs) {
-      fprintf(stderr, "Column family id:%u Not Found\n",
-              compaction_job_info.cf_id);
+      // TODO: Should treat it as background error and make DB read-only.
+      ROCKS_LOG_ERROR(db_options_.info_log,
+                      "OnCompactionCompleted[%d] Column family id:% " PRIu32
+                      " not Found.",
+                      compaction_job_info.job_id, compaction_job_info.cf_id);
       return;
     }
     for (const auto& file_number : outputs) {
