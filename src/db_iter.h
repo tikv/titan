@@ -10,6 +10,9 @@
 #include <unordered_map>
 
 #include "db/db_iter.h"
+#include "rocksdb/env.h"
+#include "util/logging.h"
+
 #include "titan_stats.h"
 
 namespace rocksdb {
@@ -20,13 +23,14 @@ class TitanDBIterator : public Iterator {
   TitanDBIterator(const TitanReadOptions& options, BlobStorage* storage,
                   std::shared_ptr<ManagedSnapshot> snap,
                   std::unique_ptr<ArenaWrappedDBIter> iter, Env* env,
-                  TitanStats* stats)
+                  TitanStats* stats, Logger* info_log)
       : options_(options),
         storage_(storage),
         snap_(snap),
         iter_(std::move(iter)),
         env_(env),
-        stats_(stats) {}
+        stats_(stats),
+        info_log_(info_log) {}
 
   bool Valid() const override { return iter_->Valid() && status_.ok(); }
 
@@ -122,6 +126,10 @@ class TitanDBIterator : public Iterator {
     BlobIndex index;
     status_ = DecodeInto(iter_->value(), &index);
     if (!status_.ok()) {
+      ROCKS_LOG_ERROR(info_log_,
+                      "Titan iterator: failed to decode blob index %s: %s",
+                      iter_->value().ToString(true /*hex*/).c_str(),
+                      status_.ToString().c_str());
       return;
     }
 
@@ -130,6 +138,11 @@ class TitanDBIterator : public Iterator {
       std::unique_ptr<BlobFilePrefetcher> prefetcher;
       status_ = storage_->NewPrefetcher(index.file_number, &prefetcher);
       if (!status_.ok()) {
+        ROCKS_LOG_ERROR(
+            info_log_,
+            "Titan iterator: failed to create prefetcher for blob file %" PRIu64
+            ": %s",
+            index.file_number, status_.ToString().c_str());
         return;
       }
       it = files_.emplace(index.file_number, std::move(prefetcher)).first;
@@ -137,6 +150,14 @@ class TitanDBIterator : public Iterator {
 
     buffer_.Reset();
     status_ = it->second->Get(options_, index.blob_handle, &record_, &buffer_);
+    if (!status_.ok()) {
+      ROCKS_LOG_ERROR(
+          info_log_,
+          "Titan iterator: failed to read blob value from file %" PRIu64
+          ", offset %" PRIu64 ", size %" PRIu64 ": %s\n",
+          index.file_number, index.blob_handle.offset, index.blob_handle.size,
+          status_.ToString().c_str());
+    }
     return;
   }
 
@@ -152,6 +173,7 @@ class TitanDBIterator : public Iterator {
 
   Env* env_;
   TitanStats* stats_;
+  Logger* info_log_;
 };
 
 }  // namespace titandb

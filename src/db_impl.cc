@@ -474,7 +474,8 @@ Iterator* TitanDBImpl::NewIteratorImpl(
       options, cfd, options.snapshot->GetSequenceNumber(),
       nullptr /*read_callback*/, true /*allow_blob*/, true /*allow_refresh*/));
   return new TitanDBIterator(options, storage.lock().get(), snapshot,
-                             std::move(iter), env_, stats_.get());
+                             std::move(iter), env_, stats_.get(),
+                             db_options_.info_log.get());
 }
 
 Status TitanDBImpl::NewIterators(
@@ -625,6 +626,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
                       " Not Found.",
                       flush_job_info.job_id, flush_job_info.cf_id);
       assert(false);
+      return;
     }
     for (const auto& file_number : outputs) {
       auto file = blob_storage->FindFile(file_number).lock();
@@ -651,6 +653,12 @@ void TitanDBImpl::OnCompactionCompleted(
     for (const auto& file : files) {
       auto tp_iter = compaction_job_info.table_properties.find(file);
       if (tp_iter == compaction_job_info.table_properties.end()) {
+        if (output) {
+          ROCKS_LOG_WARN(
+              db_options_.info_log,
+              "OnCompactionCompleted[%d]: No table properties for file %s.",
+              compaction_job_info.job_id, file.c_str());
+        }
         continue;
       }
       auto ucp_iter = tp_iter->second->user_collected_properties.find(
@@ -713,6 +721,7 @@ void TitanDBImpl::OnCompactionCompleted(
             "OnCompactionCompleted[%d]: Failed to get file %" PRIu64,
             compaction_job_info.job_id, file_number);
         assert(false);
+        return;
       }
       file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
     }
