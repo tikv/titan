@@ -24,9 +24,10 @@ void TitanDBImpl::PurgeObsoleteFiles() {
                    candidate_file.c_str());
     s = env_->DeleteFile(candidate_file);
     if (!s.ok()) {
-      fprintf(stderr, "Titan deleting file [%s] failed, status:%s",
-              candidate_file.c_str(), s.ToString().c_str());
-      abort();
+      // Move on despite error deleting the file.
+      ROCKS_LOG_ERROR(db_options_.info_log,
+                      "Titan deleting file [%s] failed, status:%s",
+                      candidate_file.c_str(), s.ToString().c_str());
     }
   }
 }

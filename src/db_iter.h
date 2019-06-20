@@ -6,6 +6,9 @@
 
 #include <inttypes.h>
 
+#include <memory>
+#include <unordered_map>
+
 #include "db/db_iter.h"
 #include "titan_stats.h"
 
@@ -38,7 +41,7 @@ class TitanDBIterator : public Iterator {
 
   void SeekToFirst() override {
     iter_->SeekToFirst();
-    if (Check()) {
+    if (ShouldGetBlobValue()) {
       StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
@@ -47,7 +50,7 @@ class TitanDBIterator : public Iterator {
 
   void SeekToLast() override {
     iter_->SeekToLast();
-    if (Check()) {
+    if (ShouldGetBlobValue()) {
       StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
@@ -56,7 +59,7 @@ class TitanDBIterator : public Iterator {
 
   void Seek(const Slice& target) override {
     iter_->Seek(target);
-    if (Check()) {
+    if (ShouldGetBlobValue()) {
       StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
@@ -65,7 +68,7 @@ class TitanDBIterator : public Iterator {
 
   void SeekForPrev(const Slice& target) override {
     iter_->SeekForPrev(target);
-    if (Check()) {
+    if (ShouldGetBlobValue()) {
       StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
@@ -75,7 +78,7 @@ class TitanDBIterator : public Iterator {
   void Next() override {
     assert(Valid());
     iter_->Next();
-    if (Check()) {
+    if (ShouldGetBlobValue()) {
       StopWatch next_sw(env_, statistics(stats_), BLOB_DB_NEXT_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_NEXT);
@@ -85,7 +88,7 @@ class TitanDBIterator : public Iterator {
   void Prev() override {
     assert(Valid());
     iter_->Prev();
-    if (Check()) {
+    if (ShouldGetBlobValue()) {
       StopWatch prev_sw(env_, statistics(stats_), BLOB_DB_PREV_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_PREV);
@@ -105,7 +108,7 @@ class TitanDBIterator : public Iterator {
   }
 
  private:
-  bool Check() {
+  bool ShouldGetBlobValue() {
     if (!iter_->Valid() || !iter_->IsBlob() || options_.key_only) {
       status_ = iter_->status();
       return false;
@@ -119,26 +122,16 @@ class TitanDBIterator : public Iterator {
     BlobIndex index;
     status_ = DecodeInto(iter_->value(), &index);
     if (!status_.ok()) {
-      fprintf(stderr, "GetBlobValue decode blob index err:%s\n",
-              status_.ToString().c_str());
-      abort();
+      return;
     }
 
     auto it = files_.find(index.file_number);
     if (it == files_.end()) {
       std::unique_ptr<BlobFilePrefetcher> prefetcher;
       status_ = storage_->NewPrefetcher(index.file_number, &prefetcher);
-      if (status_.IsCorruption()) {
-        // If use `DeleteFilesInRanges`, we may encounter this failure,
-        // because `DeleteFilesInRanges` may expose an old key whose
-        // corresponding blob file has already been GCed out, so we
-        // cannot abort here.
-        fprintf(stderr,
-                "key:%s GetBlobValue err:%s with sequence number:%" PRIu64 "\n",
-                iter_->key().ToString(true).c_str(), status_.ToString().c_str(),
-                options_.snapshot->GetSequenceNumber());
+      if (!status_.ok()) {
+        return;
       }
-      if (!status_.ok()) return;
       it = files_.emplace(index.file_number, std::move(prefetcher)).first;
     }
 
@@ -155,7 +148,7 @@ class TitanDBIterator : public Iterator {
   BlobStorage* storage_;
   std::shared_ptr<ManagedSnapshot> snap_;
   std::unique_ptr<ArenaWrappedDBIter> iter_;
-  std::map<uint64_t, std::unique_ptr<BlobFilePrefetcher>> files_;
+  std::unordered_map<uint64_t, std::unique_ptr<BlobFilePrefetcher>> files_;
 
   Env* env_;
   TitanStats* stats_;

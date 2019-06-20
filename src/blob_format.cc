@@ -43,7 +43,7 @@ void BlobEncoder::EncodeRecord(const BlobRecord& record) {
   record_ = Compress(compression_ctx_, record_buffer_, &compressed_buffer_,
                      &compression);
 
-  EXPECT(record_.size() < std::numeric_limits<uint32_t>::max());
+  assert(record_.size() < std::numeric_limits<uint32_t>::max());
   EncodeFixed32(header_ + 4, static_cast<uint32_t>(record_.size()));
   header_[8] = compression;
 
@@ -82,7 +82,10 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
     return DecodeInto(input, record);
   }
   UncompressionContext ctx(compression_);
-  TRY(Uncompress(ctx, input, buffer));
+  Status s = Uncompress(ctx, input, buffer);
+  if (!s.ok()) {
+    return s;
+  }
   return DecodeInto(*buffer, record);
 }
 
@@ -188,11 +191,7 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
       state_ = FileState::kObsolete;
       break;
     default:
-      fprintf(stderr,
-              "Unknown file event[%d], file number[%lu], file state[%d]",
-              static_cast<int>(event), static_cast<std::size_t>(file_number_),
-              static_cast<int>(state_));
-      abort();
+      assert(false);
   }
 }
 
