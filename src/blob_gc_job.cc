@@ -214,7 +214,7 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
 
   return discardable_size >=
          std::ceil(sample_size_window *
-             blob_gc_->titan_cf_options().blob_file_discardable_ratio);
+                   blob_gc_->titan_cf_options().blob_file_discardable_ratio);
 }
 
 Status BlobGCJob::DoRunGC() {
