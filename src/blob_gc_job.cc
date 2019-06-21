@@ -166,11 +166,11 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
   Status s;
   uint64_t sample_size_window = static_cast<uint64_t>(
       records_size * blob_gc_->titan_cf_options().sample_file_size_ratio);
-  Random64 random64(records_size);
-  uint64_t sample_begin_offset =
-      random64.Uniform(records_size - sample_size_window) +
-      BlobFileHeader::kEncodedLength;
-
+  uint64_t sample_begin_offset = BlobFileHeader::kEncodedLength;
+  if (records_size != sample_size_window) {
+    Random64 random64(records_size);
+    sample_begin_offset += random64.Uniform(records_size - sample_size_window);
+  }
   std::unique_ptr<RandomAccessFileReader> file_reader;
   const int readahead = 256 << 10;
   s = NewBlobFileReader(file->file_number(), readahead, db_options_,
@@ -213,8 +213,8 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
   assert(iter.status().ok());
 
   return discardable_size >=
-         sample_size_window *
-             blob_gc_->titan_cf_options().blob_file_discardable_ratio;
+         std::ceil(sample_size_window *
+             blob_gc_->titan_cf_options().blob_file_discardable_ratio);
 }
 
 Status BlobGCJob::DoRunGC() {
