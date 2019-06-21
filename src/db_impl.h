@@ -44,11 +44,11 @@ class TitanDBImpl : public TitanDB {
   Status CloseImpl();
 
   using TitanDB::Get;
-  Status Get(const TitanReadOptions& options, ColumnFamilyHandle* handle,
+  Status Get(const ReadOptions& options, ColumnFamilyHandle* handle,
              const Slice& key, PinnableSlice* value) override;
 
   using TitanDB::MultiGet;
-  std::vector<Status> MultiGet(const TitanReadOptions& options,
+  std::vector<Status> MultiGet(const ReadOptions& options,
                                const std::vector<ColumnFamilyHandle*>& handles,
                                const std::vector<Slice>& keys,
                                std::vector<std::string>* values) override;
@@ -96,11 +96,11 @@ class TitanDBImpl : public TitanDB {
   friend class TitanDBTest;
   friend class TitanThreadSafetyTest;
 
-  Status GetImpl(const TitanReadOptions& options, ColumnFamilyHandle* handle,
+  Status GetImpl(const ReadOptions& options, ColumnFamilyHandle* handle,
                  const Slice& key, PinnableSlice* value);
 
   std::vector<Status> MultiGetImpl(
-      const TitanReadOptions& options,
+      const ReadOptions& options,
       const std::vector<ColumnFamilyHandle*>& handles,
       const std::vector<Slice>& keys, std::vector<std::string>* values);
 

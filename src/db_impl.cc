@@ -358,19 +358,18 @@ Status TitanDBImpl::CompactFiles(
   return s;
 }
 
-Status TitanDBImpl::Get(const TitanReadOptions& options,
-                        ColumnFamilyHandle* handle, const Slice& key,
-                        PinnableSlice* value) {
+Status TitanDBImpl::Get(const ReadOptions& options, ColumnFamilyHandle* handle,
+                        const Slice& key, PinnableSlice* value) {
   if (options.snapshot) {
     return GetImpl(options, handle, key, value);
   }
-  TitanReadOptions ro(options);
+  ReadOptions ro(options);
   ManagedSnapshot snapshot(this);
   ro.snapshot = snapshot.snapshot();
   return GetImpl(ro, handle, key, value);
 }
 
-Status TitanDBImpl::GetImpl(const TitanReadOptions& options,
+Status TitanDBImpl::GetImpl(const ReadOptions& options,
                             ColumnFamilyHandle* handle, const Slice& key,
                             PinnableSlice* value) {
   Status s;
@@ -416,23 +415,21 @@ Status TitanDBImpl::GetImpl(const TitanReadOptions& options,
 }
 
 std::vector<Status> TitanDBImpl::MultiGet(
-    const TitanReadOptions& options,
-    const std::vector<ColumnFamilyHandle*>& handles,
+    const ReadOptions& options, const std::vector<ColumnFamilyHandle*>& handles,
     const std::vector<Slice>& keys, std::vector<std::string>* values) {
   auto options_copy = options;
   options_copy.total_order_seek = true;
   if (options_copy.snapshot) {
     return MultiGetImpl(options_copy, handles, keys, values);
   }
-  TitanReadOptions ro(options_copy);
+  ReadOptions ro(options_copy);
   ManagedSnapshot snapshot(this);
   ro.snapshot = snapshot.snapshot();
   return MultiGetImpl(ro, handles, keys, values);
 }
 
 std::vector<Status> TitanDBImpl::MultiGetImpl(
-    const TitanReadOptions& options,
-    const std::vector<ColumnFamilyHandle*>& handles,
+    const ReadOptions& options, const std::vector<ColumnFamilyHandle*>& handles,
     const std::vector<Slice>& keys, std::vector<std::string>* values) {
   std::vector<Status> res;
   res.resize(keys.size());
