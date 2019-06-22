@@ -177,16 +177,16 @@ struct TitanOptions : public TitanDBOptions, public TitanCFOptions {
       : TitanDBOptions(options), TitanCFOptions(options) {}
 
   TitanOptions& operator=(const Options& options) {
-    *dynamic_cast<TitanDBOptions*>(this) = options;
-    *dynamic_cast<TitanCFOptions*>(this) = options;
+    *static_cast<TitanDBOptions*>(this) = options;
+    *static_cast<TitanCFOptions*>(this) = options;
     return *this;
   }
 
   operator Options() {
     Options options;
-    *dynamic_cast<DBOptions*>(&options) = *dynamic_cast<DBOptions*>(this);
-    *dynamic_cast<ColumnFamilyOptions*>(&options) =
-        *dynamic_cast<ColumnFamilyOptions*>(this);
+    *static_cast<DBOptions*>(&options) = *static_cast<DBOptions*>(this);
+    *static_cast<ColumnFamilyOptions*>(&options) =
+        *static_cast<ColumnFamilyOptions*>(this);
     return options;
   }
 };
@@ -204,7 +204,7 @@ struct TitanReadOptions : public ReadOptions {
       : ReadOptions(options) {}
 
   TitanReadOptions& operator=(const ReadOptions& options) {
-    *dynamic_cast<ReadOptions*>(this) = options;
+    *static_cast<ReadOptions*>(this) = options;
     return *this;
   }
 };
