@@ -1,9 +1,10 @@
 #pragma once
 
-#include "rocksdb/options.h"
-
 #include <map>
 #include <unordered_map>
+
+#include "rocksdb/options.h"
+#include "util/logging.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -27,6 +28,8 @@ struct TitanDBOptions : public DBOptions {
 
   TitanDBOptions() = default;
   explicit TitanDBOptions(const DBOptions& options) : DBOptions(options) {}
+
+  void Dump(Logger* logger) const;
 
   TitanDBOptions& operator=(const DBOptions& options) {
     *static_cast<DBOptions*>(this) = options;
@@ -122,6 +125,8 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   }
 
   std::string ToString() const;
+
+  void Dump(Logger* logger) const;
 };
 
 struct ImmutableTitanCFOptions {

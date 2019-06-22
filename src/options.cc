@@ -6,10 +6,21 @@
 
 #include <inttypes.h>
 
+#include "options/options_helper.h"
 #include "rocksdb/convenience.h"
+#include "util/logging.h"
 
 namespace rocksdb {
 namespace titandb {
+
+void TitanDBOptions::Dump(Logger* logger) const {
+  ROCKS_LOG_HEADER(logger, "TitanDBOptions.dirname                : %s",
+                   dirname.c_str());
+  ROCKS_LOG_HEADER(logger, "TitanDBOptions.disable_background_gc  : %d",
+                   static_cast<int>(disable_background_gc));
+  ROCKS_LOG_HEADER(logger, "TitanDBOptions.max_background_gc      : %" PRIi32,
+                   static_cast<int>(disable_background_gc));
+}
 
 TitanCFOptions::TitanCFOptions(const ImmutableTitanCFOptions& immutable_opts,
                                const MutableTitanCFOptions& mutable_opts)
@@ -40,6 +51,48 @@ std::string TitanCFOptions::ToString() const {
            blob_run_mode_to_string[blob_run_mode].c_str());
   res += buf;
   return res;
+}
+
+void TitanCFOptions::Dump(Logger* logger) const {
+  ROCKS_LOG_HEADER(logger,
+                   "TitanCFOptions.min_blob_size                : %" PRIu64,
+                   min_blob_size);
+  std::string compression_str = "unknown";
+  for (auto& compression_type : compression_type_string_map) {
+    if (compression_type.second == blob_file_compression) {
+      compression_str = compression_type.first;
+      break;
+    }
+  }
+  ROCKS_LOG_HEADER(logger, "TitanCFOptions.blob_file_compression        : %s",
+                   compression_str.c_str());
+  ROCKS_LOG_HEADER(logger,
+                   "TitanCFOptions.blob_file_target_size        : %" PRIu64,
+                   blob_file_target_size);
+  ROCKS_LOG_HEADER(logger, "TitanCFOptions.blob_cache                   : %p",
+                   blob_cache.get());
+  if (blob_cache != nullptr) {
+    ROCKS_LOG_HEADER(logger, "%s", blob_cache->GetPrintableOptions().c_str());
+  }
+  ROCKS_LOG_HEADER(logger,
+                   "TitanCFOptions.max_gc_batch_size            : %" PRIu64,
+                   max_gc_batch_size);
+  ROCKS_LOG_HEADER(logger,
+                   "TitanCFOptions.min_gc_batch_size            : %" PRIu64,
+                   min_gc_batch_size);
+  ROCKS_LOG_HEADER(logger, "TitanCFOptions.blob_file_discardable_ratio  : %lf",
+                   blob_file_discardable_ratio);
+  ROCKS_LOG_HEADER(logger, "TitanCFOptions.sample_file_size_ratio       : %lf",
+                   sample_file_size_ratio);
+  ROCKS_LOG_HEADER(
+      logger, "TitanCFOptions.merge_small_file_threshold   : %" PRIu64,
+      merge_small_file_threshold);
+  std::string blob_run_mode_str = "unknown";
+  if (blob_run_mode_to_string.count(blob_run_mode) > 0) {
+    blob_run_mode_str = blob_run_mode_to_string.at(blob_run_mode);
+  }
+  ROCKS_LOG_HEADER(logger, "TitanCFOptions.blob_run_mode                : %s",
+                   blob_run_mode_str.c_str());
 }
 
 std::map<TitanBlobRunMode, std::string>
