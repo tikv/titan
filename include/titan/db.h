@@ -82,6 +82,12 @@ class TitanDB : public StackableDB {
                         ColumnFamilyHandle* column_family) override {
     return NewIterator(TitanReadOptions(opts), column_family);
   }
+  Iterator* NewIterator(const ReadOptions& opts) override {
+    return NewIterator(TitanReadOptions(opts), DefaultColumnFamily());
+  }
+  virtual Iterator* NewIterator(const TitanReadOptions& opts) {
+    return NewIterator(opts, DefaultColumnFamily());
+  }
   virtual Iterator* NewIterator(const TitanReadOptions& opts,
                                 ColumnFamilyHandle* column_family) = 0;
 
