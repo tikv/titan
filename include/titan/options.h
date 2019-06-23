@@ -25,6 +25,11 @@ struct TitanDBOptions : public DBOptions {
   // Default: 1
   int32_t max_background_gc{1};
 
+  // How often to schedule delete obsolete blob files periods
+  //
+  // Default: 10
+  uint32_t purge_obsolete_files_period{10};  // 10s
+
   TitanDBOptions() = default;
   explicit TitanDBOptions(const DBOptions& options) : DBOptions(options) {}
 
@@ -172,17 +177,36 @@ struct TitanOptions : public TitanDBOptions, public TitanCFOptions {
       : TitanDBOptions(options), TitanCFOptions(options) {}
 
   TitanOptions& operator=(const Options& options) {
-    *dynamic_cast<TitanDBOptions*>(this) = options;
-    *dynamic_cast<TitanCFOptions*>(this) = options;
+    *static_cast<TitanDBOptions*>(this) = options;
+    *static_cast<TitanCFOptions*>(this) = options;
     return *this;
   }
 
   operator Options() {
     Options options;
-    *dynamic_cast<DBOptions*>(&options) = *dynamic_cast<DBOptions*>(this);
-    *dynamic_cast<ColumnFamilyOptions*>(&options) =
-        *dynamic_cast<ColumnFamilyOptions*>(this);
+    *static_cast<DBOptions*>(&options) = *static_cast<DBOptions*>(this);
+    *static_cast<ColumnFamilyOptions*>(&options) =
+        *static_cast<ColumnFamilyOptions*>(this);
     return options;
+  }
+};
+
+struct TitanReadOptions : public ReadOptions {
+  // If true, it will just return keys without indexing value from blob files.
+  // It is mainly used for the scan-delete operation after DeleteFilesInRange.
+  // Cause DeleteFilesInRange may expose old blob index keys, returning key only
+  // avoids referring to missing blob files.
+  //
+  // Default: false
+  bool key_only{false};
+
+  TitanReadOptions() = default;
+  explicit TitanReadOptions(const ReadOptions& options)
+      : ReadOptions(options) {}
+
+  TitanReadOptions& operator=(const ReadOptions& options) {
+    *static_cast<ReadOptions*>(this) = options;
+    return *this;
   }
 };
 

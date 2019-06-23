@@ -54,10 +54,11 @@ class TitanDBImpl : public TitanDB {
                                std::vector<std::string>* values) override;
 
   using TitanDB::NewIterator;
-  Iterator* NewIterator(const ReadOptions& options,
+  Iterator* NewIterator(const TitanReadOptions& options,
                         ColumnFamilyHandle* handle) override;
 
-  Status NewIterators(const ReadOptions& options,
+  using TitanDB::NewIterators;
+  Status NewIterators(const TitanReadOptions& options,
                       const std::vector<ColumnFamilyHandle*>& handles,
                       std::vector<Iterator*>* iterators) override;
 
@@ -103,7 +104,7 @@ class TitanDBImpl : public TitanDB {
       const std::vector<ColumnFamilyHandle*>& handles,
       const std::vector<Slice>& keys, std::vector<std::string>* values);
 
-  Iterator* NewIteratorImpl(const ReadOptions& options,
+  Iterator* NewIteratorImpl(const TitanReadOptions& options,
                             ColumnFamilyHandle* handle,
                             std::shared_ptr<ManagedSnapshot> snapshot);
 
