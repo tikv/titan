@@ -99,6 +99,7 @@ class TitanDBIterator : public Iterator {
 
   Slice value() const override {
     assert(Valid() && !options_.key_only);
+    if (options_.key_only) return Slice();
     if (!iter_->IsBlob()) return iter_->value();
     return record_.value;
   }

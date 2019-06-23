@@ -79,17 +79,16 @@ class TitanDB : public StackableDB {
 
   using StackableDB::NewIterator;
   Iterator* NewIterator(const ReadOptions& opts,
-                                ColumnFamilyHandle* column_family) override {
+                        ColumnFamilyHandle* column_family) override {
     return NewIterator(TitanReadOptions(opts), column_family);
   }
   virtual Iterator* NewIterator(const TitanReadOptions& opts,
                                 ColumnFamilyHandle* column_family) = 0;
 
   using StackableDB::NewIterators;
-  Status NewIterators(
-      const ReadOptions& options,
-      const std::vector<ColumnFamilyHandle*>& column_families,
-      std::vector<Iterator*>* iterators) override {
+  Status NewIterators(const ReadOptions& options,
+                      const std::vector<ColumnFamilyHandle*>& column_families,
+                      std::vector<Iterator*>* iterators) override {
     return NewIterators(TitanReadOptions(options), column_families, iterators);
   }
   virtual Status NewIterators(
