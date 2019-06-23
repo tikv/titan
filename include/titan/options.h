@@ -193,9 +193,10 @@ struct TitanOptions : public TitanDBOptions, public TitanCFOptions {
 
 struct TitanReadOptions : public ReadOptions {
   // If true, it will just return keys without indexing value from blob files.
-  // It is mainly used for the scan-delete operation after DeleteFilesInRange. Cause DeleteFilesInRange
-  // may expose old blob index keys, returning key only avoids referring to missing blob files.
-  // 
+  // It is mainly used for the scan-delete operation after DeleteFilesInRange.
+  // Cause DeleteFilesInRange may expose old blob index keys, returning key only
+  // avoids referring to missing blob files.
+  //
   // Default: false
   bool key_only{false};
 
