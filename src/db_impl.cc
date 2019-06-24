@@ -703,6 +703,9 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
       if (!file) {
         continue;
       }
+      ROCKS_LOG_INFO(db_options_.info_log,
+                     "OnFlushCompleted[%d]: output blob file %" PRIu64 ".",
+                     flush_job_info.job_id, file->file_number());
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushCompleted);
     }
   }
@@ -792,6 +795,10 @@ void TitanDBImpl::OnCompactionCompleted(
         assert(false);
         return;
       }
+      ROCKS_LOG_INFO(
+          db_options_.info_log,
+          "OnCompactionCompleted[%d]: compaction output blob file %" PRIu64 ".",
+          compaction_job_info.job_id, file->file_number());
       file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
     }
 
