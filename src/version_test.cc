@@ -38,7 +38,8 @@ class VersionTest : public testing::Test {
     env_->CreateDirIfMissing(dbname_);
     env_->CreateDirIfMissing(db_options_.dirname);
     auto cache = NewLRUCache(db_options_.max_open_files);
-    file_cache_.reset(new BlobFileCache(db_options_, cf_options_, cache));
+    file_cache_.reset(
+        new BlobFileCache(db_options_, cf_options_, cache, nullptr));
     Reset();
   }
 
@@ -46,15 +47,17 @@ class VersionTest : public testing::Test {
     DeleteDir(env_, db_options_.dirname);
     env_->CreateDirIfMissing(db_options_.dirname);
 
-    vset_.reset(new VersionSet(db_options_));
+    vset_.reset(new VersionSet(db_options_, nullptr));
     ASSERT_OK(vset_->Open({}));
     column_families_.clear();
     // Sets up some column families.
     for (uint32_t id = 0; id < 10; id++) {
       std::shared_ptr<BlobStorage> storage;
-      storage.reset(new BlobStorage(db_options_, cf_options_, file_cache_));
+      storage.reset(
+          new BlobStorage(db_options_, cf_options_, id, file_cache_, nullptr));
       column_families_.emplace(id, storage);
-      storage.reset(new BlobStorage(db_options_, cf_options_, file_cache_));
+      storage.reset(
+          new BlobStorage(db_options_, cf_options_, id, file_cache_, nullptr));
       vset_->column_families_.emplace(id, storage);
     }
   }

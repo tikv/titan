@@ -8,6 +8,7 @@
 #include "rocksdb/statistics.h"
 #include "rocksdb/status.h"
 #include "titan/options.h"
+#include "titan_stats.h"
 #include "version_set.h"
 
 namespace rocksdb {
@@ -19,7 +20,7 @@ class BlobGCJob {
             const TitanDBOptions& titan_db_options, Env* env,
             const EnvOptions& env_options, BlobFileManager* blob_file_manager,
             VersionSet* version_set, LogBuffer* log_buffer,
-            std::atomic_bool* shuting_down);
+            std::atomic_bool* shuting_down, TitanStats* stats);
 
   // No copying allowed
   BlobGCJob(const BlobGCJob&) = delete;
@@ -57,7 +58,7 @@ class BlobGCJob {
 
   std::atomic_bool* shuting_down_{nullptr};
 
-  Statistics* stats_;
+  TitanStats* stats_;
 
   struct {
     uint64_t blob_db_bytes_read;
@@ -71,10 +72,11 @@ class BlobGCJob {
   } metrics_;
 
   Status SampleCandidateFiles();
-  bool DoSample(const BlobFileMeta* file);
+  Status DoSample(const BlobFileMeta* file, bool* selected);
   Status DoRunGC();
   Status BuildIterator(std::unique_ptr<BlobFileMergeIterator>* result);
-  bool DiscardEntry(const Slice& key, const BlobIndex& blob_index);
+  Status DiscardEntry(const Slice& key, const BlobIndex& blob_index,
+                      bool* discardable);
   Status InstallOutputBlobFiles();
   Status RewriteValidKeyToLSM();
   Status DeleteInputBlobFiles();

@@ -29,12 +29,18 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     assert(storage != nullptr);
 
     ReadOptions options;  // dummy option
-    status_ = storage->Get(options, index, &record, &buffer);
-    if (ok()) {
+    Status get_status = storage->Get(options, index, &record, &buffer);
+    if (get_status.ok()) {
       ikey.type = kTypeValue;
       std::string index_key;
       AppendInternalKey(&index_key, ikey);
       base_builder_->Add(index_key, record.value);
+    } else {
+      // Get blob value can fail if corresponding blob file has been GC-ed
+      // deleted. In this case we write the blob index as is to compaction
+      // output.
+      // TODO: return error if it is indeed an error.
+      base_builder_->Add(key, value);
     }
   } else if (ikey.type == kTypeValue &&
              value.size() >= cf_options_.min_blob_size &&
@@ -56,7 +62,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
 void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
                                 std::string* index_value) {
   if (!ok()) return;
-  StopWatch write_sw(db_options_.env, stats_, BLOB_DB_BLOB_FILE_WRITE_MICROS);
+  StopWatch write_sw(db_options_.env, statistics(stats_),
+                     BLOB_DB_BLOB_FILE_WRITE_MICROS);
 
   if (!blob_builder_) {
     status_ = blob_manager_->NewFile(&blob_handle_);
@@ -68,6 +75,7 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
   RecordTick(stats_, BLOB_DB_NUM_KEYS_WRITTEN);
   MeasureTime(stats_, BLOB_DB_KEY_SIZE, key.size());
   MeasureTime(stats_, BLOB_DB_VALUE_SIZE, value.size());
+  AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE, value.size());
 
   BlobIndex index;
   BlobRecord record;

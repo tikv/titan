@@ -6,7 +6,7 @@
 #include "blob_format.h"
 #include "blob_gc.h"
 #include "rocksdb/options.h"
-#include "rocksdb/statistics.h"
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -20,17 +20,19 @@ class BlobStorage {
     this->file_cache_ = bs.file_cache_;
     this->db_options_ = bs.db_options_;
     this->cf_options_ = bs.cf_options_;
+    this->cf_id_ = bs.cf_id_;
     this->stats_ = bs.stats_;
   }
 
   BlobStorage(const TitanDBOptions& _db_options,
-              const TitanCFOptions& _cf_options,
-              std::shared_ptr<BlobFileCache> _file_cache)
+              const TitanCFOptions& _cf_options, uint32_t cf_id,
+              std::shared_ptr<BlobFileCache> _file_cache, TitanStats* stats)
       : db_options_(_db_options),
         cf_options_(_cf_options),
+        cf_id_(cf_id),
         file_cache_(_file_cache),
         destroyed_(false),
-        stats_(_db_options.statistics.get()) {}
+        stats_(stats) {}
 
   ~BlobStorage() {
     for (auto& file : files_) {
@@ -103,6 +105,7 @@ class BlobStorage {
 
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
+  uint32_t cf_id_;
 
   mutable port::Mutex mutex_;
 
@@ -118,7 +121,7 @@ class BlobStorage {
   // kept.
   bool destroyed_;
 
-  Statistics* stats_;
+  TitanStats* stats_;
 };
 
 }  // namespace titandb

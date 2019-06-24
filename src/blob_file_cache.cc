@@ -16,13 +16,13 @@ Slice EncodeFileNumber(const uint64_t* number) {
 
 BlobFileCache::BlobFileCache(const TitanDBOptions& db_options,
                              const TitanCFOptions& cf_options,
-                             std::shared_ptr<Cache> cache)
+                             std::shared_ptr<Cache> cache, TitanStats* stats)
     : env_(db_options.env),
       env_options_(db_options),
       db_options_(db_options),
       cf_options_(cf_options),
       cache_(cache),
-      stats_(db_options.statistics.get()) {}
+      stats_(stats) {}
 
 Status BlobFileCache::Get(const ReadOptions& options, uint64_t file_number,
                           uint64_t file_size, const BlobHandle& handle,

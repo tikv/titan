@@ -49,10 +49,10 @@ class BlobFileIteratorTest : public testing::Test {
     }
   }
 
-  void NewBuiler() {
+  void NewBuilder() {
     TitanDBOptions db_options(titan_options_);
     TitanCFOptions cf_options(titan_options_);
-    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)});
+    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     {
       std::unique_ptr<WritableFile> f;
@@ -73,7 +73,7 @@ class BlobFileIteratorTest : public testing::Test {
     ASSERT_OK(builder_->status());
   }
 
-  void FinishBuiler() {
+  void FinishBuilder() {
     ASSERT_OK(builder_->Finish());
     ASSERT_OK(builder_->status());
   }
@@ -88,7 +88,7 @@ class BlobFileIteratorTest : public testing::Test {
   }
 
   void TestBlobFileIterator() {
-    NewBuiler();
+    NewBuilder();
 
     const int n = 1000;
     std::vector<BlobHandle> handles(n);
@@ -97,7 +97,7 @@ class BlobFileIteratorTest : public testing::Test {
       AddKeyValue(id, id, &handles[i]);
     }
 
-    FinishBuiler();
+    FinishBuilder();
 
     NewBlobFileIterator();
 
@@ -120,7 +120,7 @@ TEST_F(BlobFileIteratorTest, Basic) {
 }
 
 TEST_F(BlobFileIteratorTest, IterateForPrev) {
-  NewBuiler();
+  NewBuilder();
   const int n = 1000;
   std::vector<BlobHandle> handles(n);
   for (int i = 0; i < n; i++) {
@@ -128,7 +128,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
     AddKeyValue(id, id, &handles[i]);
   }
 
-  FinishBuiler();
+  FinishBuilder();
 
   NewBlobFileIterator();
 
@@ -181,11 +181,11 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
   const int kMaxKeyNum = 1000;
   std::vector<BlobHandle> handles(kMaxKeyNum);
   std::vector<std::unique_ptr<BlobFileIterator>> iters;
-  NewBuiler();
+  NewBuilder();
   for (int i = 1; i < kMaxKeyNum; i++) {
     AddKeyValue(GenKey(i), GenValue(i), &handles[i]);
     if (i % 100 == 0) {
-      FinishBuiler();
+      FinishBuilder();
       uint64_t file_size = 0;
       ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
       NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
@@ -195,11 +195,11 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
                                file_size, TitanCFOptions()}));
       file_number_ = Random::GetTLSInstance()->Next();
       file_name_ = BlobFileName(dirname_, file_number_);
-      NewBuiler();
+      NewBuilder();
     }
   }
 
-  FinishBuiler();
+  FinishBuilder();
   uint64_t file_size = 0;
   ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
   NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,

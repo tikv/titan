@@ -77,6 +77,31 @@ class TitanDB : public StackableDB {
   Status DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) override =
       0;
 
+  using StackableDB::NewIterator;
+  Iterator* NewIterator(const ReadOptions& opts,
+                        ColumnFamilyHandle* column_family) override {
+    return NewIterator(TitanReadOptions(opts), column_family);
+  }
+  Iterator* NewIterator(const ReadOptions& opts) override {
+    return NewIterator(TitanReadOptions(opts), DefaultColumnFamily());
+  }
+  virtual Iterator* NewIterator(const TitanReadOptions& opts) {
+    return NewIterator(opts, DefaultColumnFamily());
+  }
+  virtual Iterator* NewIterator(const TitanReadOptions& opts,
+                                ColumnFamilyHandle* column_family) = 0;
+
+  using StackableDB::NewIterators;
+  Status NewIterators(const ReadOptions& options,
+                      const std::vector<ColumnFamilyHandle*>& column_families,
+                      std::vector<Iterator*>* iterators) override {
+    return NewIterators(TitanReadOptions(options), column_families, iterators);
+  }
+  virtual Status NewIterators(
+      const TitanReadOptions& options,
+      const std::vector<ColumnFamilyHandle*>& column_families,
+      std::vector<Iterator*>* iterators) = 0;
+
   using StackableDB::Merge;
   Status Merge(const WriteOptions&, ColumnFamilyHandle*, const Slice& /*key*/,
                const Slice& /*value*/) override {
@@ -106,6 +131,34 @@ class TitanDB : public StackableDB {
   Status SetOptions(ColumnFamilyHandle* column_family,
                     const std::unordered_map<std::string, std::string>&
                         new_options) override = 0;
+
+  struct Properties {
+    //  "rocksdb.titandb.live-blob-size" - returns total blob value size
+    //      referenced by LSM tree.
+    static const std::string kLiveBlobSize;
+    //  "rocksdb.titandb.num-live-blob-file" - returns total blob file count.
+    static const std::string kNumLiveBlobFile;
+    //  "rocksdb.titandb.num-obsolete-blob-file" - return obsolete blob file.
+    static const std::string kNumObsoleteBlobFile;
+    //  "rocksdb.titandb.live-blob-file-size" - returns total size of live blob
+    //      files.
+    static const std::string kLiveBlobFileSize;
+    //  "rocksdb.titandb.obsolete-blob-file-size" - returns size of obsolete
+    //      blob files.
+    static const std::string kObsoleteBlobFileSize;
+  };
+
+  bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                   std::string* value) override = 0;
+  bool GetProperty(const Slice& property, std::string* value) override {
+    return GetProperty(DefaultColumnFamily(), property, value);
+  }
+
+  bool GetIntProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                      uint64_t* value) override = 0;
+  bool GetIntProperty(const Slice& property, uint64_t* value) override {
+    return GetIntProperty(DefaultColumnFamily(), property, value);
+  }
 };
 
 }  // namespace titandb

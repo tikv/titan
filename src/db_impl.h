@@ -54,10 +54,11 @@ class TitanDBImpl : public TitanDB {
                                std::vector<std::string>* values) override;
 
   using TitanDB::NewIterator;
-  Iterator* NewIterator(const ReadOptions& options,
+  Iterator* NewIterator(const TitanReadOptions& options,
                         ColumnFamilyHandle* handle) override;
 
-  Status NewIterators(const ReadOptions& options,
+  using TitanDB::NewIterators;
+  Status NewIterators(const TitanReadOptions& options,
                       const std::vector<ColumnFamilyHandle*>& handles,
                       std::vector<Iterator*>* iterators) override;
 
@@ -73,11 +74,22 @@ class TitanDBImpl : public TitanDB {
       ColumnFamilyHandle* column_family,
       const std::unordered_map<std::string, std::string>& new_options) override;
 
+  using TitanDB::GetProperty;
+  bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                   std::string* value) override;
+
+  using TitanDB::GetIntProperty;
+  bool GetIntProperty(ColumnFamilyHandle* column_family, const Slice& property,
+                      uint64_t* value) override;
+
   void OnFlushCompleted(const FlushJobInfo& flush_job_info);
 
   void OnCompactionCompleted(const CompactionJobInfo& compaction_job_info);
 
   void StartBackgroundTasks();
+
+  Status TEST_StartGC(uint32_t column_family_id);
+  Status TEST_PurgeObsoleteFiles();
 
  private:
   class FileManager;
@@ -95,7 +107,7 @@ class TitanDBImpl : public TitanDB {
       const std::vector<ColumnFamilyHandle*>& handles,
       const std::vector<Slice>& keys, std::vector<std::string>* values);
 
-  Iterator* NewIteratorImpl(const ReadOptions& options,
+  Iterator* NewIteratorImpl(const TitanReadOptions& options,
                             ColumnFamilyHandle* handle,
                             std::shared_ptr<ManagedSnapshot> snapshot);
 
@@ -119,9 +131,9 @@ class TitanDBImpl : public TitanDB {
   static void BGWorkGC(void* db);
   void BackgroundCallGC();
   Status BackgroundGC(LogBuffer* log_buffer);
-  Status TEST_StartGC(uint32_t column_family_id);
 
   void PurgeObsoleteFiles();
+  Status PurgeObsoleteFilesImpl();
 
   SequenceNumber GetOldestSnapshotSequence() {
     SequenceNumber oldest_snapshot = kMaxSequenceNumber;
@@ -153,8 +165,9 @@ class TitanDBImpl : public TitanDB {
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
 
-  // statistics object sharing with RocksDB
-  Statistics* stats_;
+  // TitanStats is turned on only if statistics field of DBOptions
+  // is not null.
+  std::unique_ptr<TitanStats> stats_;
 
   std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
       base_table_factory_;

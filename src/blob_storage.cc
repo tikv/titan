@@ -45,6 +45,9 @@ void BlobStorage::ExportBlobFiles(
 void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   MutexLock l(&mutex_);
   files_.emplace(std::make_pair(file->file_number(), file));
+  AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
+           file->file_size());
+  AddStats(stats_, cf_id_, TitanInternalStats::NUM_LIVE_BLOB_FILE, 1);
 }
 
 void BlobStorage::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file,
@@ -53,12 +56,22 @@ void BlobStorage::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file,
   obsolete_files_.push_back(
       std::make_pair(file->file_number(), obsolete_sequence));
   file->FileStateTransit(BlobFileMeta::FileEvent::kDelete);
+  SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
+           file->file_size() - file->discardable_size());
+  SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
+           file->file_size());
+  SubStats(stats_, cf_id_, TitanInternalStats::NUM_LIVE_BLOB_FILE, 1);
+  AddStats(stats_, cf_id_, TitanInternalStats::OBSOLETE_BLOB_FILE_SIZE,
+           file->file_size());
+  AddStats(stats_, cf_id_, TitanInternalStats::NUM_OBSOLETE_BLOB_FILE, 1);
 }
 
 void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                                    SequenceNumber oldest_sequence) {
   MutexLock l(&mutex_);
 
+  uint32_t file_dropped = 0;
+  uint64_t file_dropped_size = 0;
   for (auto it = obsolete_files_.begin(); it != obsolete_files_.end();) {
     auto& file_number = it->first;
     auto& obsolete_sequence = it->second;
@@ -67,7 +80,12 @@ void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
     // visible to all existing snapshots.
     if (oldest_sequence > obsolete_sequence) {
       // remove obsolete files
-      files_.erase(file_number);
+      auto p = files_.find(file_number);
+      assert(p != files_.end());
+      file_dropped++;
+      file_dropped_size += p->second->file_size();
+      files_.erase(p);
+
       file_cache_->Evict(file_number);
 
       ROCKS_LOG_INFO(db_options_.info_log,
@@ -85,6 +103,10 @@ void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
     }
     ++it;
   }
+  SubStats(stats_, cf_id_, TitanInternalStats::OBSOLETE_BLOB_FILE_SIZE,
+           file_dropped_size);
+  SubStats(stats_, cf_id_, TitanInternalStats::NUM_OBSOLETE_BLOB_FILE,
+           file_dropped);
 }
 
 void BlobStorage::ComputeGCScore() {

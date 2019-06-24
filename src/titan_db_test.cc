@@ -697,6 +697,32 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   version.clear();
 }
 
+TEST_F(TitanDBTest, FallbackModeEncounterMissingBlobFile) {
+  options_.disable_background_gc = true;
+  options_.blob_file_discardable_ratio = 0.01;
+  options_.min_blob_size = true;
+  Open();
+  ASSERT_OK(db_->Put(WriteOptions(), "foo", "v1"));
+  ASSERT_OK(db_->Put(WriteOptions(), "bar", "v1"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+  ASSERT_OK(db_->Delete(WriteOptions(), "foo"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  uint32_t default_cf_id = db_->DefaultColumnFamily()->GetID();
+  // GC the first blob file.
+  ASSERT_OK(db_impl_->TEST_StartGC(default_cf_id));
+  ASSERT_EQ(2, GetBlobStorage().lock()->NumBlobFiles());
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+  ASSERT_OK(db_->SetOptions({{"blob_run_mode", "kFallback"}}));
+  // Run compaction in fallback mode. Make sure it correctly handle the
+  // missing blob file.
+  Slice begin("foo");
+  Slice end("foo1");
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), &begin, &end));
+  VerifyDB({{"bar", "v1"}});
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
 

@@ -2,6 +2,7 @@
 
 #include "blob_format.h"
 #include "titan/options.h"
+#include "titan_stats.h"
 #include "util/file_reader_writer.h"
 
 namespace rocksdb {
@@ -20,7 +21,7 @@ class BlobFileReader {
                      std::unique_ptr<RandomAccessFileReader> file,
                      uint64_t file_size,
                      std::unique_ptr<BlobFileReader>* result,
-                     Statistics* stats);
+                     TitanStats* stats);
 
   // Gets the blob record pointed by the handle in this file. The data
   // of the record is stored in the provided buffer, so the buffer
@@ -33,7 +34,7 @@ class BlobFileReader {
 
   BlobFileReader(const TitanCFOptions& options,
                  std::unique_ptr<RandomAccessFileReader> file,
-                 Statistics* stats);
+                 TitanStats* stats);
 
   Status ReadRecord(const BlobHandle& handle, BlobRecord* record,
                     OwnedSlice* buffer);
@@ -47,7 +48,7 @@ class BlobFileReader {
   // Information read from the file.
   BlobFileFooter footer_;
 
-  Statistics* stats_;
+  TitanStats* stats_;
 };
 
 // Performs readahead on continuous reads.

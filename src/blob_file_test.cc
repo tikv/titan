@@ -22,7 +22,7 @@ class BlobFileTest : public testing::Test {
     options.dirname = dirname_;
     TitanDBOptions db_options(options);
     TitanCFOptions cf_options(options);
-    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)});
+    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     const int n = 100;
     std::vector<BlobHandle> handles(n);
@@ -83,7 +83,7 @@ class BlobFileTest : public testing::Test {
     options.dirname = dirname_;
     TitanDBOptions db_options(options);
     TitanCFOptions cf_options(options);
-    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)});
+    BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     const int n = 100;
     std::vector<BlobHandle> handles(n);
