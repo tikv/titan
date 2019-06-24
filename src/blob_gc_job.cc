@@ -459,7 +459,9 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       blob_gc_->AddOutputFile(file.get());
       files.emplace_back(std::make_pair(file, std::move(builder.first)));
     }
-    ROCKS_LOG_BUFFER(log_buffer_, " output[%s]", tmp.c_str());
+    ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
+                     blob_gc_->column_family_handle()->GetName().c_str(),
+                     tmp.c_str());
     this->blob_file_manager_->BatchFinishFiles(
         blob_gc_->column_family_handle()->GetID(), files);
   } else {

@@ -211,7 +211,10 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   // Add EventListener to collect statistics for GC
   db_options_.listeners.emplace_back(std::make_shared<BaseDbListener>(this));
 
-  vset_.reset(new VersionSet(db_options_));
+  // Note that info log is initialized after `CreateLoggerFromOptions`,
+  // so new `VersionSet` here but not in constructor is to get a proper info
+  // log.
+  vset_.reset(new VersionSet(db_options_, stats_.get()));
   s = vset_->Open(column_families);
   if (!s.ok()) return s;
 
