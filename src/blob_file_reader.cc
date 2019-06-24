@@ -1,9 +1,17 @@
 #include "blob_file_reader.h"
-#include "titan_stats.h"
+
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
+
+#include <inttypes.h>
 
 #include "util/crc32c.h"
 #include "util/filename.h"
+#include "util/string_util.h"
 #include "util/sync_point.h"
+
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -55,11 +63,17 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
   }
 
   FixedSlice<BlobFileFooter::kEncodedLength> buffer;
-  TRY(file->Read(file_size - BlobFileFooter::kEncodedLength,
-                 BlobFileFooter::kEncodedLength, &buffer, buffer.get()));
+  Status s = file->Read(file_size - BlobFileFooter::kEncodedLength,
+                        BlobFileFooter::kEncodedLength, &buffer, buffer.get());
+  if (!s.ok()) {
+    return s;
+  }
 
   BlobFileFooter footer;
-  TRY(DecodeInto(buffer, &footer));
+  s = DecodeInto(buffer, &footer);
+  if (!s.ok()) {
+    return s;
+  }
 
   auto reader = new BlobFileReader(options, std::move(file), stats);
   reader->footer_ = footer;
@@ -101,7 +115,10 @@ Status BlobFileReader::Get(const ReadOptions& /*options*/,
   RecordTick(stats_, BLOCK_CACHE_MISS);
 
   OwnedSlice blob;
-  TRY(ReadRecord(handle, record, &blob));
+  Status s = ReadRecord(handle, record, &blob);
+  if (!s.ok()) {
+    return s;
+  }
 
   if (cache_) {
     auto cache_value = new OwnedSlice(std::move(blob));
@@ -121,19 +138,24 @@ Status BlobFileReader::ReadRecord(const BlobHandle& handle, BlobRecord* record,
                                   OwnedSlice* buffer) {
   Slice blob;
   CacheAllocationPtr ubuf(new char[handle.size]);
-  TRY(file_->Read(handle.offset, handle.size, &blob, ubuf.get()));
-  // something must be wrong
-  if (handle.size != blob.size()) {
-    fprintf(stderr, "ReadRecord actual size:%lu != blob size:%lu\n",
-            blob.size(), static_cast<std::size_t>(handle.size));
-    abort();
+  Status s = file_->Read(handle.offset, handle.size, &blob, ubuf.get());
+  if (!s.ok()) {
+    return s;
+  }
+  if (handle.size != static_cast<uint64_t>(blob.size())) {
+    return Status::Corruption(
+        "ReadRecord actual size: " + ToString(blob.size()) +
+        " not equal to blob size " + ToString(handle.size));
   }
 
   BlobDecoder decoder;
-  TRY(decoder.DecodeHeader(&blob));
+  s = decoder.DecodeHeader(&blob);
+  if (!s.ok()) {
+    return s;
+  }
   buffer->reset(std::move(ubuf), blob);
-  TRY(decoder.DecodeRecord(&blob, record, buffer));
-  return Status::OK();
+  s = decoder.DecodeRecord(&blob, record, buffer);
+  return s;
 }
 
 Status BlobFilePrefetcher::Get(const ReadOptions& options,

@@ -3,6 +3,7 @@
 #include <inttypes.h>
 
 #include "util/filename.h"
+#include "util/string_util.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -223,12 +224,11 @@ Status VersionSet::Apply(VersionEdit* edit) {
     auto number = file.first;
     auto blob_it = files.find(number);
     if (blob_it == files.end()) {
-      fprintf(stderr, "blob file %" PRIu64 " doesn't exist before\n", number);
-      abort();
+      return Status::Corruption("Blob file " + ToString(number) +
+                                " doesn't exist before.");
     } else if (blob_it->second->is_obsolete()) {
-      fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n",
-              number);
-      abort();
+      return Status::Corruption("Blob file " + ToString(number) +
+                                " to delete has been deleted before.");
     }
     it->second->MarkFileObsolete(blob_it->second, file.second);
   }
@@ -238,13 +238,12 @@ Status VersionSet::Apply(VersionEdit* edit) {
     auto blob_it = files.find(number);
     if (blob_it != files.end()) {
       if (blob_it->second->is_obsolete()) {
-        fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n",
-                number);
+        return Status::Corruption("Blob file " + ToString(number) +
+                                  " to add has been deleted before.");
       } else {
-        fprintf(stderr, "blob file %" PRIu64 " has been added before\n",
-                number);
+        return Status::Corruption("Blob file " + ToString(number) +
+                                  " has been added before.");
       }
-      abort();
     }
     it->second->AddBlobFile(file);
   }
