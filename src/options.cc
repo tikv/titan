@@ -84,9 +84,9 @@ void TitanCFOptions::Dump(Logger* logger) const {
                    blob_file_discardable_ratio);
   ROCKS_LOG_HEADER(logger, "TitanCFOptions.sample_file_size_ratio       : %lf",
                    sample_file_size_ratio);
-  ROCKS_LOG_HEADER(
-      logger, "TitanCFOptions.merge_small_file_threshold   : %" PRIu64,
-      merge_small_file_threshold);
+  ROCKS_LOG_HEADER(logger,
+                   "TitanCFOptions.merge_small_file_threshold   : %" PRIu64,
+                   merge_small_file_threshold);
   std::string blob_run_mode_str = "unknown";
   if (blob_run_mode_to_string.count(blob_run_mode) > 0) {
     blob_run_mode_str = blob_run_mode_to_string.at(blob_run_mode);
