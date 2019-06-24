@@ -2,6 +2,7 @@
 
 #include "blob_gc_picker.h"
 #include "db_impl.h"
+#include "rocksdb/convenience.h"
 #include "util/testharness.h"
 
 namespace rocksdb {
@@ -36,6 +37,7 @@ class BlobGCJobTest : public testing::Test {
     options_.create_if_missing = true;
     options_.disable_background_gc = true;
     options_.min_blob_size = 0;
+    options_.disable_auto_compactions = true;
     options_.env->CreateDirIfMissing(dbname_);
     options_.env->CreateDirIfMissing(options_.dirname);
   }
@@ -84,6 +86,15 @@ class BlobGCJobTest : public testing::Test {
     ASSERT_OK(db_->Flush(fopts));
   }
 
+  void CompactAll() {
+    auto opts = db_->GetOptions();
+    auto compact_opts = CompactRangeOptions();
+    compact_opts.change_level = true;
+    compact_opts.target_level = opts.num_levels - 1;
+    compact_opts.bottommost_level_compaction = BottommostLevelCompaction::kSkip;
+    ASSERT_OK(db_->CompactRange(compact_opts, nullptr, nullptr));
+  }
+
   void DestroyDB() {
     Status s __attribute__((__unused__)) = db_->Close();
     assert(s.ok());
@@ -91,7 +102,7 @@ class BlobGCJobTest : public testing::Test {
     db_ = nullptr;
   }
 
-  void RunGC() {
+  void RunGC(bool expected = false) {
     MutexLock l(mutex_);
     Status s;
     auto* cfh = base_db_->DefaultColumnFamily();
@@ -102,6 +113,7 @@ class BlobGCJobTest : public testing::Test {
     LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options.info_log.get());
     cf_options.min_gc_batch_size = 0;
     cf_options.blob_file_discardable_ratio = 0.4;
+    cf_options.sample_file_size_ratio = 1;
 
     std::unique_ptr<BlobGC> blob_gc;
     {
@@ -109,6 +121,10 @@ class BlobGCJobTest : public testing::Test {
           std::make_shared<BasicBlobGCPicker>(db_options, cf_options);
       blob_gc = blob_gc_picker->PickBlobGC(
           version_set_->GetBlobStorage(cfh->GetID()).lock().get());
+    }
+
+    if (expected) {
+      ASSERT_TRUE(blob_gc != nullptr);
     }
 
     if (blob_gc) {
@@ -124,6 +140,9 @@ class BlobGCJobTest : public testing::Test {
       {
         mutex_->Unlock();
         s = blob_gc_job.Run();
+        if (expected) {
+          ASSERT_OK(s);
+        }
         mutex_->Lock();
       }
 
@@ -171,7 +190,9 @@ class BlobGCJobTest : public testing::Test {
     BlobGCJob blob_gc_job(&blob_gc, base_db_, mutex_, TitanDBOptions(),
                           Env::Default(), EnvOptions(), nullptr, version_set_,
                           nullptr, nullptr, nullptr);
-    ASSERT_FALSE(blob_gc_job.DiscardEntry(key, blob_index));
+    bool discardable = false;
+    ASSERT_OK(blob_gc_job.DiscardEntry(key, blob_index, &discardable));
+    ASSERT_FALSE(discardable);
     DestroyDB();
   }
 
@@ -290,6 +311,62 @@ TEST_F(BlobGCJobTest, PurgeBlobs) {
   db_->ReleaseSnapshot(snap5);
   RunGC();
   CheckBlobNumber(1);
+
+  DestroyDB();
+}
+
+TEST_F(BlobGCJobTest, DeleteFilesInRange) {
+  NewDB();
+
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(2), GenValue(21)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(4), GenValue(4)));
+  Flush();
+  CompactAll();
+  std::string value;
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
+  ASSERT_EQ(value, "0");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_EQ(value, "1");
+
+  SstFileWriter sst_file_writer(EnvOptions(), options_);
+  std::string sst_file = options_.dirname + "/for_ingest.sst";
+  ASSERT_OK(sst_file_writer.Open(sst_file));
+  ASSERT_OK(sst_file_writer.Put(GenKey(1), GenValue(1)));
+  ASSERT_OK(sst_file_writer.Put(GenKey(2), GenValue(22)));
+  ASSERT_OK(sst_file_writer.Finish());
+  ASSERT_OK(db_->IngestExternalFile({sst_file}, IngestExternalFileOptions()));
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
+  ASSERT_EQ(value, "0");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level5", &value));
+  ASSERT_EQ(value, "1");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_EQ(value, "1");
+
+  RunGC(true);
+
+  std::string key0 = GenKey(0);
+  std::string key3 = GenKey(3);
+  Slice start = Slice(key0);
+  Slice end = Slice(key3);
+  ASSERT_OK(
+      DeleteFilesInRange(base_db_, db_->DefaultColumnFamily(), &start, &end));
+  TitanReadOptions opts;
+  auto* iter = db_->NewIterator(opts, db_->DefaultColumnFamily());
+  iter->SeekToFirst();
+  while (iter->Valid()) {
+    iter->Next();
+  }
+  ASSERT_TRUE(iter->status().IsCorruption());
+  delete iter;
+
+  opts.key_only = true;
+  iter = db_->NewIterator(opts, db_->DefaultColumnFamily());
+  iter->SeekToFirst();
+  while (iter->Valid()) {
+    iter->Next();
+  }
+  ASSERT_OK(iter->status());
+  delete iter;
 
   DestroyDB();
 }

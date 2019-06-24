@@ -23,8 +23,7 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
                               nullptr /*value_found*/,
                               nullptr /*read_callback*/, &is_blob_index);
     if (!s.ok() && !s.IsNotFound()) {
-      fprintf(stderr, "GetImpl err, status:%s\n", s.ToString().c_str());
-      abort();
+      return s;
     }
     read_bytes_ = key_.size() + index_entry.size();
     if (s.IsNotFound()) {
@@ -39,9 +38,7 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
       BlobIndex other_blob_index;
       s = other_blob_index.DecodeFrom(&index_entry);
       if (!s.ok()) {
-        fprintf(stderr, "Decode blob index [%s] failed, err:%s\n",
-                index_entry.ToString(true).c_str(), s.ToString().c_str());
-        abort();
+        return s;
       }
 
       if (!(blob_index_ == other_blob_index)) {
@@ -107,9 +104,10 @@ BlobGCJob::~BlobGCJob() {
 Status BlobGCJob::Prepare() { return Status::OK(); }
 
 Status BlobGCJob::Run() {
-  Status s;
-
-  s = SampleCandidateFiles();
+  Status s = SampleCandidateFiles();
+  if (!s.ok()) {
+    return s;
+  }
 
   std::string tmp;
   for (const auto& f : blob_gc_->inputs()) {
@@ -134,7 +132,9 @@ Status BlobGCJob::Run() {
   log_buffer_->FlushBufferToLog();
   LogFlush(db_options_.info_log.get());
 
-  if (!s.ok()) return s;
+  if (blob_gc_->sampled_inputs().empty()) {
+    return Status::OK();
+  }
 
   return DoRunGC();
 }
@@ -142,41 +142,46 @@ Status BlobGCJob::Run() {
 Status BlobGCJob::SampleCandidateFiles() {
   std::vector<BlobFileMeta*> result;
   for (const auto& file : blob_gc_->inputs()) {
-    if (DoSample(file)) {
+    bool selected = false;
+    Status s = DoSample(file, &selected);
+    if (!s.ok()) {
+      return s;
+    }
+    if (selected) {
       result.push_back(file);
     }
   }
-
-  if (result.empty()) return Status::Aborted("No blob file need to be gc");
-
-  blob_gc_->set_sampled_inputs(std::move(result));
-
+  if (!result.empty()) {
+    blob_gc_->set_sampled_inputs(std::move(result));
+  }
   return Status::OK();
 }
 
-bool BlobGCJob::DoSample(const BlobFileMeta* file) {
+Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
+  assert(selected != nullptr);
   if (file->GetDiscardableRatio() >=
       blob_gc_->titan_cf_options().blob_file_discardable_ratio) {
-    return true;
+    *selected = true;
+    return Status::OK();
   }
 
   // TODO: add do sample count metrics
-
+  auto records_size = file->file_size() - BlobFileHeader::kEncodedLength -
+                      BlobFileFooter::kEncodedLength;
   Status s;
   uint64_t sample_size_window = static_cast<uint64_t>(
-      file->file_size() * blob_gc_->titan_cf_options().sample_file_size_ratio);
-  Random64 random64(file->file_size());
-  uint64_t sample_begin_offset =
-      random64.Uniform(file->file_size() - sample_size_window);
-
+      records_size * blob_gc_->titan_cf_options().sample_file_size_ratio);
+  uint64_t sample_begin_offset = BlobFileHeader::kEncodedLength;
+  if (records_size != sample_size_window) {
+    Random64 random64(records_size);
+    sample_begin_offset += random64.Uniform(records_size - sample_size_window);
+  }
   std::unique_ptr<RandomAccessFileReader> file_reader;
   const int readahead = 256 << 10;
   s = NewBlobFileReader(file->file_number(), readahead, db_options_,
                         env_options_, env_, &file_reader);
   if (!s.ok()) {
-    fprintf(stderr, "NewBlobFileReader failed, status:%s\n",
-            s.ToString().c_str());
-    abort();
+    return s;
   }
   BlobFileIterator iter(std::move(file_reader), file->file_number(),
                         file->file_size(), blob_gc_->titan_cf_options());
@@ -184,15 +189,16 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
   // TODO(@DorianZheng) sample_begin_offset maybe out of data block size, need
   // more elegant solution
   if (iter.status().IsInvalidArgument()) {
-    iter.IterateForPrev(0);
+    iter.IterateForPrev(BlobFileHeader::kEncodedLength);
   }
   if (!iter.status().ok()) {
-    fprintf(stderr,
-            "IterateForPrev faile, file number[%lu] size[%lu] status[%s]\n",
-            static_cast<size_t>(file->file_number()),
-            static_cast<size_t>(file->file_size()),
-            iter.status().ToString().c_str());
-    abort();
+    s = iter.status();
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "IterateForPrev failed, file number[%" PRIu64
+                    "] size[%" PRIu64 "] status[%s]",
+                    file->file_number(), file->file_size(),
+                    s.ToString().c_str());
+    return s;
   }
 
   uint64_t iterated_size{0};
@@ -203,16 +209,23 @@ bool BlobGCJob::DoSample(const BlobFileMeta* file) {
     BlobIndex blob_index = iter.GetBlobIndex();
     uint64_t total_length = blob_index.blob_handle.size;
     iterated_size += total_length;
-    if (DiscardEntry(iter.key(), blob_index)) {
+    bool discardable = false;
+    s = DiscardEntry(iter.key(), blob_index, &discardable);
+    if (!s.ok()) {
+      return s;
+    }
+    if (discardable) {
       discardable_size += total_length;
     }
   }
   metrics_.blob_db_bytes_read += iterated_size;
   assert(iter.status().ok());
 
-  return discardable_size >=
-         sample_size_window *
-             blob_gc_->titan_cf_options().blob_file_discardable_ratio;
+  *selected =
+      discardable_size >=
+      std::ceil(sample_size_window *
+                blob_gc_->titan_cf_options().blob_file_discardable_ratio);
+  return s;
 }
 
 Status BlobGCJob::DoRunGC() {
@@ -265,7 +278,12 @@ Status BlobGCJob::DoRunGC() {
       last_key_valid = false;
     }
 
-    if (DiscardEntry(gc_iter->key(), blob_index)) {
+    bool discardable = false;
+    s = DiscardEntry(gc_iter->key(), blob_index, &discardable);
+    if (!s.ok()) {
+      break;
+    }
+    if (discardable) {
       metrics_.blob_db_gc_num_keys_overwritten++;
       metrics_.blob_db_gc_bytes_overwritten += blob_index.blob_handle.size;
       continue;
@@ -287,7 +305,7 @@ Status BlobGCJob::DoRunGC() {
       if (!s.ok()) {
         break;
       }
-      blob_file_builder = unique_ptr<BlobFileBuilder>(
+      blob_file_builder = std::unique_ptr<BlobFileBuilder>(
           new BlobFileBuilder(db_options_, blob_gc_->titan_cf_options(),
                               blob_file_handle->GetFile()));
       file_size = 0;
@@ -339,7 +357,8 @@ Status BlobGCJob::DoRunGC() {
   return s;
 }
 
-Status BlobGCJob::BuildIterator(unique_ptr<BlobFileMergeIterator>* result) {
+Status BlobGCJob::BuildIterator(
+    std::unique_ptr<BlobFileMergeIterator>* result) {
   Status s;
   const auto& inputs = blob_gc_->sampled_inputs();
   assert(!inputs.empty());
@@ -362,31 +381,34 @@ Status BlobGCJob::BuildIterator(unique_ptr<BlobFileMergeIterator>* result) {
   return s;
 }
 
-bool BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index) {
+Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
+                               bool* discardable) {
+  assert(discardable != nullptr);
   PinnableSlice index_entry;
-  bool is_blob_index;
-  auto s = base_db_impl_->GetImpl(
+  bool is_blob_index = false;
+  Status s = base_db_impl_->GetImpl(
       ReadOptions(), blob_gc_->column_family_handle(), key, &index_entry,
       nullptr /*value_found*/, nullptr /*read_callback*/, &is_blob_index);
   if (!s.ok() && !s.IsNotFound()) {
-    fprintf(stderr, "GetImpl err, status:%s\n", s.ToString().c_str());
-    abort();
+    return s;
   }
   // count read bytes for checking LSM entry
   metrics_.blob_db_bytes_read += key.size() + index_entry.size();
   if (s.IsNotFound() || !is_blob_index) {
     // Either the key is deleted or updated with a newer version which is
     // inlined in LSM.
-    return true;
+    *discardable = true;
+    return Status::OK();
   }
 
   BlobIndex other_blob_index;
   s = other_blob_index.DecodeFrom(&index_entry);
   if (!s.ok()) {
-    abort();
+    return s;
   }
 
-  return !(blob_index == other_blob_index);
+  *discardable = !(blob_index == other_blob_index);
+  return Status::OK();
 }
 
 // We have to make sure crash consistency, but LSM db MANIFEST and BLOB db
@@ -481,7 +503,8 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
   }
 
   if (s.ok()) {
-    db_impl->FlushWAL(true);
+    // Flush and sync WAL.
+    s = db_impl->FlushWAL(true /*sync*/);
   }
 
   return s;

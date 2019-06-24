@@ -3,7 +3,7 @@
 namespace rocksdb {
 namespace titandb {
 
-void TitanDBImpl::PurgeObsoleteFiles() {
+Status TitanDBImpl::PurgeObsoleteFilesImpl() {
   Status s;
   std::vector<std::string> candidate_files;
   auto oldest_sequence = GetOldestSnapshotSequence();
@@ -22,13 +22,25 @@ void TitanDBImpl::PurgeObsoleteFiles() {
   for (const auto& candidate_file : candidate_files) {
     ROCKS_LOG_INFO(db_options_.info_log, "Titan deleting obsolete file [%s]",
                    candidate_file.c_str());
-    s = env_->DeleteFile(candidate_file);
+    Status delete_status = env_->DeleteFile(candidate_file);
     if (!s.ok()) {
-      fprintf(stderr, "Titan deleting file [%s] failed, status:%s",
-              candidate_file.c_str(), s.ToString().c_str());
-      abort();
+      // Move on despite error deleting the file.
+      ROCKS_LOG_ERROR(db_options_.info_log,
+                      "Titan deleting file [%s] failed, status:%s",
+                      candidate_file.c_str(), s.ToString().c_str());
+      s = delete_status;
     }
   }
+  return s;
+}
+
+void TitanDBImpl::PurgeObsoleteFiles() {
+  Status s __attribute__((__unused__)) = PurgeObsoleteFilesImpl();
+  assert(s.ok());
+}
+
+Status TitanDBImpl::TEST_PurgeObsoleteFiles() {
+  return PurgeObsoleteFilesImpl();
 }
 
 }  // namespace titandb

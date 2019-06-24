@@ -902,7 +902,7 @@ class SharedState {
       if (status.ok()) {
         status = FLAGS_env->GetFileSize(FLAGS_expected_values_path, &size);
       }
-      unique_ptr<WritableFile> wfile;
+      std::unique_ptr<WritableFile> wfile;
       if (status.ok() && size == 0) {
         const EnvOptions soptions;
         status = FLAGS_env->NewWritableFile(FLAGS_expected_values_path, &wfile,
@@ -2444,7 +2444,7 @@ class NonBatchedOpsStressTest : public StressTest {
       }
       if (!thread->rand.OneIn(2)) {
         // Use iterator to verify this range
-        unique_ptr<Iterator> iter(
+        std::unique_ptr<Iterator> iter(
             db_->NewIterator(options, column_families_[cf]));
         iter->Seek(Key(start));
         for (auto i = start; i < end; i++) {

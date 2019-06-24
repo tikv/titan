@@ -4,6 +4,7 @@
 
 #include "version_edit.h"
 #include "version_set.h"
+#include "util/string_util.h"
 
 #include <inttypes.h>
 
@@ -66,7 +67,8 @@ class EditCollector {
     Status AddFile(const std::shared_ptr<BlobFileMeta>& file) {
       auto number = file->file_number();
       if (added_files_.count(number) > 0) {
-        return Status::Corruption("blob file has been added twice");
+        return Status::Corruption("Blob file " + ToString(number) +
+                                  " has been added twice");
       }
       added_files_.emplace(number, file);
       return Status::OK();
@@ -74,7 +76,8 @@ class EditCollector {
 
     Status DeleteFile(uint64_t number, SequenceNumber obsolete_sequence) {
       if (deleted_files_.count(number) > 0) {
-        return Status::Corruption("blob file has been deleted twice");
+        return Status::Corruption("Blob file " + ToString(number) +
+                                  " has been deleted twice");
       }
       deleted_files_.emplace(number, obsolete_sequence);
       return Status::OK();
@@ -89,12 +92,14 @@ class EditCollector {
             ROCKS_LOG_ERROR(storage->db_options().info_log,
                             "blob file %" PRIu64 " has been deleted before\n",
                             number);
-            return Status::Corruption("blob file has been deleted before");
+            return Status::Corruption("Blob file " + ToString(number) +
+                                      " has been deleted before");
           } else {
             ROCKS_LOG_ERROR(storage->db_options().info_log,
                             "blob file %" PRIu64 " has been added before\n",
                             number);
-            return Status::Corruption("blob file has been added before");
+            return Status::Corruption("Blob file " + ToString(number) +
+                                      " has been added before");
           }
         }
         storage->AddBlobFile(file.second);
@@ -107,12 +112,14 @@ class EditCollector {
           ROCKS_LOG_ERROR(storage->db_options().info_log,
                           "blob file %" PRIu64 " doesn't exist before\n",
                           number);
-          return Status::Corruption("blob file doesn't exist before");
+          return Status::Corruption("Blob file " + ToString(number) +
+                                    " doesn't exist before");
         } else if (blob->is_obsolete()) {
           ROCKS_LOG_ERROR(storage->db_options().info_log,
                           "blob file %" PRIu64 " has been deleted already\n",
                           number);
-          return Status::Corruption("blob file has been deleted already");
+          return Status::Corruption("Blob file " + ToString(number) +
+                                    " has been deleted already");
         }
         storage->MarkFileObsolete(blob, file.second);
       }

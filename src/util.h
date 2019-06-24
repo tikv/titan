@@ -6,17 +6,6 @@
 namespace rocksdb {
 namespace titandb {
 
-#define TRY(expr)          \
-  do {                     \
-    auto s = (expr);       \
-    if (!s.ok()) return s; \
-  } while (0)
-
-#define EXPECT(expr)      \
-  do {                    \
-    if (!(expr)) abort(); \
-  } while (0)
-
 // A slice pointed to an owned buffer.
 class OwnedSlice : public Slice {
  public:
