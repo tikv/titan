@@ -81,23 +81,6 @@ class EditCollector {
     }
 
     Status Apply(shared_ptr<BlobStorage>& storage) {
-      for (auto& file : deleted_files_) {
-        auto number = file.first;
-        auto blob = storage->FindFile(number).lock();
-        if (!blob) {
-          ROCKS_LOG_ERROR(storage->db_options().info_log,
-                          "blob file %" PRIu64 " doesn't exist before\n",
-                          number);
-          return Status::Corruption("blob file doesn't exist before");
-        } else if (blob->is_obsolete()) {
-          ROCKS_LOG_ERROR(storage->db_options().info_log,
-                          "blob file %" PRIu64 " has been deleted already\n",
-                          number);
-          return Status::Corruption("blob file has been deleted already");
-        }
-        storage->MarkFileObsolete(blob, file.second);
-      }
-
       for (auto& file : added_files_) {
         auto number = file.first;
         auto blob = storage->FindFile(number).lock();
@@ -115,6 +98,23 @@ class EditCollector {
           }
         }
         storage->AddBlobFile(file.second);
+      }
+
+      for (auto& file : deleted_files_) {
+        auto number = file.first;
+        auto blob = storage->FindFile(number).lock();
+        if (!blob) {
+          ROCKS_LOG_ERROR(storage->db_options().info_log,
+                          "blob file %" PRIu64 " doesn't exist before\n",
+                          number);
+          return Status::Corruption("blob file doesn't exist before");
+        } else if (blob->is_obsolete()) {
+          ROCKS_LOG_ERROR(storage->db_options().info_log,
+                          "blob file %" PRIu64 " has been deleted already\n",
+                          number);
+          return Status::Corruption("blob file has been deleted already");
+        }
+        storage->MarkFileObsolete(blob, file.second);
       }
 
       storage->ComputeGCScore();
