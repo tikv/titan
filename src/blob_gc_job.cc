@@ -221,9 +221,10 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   metrics_.blob_db_bytes_read += iterated_size;
   assert(iter.status().ok());
 
-  *selected = discardable_size >=
-              std::ceil(sample_size_window *
-                        blob_gc_->titan_cf_options().blob_file_discardable_ratio);
+  *selected =
+      discardable_size >=
+      std::ceil(sample_size_window *
+                blob_gc_->titan_cf_options().blob_file_discardable_ratio);
   return s;
 }
 
