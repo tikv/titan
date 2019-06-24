@@ -130,7 +130,6 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
   if (db_options_.statistics != nullptr) {
     stats_.reset(new TitanStats(db_options_.statistics.get()));
   }
-  vset_.reset(new VersionSet(db_options_, stats_.get()));
   blob_manager_.reset(new FileManager(this));
 }
 
@@ -183,6 +182,13 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
     desc.options.disable_auto_compactions = true;
   }
   db_options_.avoid_flush_during_recovery = true;
+  // Add EventListener to collect statistics for GC
+  db_options_.listeners.emplace_back(std::make_shared<BaseDbListener>(this));
+  // Note that info log is initialized after `CreateLoggerFromOptions`,
+  // so new `VersionSet` here but not in constructor is to get a proper info
+  // log.
+  vset_.reset(new VersionSet(db_options_, stats_.get()));
+
   s = DB::Open(db_options_, dbname_, init_descs, handles, &db_);
   if (s.ok()) {
     for (size_t i = 0; i < descs.size(); i++) {
@@ -211,9 +217,6 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
 
   s = vset_->Open(column_families);
   if (!s.ok()) return s;
-
-  // Add EventListener to collect statistics for GC
-  db_options_.listeners.emplace_back(std::make_shared<BaseDbListener>(this));
 
   static bool has_init_background_threads = false;
   if (!has_init_background_threads) {

@@ -85,6 +85,10 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
       stats_(stats) {}
 
 BlobGCJob::~BlobGCJob() {
+  if (log_buffer_) {
+    log_buffer_->FlushBufferToLog();
+    LogFlush(db_options_.info_log.get());
+  }
   // flush metrics
   RecordTick(stats_, BLOB_DB_BYTES_READ, metrics_.blob_db_bytes_read);
   RecordTick(stats_, BLOB_DB_BYTES_WRITTEN, metrics_.blob_db_bytes_written);
@@ -128,9 +132,6 @@ Status BlobGCJob::Run() {
   ROCKS_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s] selected[%s]",
                    blob_gc_->column_family_handle()->GetName().c_str(),
                    tmp.c_str(), tmp2.c_str());
-
-  log_buffer_->FlushBufferToLog();
-  LogFlush(db_options_.info_log.get());
 
   if (blob_gc_->sampled_inputs().empty()) {
     return Status::OK();
@@ -445,12 +446,22 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     std::vector<std::pair<std::shared_ptr<BlobFileMeta>,
                           std::unique_ptr<BlobFileHandle>>>
         files;
+    std::string tmp;
     for (auto& builder : this->blob_file_builders_) {
       auto file = std::make_shared<BlobFileMeta>(
           builder.first->GetNumber(), builder.first->GetFile()->GetFileSize());
+
+      if (!tmp.empty()) {
+        tmp.append(" ");
+      }
+      tmp.append(std::to_string(file->file_number()));
+
       blob_gc_->AddOutputFile(file.get());
       files.emplace_back(std::make_pair(file, std::move(builder.first)));
     }
+    ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
+                     blob_gc_->column_family_handle()->GetName().c_str(),
+                     tmp.c_str());
     this->blob_file_manager_->BatchFinishFiles(
         blob_gc_->column_family_handle()->GetID(), files);
   } else {
