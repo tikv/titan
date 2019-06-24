@@ -88,6 +88,9 @@ class TitanDBImpl : public TitanDB {
 
   void StartBackgroundTasks();
 
+  Status TEST_StartGC(uint32_t column_family_id);
+  Status TEST_PurgeObsoleteFiles();
+
  private:
   class FileManager;
   friend class FileManager;
@@ -128,9 +131,9 @@ class TitanDBImpl : public TitanDB {
   static void BGWorkGC(void* db);
   void BackgroundCallGC();
   Status BackgroundGC(LogBuffer* log_buffer);
-  Status TEST_StartGC(uint32_t column_family_id);
 
   void PurgeObsoleteFiles();
+  Status PurgeObsoleteFilesImpl();
 
   SequenceNumber GetOldestSnapshotSequence() {
     SequenceNumber oldest_snapshot = kMaxSequenceNumber;

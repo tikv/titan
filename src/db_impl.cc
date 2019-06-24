@@ -158,16 +158,32 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   s = env_->LockFile(LockFileName(dirname_), &lock_);
   if (!s.ok()) return s;
 
+  // Descriptors for initial DB open to get CF ids.
+  std::vector<ColumnFamilyDescriptor> init_descs;
+  // Descriptors for actually open DB.
   std::vector<ColumnFamilyDescriptor> base_descs;
   for (auto& desc : descs) {
+    init_descs.emplace_back(desc.name, desc.options);
     base_descs.emplace_back(desc.name, desc.options);
   }
   std::map<uint32_t, TitanCFOptions> column_families;
 
-  // Opens the base DB first to collect the column families information.
-  // Avoid flush here because we haven't replaced the table factory yet.
+  // Opens the base DB first to collect the column families information
+  //
+  // Disable compaction at this point because we haven't add table properties
+  // collector. A compaction can generate a SST file without blob size table
+  // property. A later compaction after Titan DB open can cause crash because
+  // OnCompactionCompleted use table property to discover blob files generated
+  // by the compaction, and get confused by missing property.
+  //
+  // We also avoid flush here because we haven't replaced the table factory
+  // yet, but rocksdb may still flush if memtable is full. This is fine though,
+  // since values in memtable are raw values.
+  for (auto& desc : init_descs) {
+    desc.options.disable_auto_compactions = true;
+  }
   db_options_.avoid_flush_during_recovery = true;
-  s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
+  s = DB::Open(db_options_, dbname_, init_descs, handles, &db_);
   if (s.ok()) {
     for (size_t i = 0; i < descs.size(); i++) {
       auto handle = (*handles)[i];
@@ -220,6 +236,16 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
     if (stats_.get()) {
       stats_->Initialize(column_families, db_->DefaultColumnFamily()->GetID());
     }
+    ROCKS_LOG_INFO(db_options_.info_log, "Titan DB open.");
+    db_options_.Dump(db_options_.info_log.get());
+    for (auto& desc : descs) {
+      ROCKS_LOG_HEADER(db_options_.info_log,
+                       "Column family [%s], options:", desc.name.c_str());
+      desc.options.Dump(db_options_.info_log.get());
+    }
+  } else {
+    ROCKS_LOG_ERROR(db_options_.info_log, "Titan DB open failed: %s",
+                    s.ToString().c_str());
   }
   return s;
 }
@@ -305,14 +331,31 @@ Status TitanDBImpl::CreateColumnFamilies(
       vset_->AddColumnFamilies(column_families);
     }
   }
+  if (s.ok()) {
+    for (auto& desc : descs) {
+      ROCKS_LOG_INFO(db_options_.info_log, "Created column family [%s].",
+                     desc.name.c_str());
+      desc.options.Dump(db_options_.info_log.get());
+    }
+  } else {
+    std::string column_families_str;
+    for (auto& desc : descs) {
+      column_families_str += "[" + desc.name + "]";
+    }
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "Failed to create column families %s: %s",
+                    column_families_str.c_str(), s.ToString().c_str());
+  }
   return s;
 }
 
 Status TitanDBImpl::DropColumnFamilies(
     const std::vector<ColumnFamilyHandle*>& handles) {
   std::vector<uint32_t> column_families;
+  std::string column_families_str;
   for (auto& handle : handles) {
     column_families.emplace_back(handle->GetID());
+    column_families_str += "[" + handle->GetName() + "]";
   }
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
@@ -324,18 +367,38 @@ Status TitanDBImpl::DropColumnFamilies(
     SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
     s = vset_->DropColumnFamilies(column_families, obsolete_sequence);
   }
+  if (s.ok()) {
+    ROCKS_LOG_INFO(db_options_.info_log, "Dropped column families: %s",
+                   column_families_str.c_str());
+  } else {
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "Failed to drop column families %s: %s",
+                    column_families_str.c_str(), s.ToString().c_str());
+  }
   return s;
 }
 
 Status TitanDBImpl::DestroyColumnFamilyHandle(
     ColumnFamilyHandle* column_family) {
+  if (column_family == nullptr) {
+    return Status::InvalidArgument("Column family handle is nullptr.");
+  }
   auto cf_id = column_family->GetID();
+  std::string cf_name = column_family->GetName();
   Status s = db_impl_->DestroyColumnFamilyHandle(column_family);
 
   if (s.ok()) {
     MutexLock l(&mutex_);
     // it just changes some marks and doesn't delete blob files physically.
     vset_->DestroyColumnFamily(cf_id);
+  }
+  if (s.ok()) {
+    ROCKS_LOG_INFO(db_options_.info_log, "Destroyed column family handle [%s].",
+                   cf_name.c_str());
+  } else {
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "Failed to destroy column family handle [%s]: %s",
+                    cf_name.c_str(), s.ToString().c_str());
   }
   return s;
 }
@@ -549,6 +612,9 @@ Status TitanDBImpl::SetOptions(
                                    blob_run_mode_string);
   } else {
     mode = pm->second;
+    ROCKS_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
+                   column_family->GetName().c_str(),
+                   blob_run_mode_string.c_str());
   }
   {
     MutexLock l(&mutex_);
