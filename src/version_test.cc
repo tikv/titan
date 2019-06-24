@@ -1,3 +1,4 @@
+#include "edit_collector.h"
 #include "testutil.h"
 #include "util.h"
 #include "util/filename.h"
@@ -80,9 +81,9 @@ class VersionTest : public testing::Test {
   void BuildAndCheck(std::vector<VersionEdit> edits) {
     EditCollector collector;
     for (auto& edit : edits) {
-      collector.AddEdit(&edit);
+      collector.AddEdit(edit);
     }
-    ASSERT_OK(vset_->Apply(&collector));
+    ASSERT_TRUE(collector.Apply(*vset_.get()).ok());
     for (auto& it : vset_->column_families_) {
       auto& storage = column_families_[it.first];
       // ignore obsolete file
@@ -187,7 +188,7 @@ TEST_F(VersionTest, ObsoleteFiles) {
   {
     auto add1_1_5 = AddBlobFilesEdit(1, 1, 5);
     MutexLock l(&mutex_);
-    vset_->LogAndApply(&add1_1_5);
+    vset_->LogAndApply(add1_1_5);
   }
   std::vector<std::string> of;
   vset_->GetObsoleteFiles(&of, kMaxSequenceNumber);
@@ -195,7 +196,7 @@ TEST_F(VersionTest, ObsoleteFiles) {
   {
     auto del1_4_5 = DeleteBlobFilesEdit(1, 4, 5);
     MutexLock l(&mutex_);
-    vset_->LogAndApply(&del1_4_5);
+    vset_->LogAndApply(del1_4_5);
   }
   vset_->GetObsoleteFiles(&of, kMaxSequenceNumber);
   ASSERT_EQ(of.size(), 1);
