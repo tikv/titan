@@ -51,7 +51,7 @@ class BlobStorage {
                        std::unique_ptr<BlobFilePrefetcher>* result);
 
   // Finds the blob file meta for the specified file number. It is a
-  // corruption if the file doesn't exist in the specific version.
+  // corruption if the file doesn't exist.
   std::weak_ptr<BlobFileMeta> FindFile(uint64_t file_number) const;
 
   std::size_t NumBlobFiles() const {
@@ -85,6 +85,8 @@ class BlobStorage {
   }
 
   void ComputeGCScore();
+
+  const TitanDBOptions& db_options() { return db_options_; }
 
   const TitanCFOptions& cf_options() { return cf_options_; }
 
