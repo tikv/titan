@@ -2,8 +2,8 @@
 
 #include <inttypes.h>
 
+#include "edit_collector.h"
 #include "util/filename.h"
-#include "util/string_util.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -66,9 +66,6 @@ Status VersionSet::Recover() {
     file.reset(new SequentialFileReader(std::move(f), file_name));
   }
 
-  bool has_next_file_number = false;
-  uint64_t next_file_number = 0;
-
   // Reads edits from the manifest and applies them one by one.
   {
     LogReporter reporter;
@@ -77,24 +74,21 @@ Status VersionSet::Recover() {
                        0 /*initial_offset*/, 0);
     Slice record;
     std::string scratch;
+    EditCollector collector;
     while (reader.ReadRecord(&record, &scratch) && s.ok()) {
       VersionEdit edit;
       s = DecodeInto(record, &edit);
       if (!s.ok()) return s;
-      s = Apply(&edit);
+      s = collector.AddEdit(edit);
       if (!s.ok()) return s;
-      if (edit.has_next_file_number_) {
-        assert(edit.next_file_number_ >= next_file_number);
-        next_file_number = edit.next_file_number_;
-        has_next_file_number = true;
-      }
     }
+    s = collector.Apply(*this);
+    if (!s.ok()) return s;
+    uint64_t next_file_number = 0;
+    s = collector.GetNextFileNumber(&next_file_number);
+    if (!s.ok()) return s;
+    next_file_number_.store(next_file_number);
   }
-
-  if (!has_next_file_number) {
-    return Status::Corruption("no next file number in manifest file");
-  }
-  next_file_number_.store(next_file_number);
 
   auto new_manifest_file_number = NewFileNumber();
   s = OpenManifest(new_manifest_file_number);
@@ -193,11 +187,11 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
   return s;
 }
 
-Status VersionSet::LogAndApply(VersionEdit* edit) {
+Status VersionSet::LogAndApply(VersionEdit& edit) {
   // TODO(@huachao): write manifest file unlocked
   std::string record;
-  edit->SetNextFileNumber(next_file_number_.load());
-  edit->EncodeTo(&record);
+  edit.SetNextFileNumber(next_file_number_.load());
+  edit.EncodeTo(&record);
   Status s = manifest_->AddRecord(record);
   if (s.ok()) {
     ImmutableDBOptions ioptions(db_options_);
@@ -205,51 +199,9 @@ Status VersionSet::LogAndApply(VersionEdit* edit) {
   }
   if (!s.ok()) return s;
 
-  return Apply(edit);
-}
-
-Status VersionSet::Apply(VersionEdit* edit) {
-  auto cf_id = edit->column_family_id_;
-  auto it = column_families_.find(cf_id);
-  if (it == column_families_.end()) {
-    // TODO: support OpenForReadOnly which doesn't open DB with all column
-    // family so there are maybe some invalid column family, but we can't just
-    // skip it otherwise blob files of the non-open column families will be
-    // regarded as obsolete and deleted.
-    return Status::OK();
-  }
-  auto& files = it->second->files_;
-
-  for (auto& file : edit->deleted_files_) {
-    auto number = file.first;
-    auto blob_it = files.find(number);
-    if (blob_it == files.end()) {
-      return Status::Corruption("Blob file " + ToString(number) +
-                                " doesn't exist before.");
-    } else if (blob_it->second->is_obsolete()) {
-      return Status::Corruption("Blob file " + ToString(number) +
-                                " to delete has been deleted before.");
-    }
-    it->second->MarkFileObsolete(blob_it->second, file.second);
-  }
-
-  for (auto& file : edit->added_files_) {
-    auto number = file->file_number();
-    auto blob_it = files.find(number);
-    if (blob_it != files.end()) {
-      if (blob_it->second->is_obsolete()) {
-        return Status::Corruption("Blob file " + ToString(number) +
-                                  " to add has been deleted before.");
-      } else {
-        return Status::Corruption("Blob file " + ToString(number) +
-                                  " has been added before.");
-      }
-    }
-    it->second->AddBlobFile(file);
-  }
-
-  it->second->ComputeGCScore();
-  return Status::OK();
+  EditCollector collector;
+  collector.AddEdit(edit);
+  return collector.Apply(*this);
 }
 
 void VersionSet::AddColumnFamilies(
@@ -277,7 +229,7 @@ Status VersionSet::DropColumnFamilies(
                        file.second->file_number());
         edit.DeleteBlobFile(file.first, obsolete_sequence);
       }
-      s = LogAndApply(&edit);
+      s = LogAndApply(edit);
       if (!s.ok()) return s;
     } else {
       ROCKS_LOG_ERROR(db_options_.info_log, "column %u not found for drop\n",

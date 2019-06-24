@@ -34,7 +34,7 @@ class VersionSet {
   // Applies *edit on the current version to form a new version that is
   // both saved to the manifest and installed as the new current version.
   // REQUIRES: mutex is held
-  Status LogAndApply(VersionEdit* edit);
+  Status LogAndApply(VersionEdit& edit);
 
   // Adds some column families with the specified options.
   // REQUIRES: mutex is held
@@ -84,8 +84,6 @@ class VersionSet {
   Status OpenManifest(uint64_t number);
 
   Status WriteSnapshot(log::Writer* log);
-
-  Status Apply(VersionEdit* edit);
 
   std::string dirname_;
   Env* env_;

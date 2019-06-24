@@ -71,7 +71,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
 
     {
       MutexLock l(&db_->mutex_);
-      s = db_->vset_->LogAndApply(&edit);
+      s = db_->vset_->LogAndApply(edit);
       for (const auto& file : files)
         db_->pending_outputs_.erase(file.second->GetNumber());
     }

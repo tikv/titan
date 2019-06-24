@@ -5,6 +5,8 @@
 #include "blob_format.h"
 #include "rocksdb/slice.h"
 
+#include <inttypes.h>
+
 namespace rocksdb {
 namespace titandb {
 
@@ -33,6 +35,7 @@ class VersionEdit {
 
  private:
   friend class VersionSet;
+  friend class EditCollector;
 
   bool has_next_file_number_{false};
   uint64_t next_file_number_{0};
