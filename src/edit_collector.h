@@ -2,9 +2,9 @@
 
 #include <unordered_map>
 
+#include "util/string_util.h"
 #include "version_edit.h"
 #include "version_set.h"
-#include "util/string_util.h"
 
 #include <inttypes.h>
 
@@ -28,7 +28,12 @@ class EditCollector {
     }
 
     if (edit.has_next_file_number_) {
-      assert(edit.next_file_number_ >= next_file_number_);
+      if (edit.next_file_number_ < next_file_number_) {
+        return Status::Corruption("Edit has a smaller next file number " +
+                                  ToString(edit.next_file_number_) +
+                                  " than current " +
+                                  ToString(next_file_number_));
+      }
       next_file_number_ = edit.next_file_number_;
       has_next_file_number_ = true;
     }
@@ -58,7 +63,7 @@ class EditCollector {
       *next_file_number = next_file_number_;
       return Status::OK();
     }
-    return Status::Corruption("no next file number in manifest file");
+    return Status::Corruption("No next file number in manifest file");
   }
 
  private:
