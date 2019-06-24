@@ -36,3 +36,6 @@ ctest -R titan
 # To format code, install clang-format and run the script.
 bash scripts/format-diff.sh
 ```
+
+## Compatibility
+Currently Titan is only compatible with RocksDB 5.18.
