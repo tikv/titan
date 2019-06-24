@@ -162,8 +162,19 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   }
   std::map<uint32_t, TitanCFOptions> column_families;
 
-  // Opens the base DB first to collect the column families information.
-  // Avoid flush here because we haven't replaced the table factory yet.
+  // Opens the base DB first to collect the column families information
+  //
+  // Disable compaction at this point because we haven't add table properties
+  // collector. A compaction can generate a SST file without blob size table
+  // property. A later compaction after Titan DB open can cause crash because
+  // OnCompactionCompleted use table property to discover blob files generated
+  // by the compaction, and get confused by missing property.
+  //
+  // We also avoid flush here because we haven't replaced the table factory
+  // yet, but rocksdb may still flush if memtable is full. This is fine though,
+  // since values in memtable are raw values.
+  bool tmp_disable_auto_compactions = db_options_.disable_auto_compactions;
+  db_options_.disable_auto_compactions = true;
   db_options_.avoid_flush_during_recovery = true;
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
   if (s.ok()) {
@@ -190,6 +201,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
     delete db_;
   }
   if (!s.ok()) return s;
+  db_options_.disable_auto_compactions = tmp_disable_auto_compactions;
 
   s = vset_->Open(column_families);
   if (!s.ok()) return s;
