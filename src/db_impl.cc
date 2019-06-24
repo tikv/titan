@@ -156,8 +156,12 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   s = env_->LockFile(LockFileName(dirname_), &lock_);
   if (!s.ok()) return s;
 
+  // Descriptors for initial DB open to get CF ids.
+  std::vector<ColumnFamilyDescriptor> init_descs;
+  // Descriptors for actually open DB.
   std::vector<ColumnFamilyDescriptor> base_descs;
   for (auto& desc : descs) {
+    init_descs.emplace_back(desc.name, desc.options);
     base_descs.emplace_back(desc.name, desc.options);
   }
   std::map<uint32_t, TitanCFOptions> column_families;
@@ -173,10 +177,11 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   // We also avoid flush here because we haven't replaced the table factory
   // yet, but rocksdb may still flush if memtable is full. This is fine though,
   // since values in memtable are raw values.
-  bool tmp_disable_auto_compactions = db_options_.disable_auto_compactions;
-  db_options_.disable_auto_compactions = true;
+  for (auto& desc : init_descs) {
+    desc.options.disable_auto_compactions = true;
+  }
   db_options_.avoid_flush_during_recovery = true;
-  s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
+  s = DB::Open(db_options_, dbname_, init_descs, handles, &db_);
   if (s.ok()) {
     for (size_t i = 0; i < descs.size(); i++) {
       auto handle = (*handles)[i];
@@ -201,7 +206,6 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
     delete db_;
   }
   if (!s.ok()) return s;
-  db_options_.disable_auto_compactions = tmp_disable_auto_compactions;
 
   s = vset_->Open(column_families);
   if (!s.ok()) return s;
