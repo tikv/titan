@@ -88,6 +88,8 @@ Status VersionSet::Recover() {
     s = collector.GetNextFileNumber(&next_file_number);
     if (!s.ok()) return s;
     next_file_number_.store(next_file_number);
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "Next blob file number is %" PRIu64 ".", next_file_number);
   }
 
   auto new_manifest_file_number = NewFileNumber();
@@ -98,6 +100,19 @@ Status VersionSet::Recover() {
   std::set<uint64_t> alive_files;
   alive_files.insert(new_manifest_file_number);
   for (const auto& bs : column_families_) {
+    std::string files_str;
+    for (const auto& f : bs.second->files_) {
+      if (!files_str.empty()) {
+        files_str.append(", ");
+      }
+      files_str.append(std::to_string(f.first));
+      if (f.second->is_obsolete()) {
+        files_str.append("(obsolete)");
+      }
+    }
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "Blob files for CF %" PRIu32 " found: %s", bs.first,
+                   files_str.c_str());
     // delete obsoleted files at reopen
     // all the obsolete files's obsolete sequence are 0
     bs.second->GetObsoleteFiles(nullptr, kMaxSequenceNumber);
@@ -115,7 +130,8 @@ Status VersionSet::Recover() {
     if (file_type != FileType::kBlobFile &&
         file_type != FileType::kDescriptorFile)
       continue;
-
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "Titan recovery delete obsolete file %s.", f.c_str());
     env_->DeleteFile(dirname_ + "/" + f);
   }
 

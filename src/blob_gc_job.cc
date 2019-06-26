@@ -1,5 +1,11 @@
 #include "blob_gc_job.h"
 
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
+
+#include <inttypes.h>
+
 namespace rocksdb {
 namespace titandb {
 
@@ -306,6 +312,9 @@ Status BlobGCJob::DoRunGC() {
       if (!s.ok()) {
         break;
       }
+      ROCKS_LOG_INFO(db_options_.info_log,
+                     "Titan new GC output file %" PRIu64 ".",
+                     blob_file_handle->GetNumber());
       blob_file_builder = std::unique_ptr<BlobFileBuilder>(
           new BlobFileBuilder(db_options_, blob_gc_->titan_cf_options(),
                               blob_file_handle->GetFile()));
@@ -420,7 +429,20 @@ Status BlobGCJob::Finish() {
   {
     mutex_->Unlock();
     s = InstallOutputBlobFiles();
-    if (s.ok()) s = RewriteValidKeyToLSM();
+    if (s.ok()) {
+      s = RewriteValidKeyToLSM();
+      if (!s.ok()) {
+        ROCKS_LOG_ERROR(db_options_.info_log,
+                        "[%s] GC job failed to rewrite keys to LSM: %s",
+                        blob_gc_->column_family_handle()->GetName().c_str(),
+                        s.ToString().c_str());
+      }
+    } else {
+      ROCKS_LOG_ERROR(db_options_.info_log,
+                      "[%s] GC job failed to install output blob files: %s",
+                      blob_gc_->column_family_handle()->GetName().c_str(),
+                      s.ToString().c_str());
+    }
     mutex_->Lock();
   }
 
@@ -466,8 +488,19 @@ Status BlobGCJob::InstallOutputBlobFiles() {
         blob_gc_->column_family_handle()->GetID(), files);
   } else {
     std::vector<unique_ptr<BlobFileHandle>> handles;
-    for (auto& builder : this->blob_file_builders_)
+    std::string to_delete_files;
+    for (auto& builder : this->blob_file_builders_) {
+      if (!to_delete_files.empty()) {
+        to_delete_files.append(" ");
+      }
+      to_delete_files.append(std::to_string(builder.first->GetNumber()));
       handles.emplace_back(std::move(builder.first));
+    }
+    ROCKS_LOG_BUFFER(
+        log_buffer_,
+        "[%s] InstallOutputBlobFiles failed. Delete GC output files: %s",
+        blob_gc_->column_family_handle()->GetName().c_str(),
+        to_delete_files.c_str());
     this->blob_file_manager_->BatchDeleteFiles(handles);
   }
   return s;
