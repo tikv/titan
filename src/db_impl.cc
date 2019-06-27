@@ -200,6 +200,10 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       // While we need to preserve original table_factory for GetOptions.
       auto& base_table_factory = base_descs[i].options.table_factory;
       assert(base_table_factory != nullptr);
+      immutable_cf_options_.emplace(cf_id,
+                                    ImmutableTitanCFOptions(descs[i].options));
+      mutable_cf_options_.emplace(cf_id,
+                                  MutableTitanCFOptions(descs[i].options));
       base_table_factory_[cf_id] = base_table_factory;
       titan_table_factory_[cf_id] = std::make_shared<TitanTableFactory>(
           db_options_, descs[i].options, blob_manager_, &mutex_, vset_.get(),
@@ -328,6 +332,10 @@ Status TitanDBImpl::CreateColumnFamilies(
       for (size_t i = 0; i < descs.size(); i++) {
         uint32_t cf_id = (*handles)[i]->GetID();
         column_families.emplace(cf_id, descs[i].options);
+        immutable_cf_options_.emplace(
+            cf_id, ImmutableTitanCFOptions(descs[i].options));
+        mutable_cf_options_.emplace(cf_id,
+                                    MutableTitanCFOptions(descs[i].options));
         base_table_factory_[cf_id] = base_table_factory[i];
         titan_table_factory_[cf_id] = titan_table_factory[i];
       }
@@ -597,9 +605,19 @@ Status TitanDBImpl::SetOptions(
   auto opts = new_options;
   auto p = opts.find("blob_run_mode");
   bool set_blob_run_mode = (p != opts.end());
-  std::string blob_run_mode_string;
+  TitanBlobRunMode mode = TitanBlobRunMode::kNormal;
   if (set_blob_run_mode) {
-    blob_run_mode_string = p->second;
+    const std::string& blob_run_mode_string = p->second;
+    auto pm = blob_run_mode_string_map.find(blob_run_mode_string);
+    if (pm == blob_run_mode_string_map.end()) {
+      return Status::InvalidArgument("No blob_run_mode defined for " +
+                                     blob_run_mode_string);
+    } else {
+      mode = pm->second;
+      ROCKS_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
+                     column_family->GetName().c_str(),
+                     blob_run_mode_string.c_str());
+    }
     opts.erase(p);
   }
   if (opts.size() > 0) {
@@ -608,23 +626,42 @@ Status TitanDBImpl::SetOptions(
       return s;
     }
   }
-  TitanBlobRunMode mode = TitanBlobRunMode::kNormal;
-  auto pm = blob_run_mode_string_map.find(blob_run_mode_string);
-  if (pm == blob_run_mode_string_map.end()) {
-    return Status::InvalidArgument("No blob_run_mode defined for " +
-                                   blob_run_mode_string);
-  } else {
-    mode = pm->second;
-    ROCKS_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
-                   column_family->GetName().c_str(),
-                   blob_run_mode_string.c_str());
-  }
-  {
-    MutexLock l(&mutex_);
-    auto& table_factory = titan_table_factory_[column_family->GetID()];
-    table_factory->SetBlobRunMode(mode);
+  // Make sure base db's SetOptions sucesss before setting blob_run_mode.
+  if (set_blob_run_mode) {
+    uint32_t cf_id = column_family->GetID();
+    {
+      MutexLock l(&mutex_);
+      auto& table_factory = titan_table_factory_[cf_id];
+      table_factory->SetBlobRunMode(mode);
+      mutable_cf_options_[cf_id].blob_run_mode = mode;
+    }
   }
   return Status::OK();
+}
+
+TitanOptions TitanDBImpl::GetTitanOptions(
+    ColumnFamilyHandle* column_family) const {
+  assert(column_family != nullptr);
+  Options base_options = GetOptions(column_family);
+  TitanOptions titan_options;
+  *static_cast<TitanDBOptions*>(&titan_options) = db_options_;
+  *static_cast<DBOptions*>(&titan_options) =
+      static_cast<DBOptions>(base_options);
+  uint32_t cf_id = column_family->GetID();
+  {
+    MutexLock l(&mutex_);
+    *static_cast<TitanCFOptions*>(&titan_options) = TitanCFOptions(
+        static_cast<ColumnFamilyOptions>(base_options),
+        immutable_cf_options_.at(cf_id), mutable_cf_options_.at(cf_id));
+  }
+  return titan_options;
+}
+
+TitanDBOptions TitanDBImpl::GetTitanDBOptions() const {
+  // Titan db_options_ is not mutable after DB open.
+  TitanDBOptions result = db_options_;
+  *static_cast<DBOptions*>(&result) = db_impl_->GetDBOptions();
+  return db_options_;
 }
 
 bool TitanDBImpl::GetProperty(ColumnFamilyHandle* column_family,

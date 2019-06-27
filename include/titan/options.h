@@ -121,15 +121,14 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}
-  explicit TitanCFOptions(const ImmutableTitanCFOptions&,
+  explicit TitanCFOptions(const ColumnFamilyOptions&,
+                          const ImmutableTitanCFOptions&,
                           const MutableTitanCFOptions&);
 
   TitanCFOptions& operator=(const ColumnFamilyOptions& options) {
     *dynamic_cast<ColumnFamilyOptions*>(this) = options;
     return *this;
   }
-
-  std::string ToString() const;
 
   void Dump(Logger* logger) const;
 };

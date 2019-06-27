@@ -74,6 +74,13 @@ class TitanDBImpl : public TitanDB {
       ColumnFamilyHandle* column_family,
       const std::unordered_map<std::string, std::string>& new_options) override;
 
+  using TitanDB::GetTitanOptions;
+  TitanOptions GetTitanOptions(
+      ColumnFamilyHandle* column_family) const override;
+
+  using TitanDB::GetTitanDBOptions;
+  TitanDBOptions GetTitanDBOptions() const override;
+
   using TitanDB::GetProperty;
   bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,
                    std::string* value) override;
@@ -169,8 +176,17 @@ class TitanDBImpl : public TitanDB {
   // is not null.
   std::unique_ptr<TitanStats> stats_;
 
+  // Guarded by mutex_.
+  std::unordered_map<uint32_t, ImmutableTitanCFOptions> immutable_cf_options_;
+
+  // Guarded by mutex_.
+  std::unordered_map<uint32_t, MutableTitanCFOptions> mutable_cf_options_;
+
+  // Guarded by mutex_.
   std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
       base_table_factory_;
+
+  // Guarded by mutex_.
   std::unordered_map<uint32_t, std::shared_ptr<TitanTableFactory>>
       titan_table_factory_;
 

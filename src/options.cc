@@ -14,17 +14,23 @@ namespace rocksdb {
 namespace titandb {
 
 void TitanDBOptions::Dump(Logger* logger) const {
-  ROCKS_LOG_HEADER(logger, "TitanDBOptions.dirname                : %s",
+  ROCKS_LOG_HEADER(logger, "TitanDBOptions.dirname                    : %s",
                    dirname.c_str());
-  ROCKS_LOG_HEADER(logger, "TitanDBOptions.disable_background_gc  : %d",
+  ROCKS_LOG_HEADER(logger, "TitanDBOptions.disable_background_gc      : %d",
                    static_cast<int>(disable_background_gc));
-  ROCKS_LOG_HEADER(logger, "TitanDBOptions.max_background_gc      : %" PRIi32,
-                   static_cast<int>(disable_background_gc));
+  ROCKS_LOG_HEADER(logger,
+                   "TitanDBOptions.max_background_gc          : %" PRIi32,
+                   max_background_gc);
+  ROCKS_LOG_HEADER(logger,
+                   "TitanDBOptions.purge_obsolete_files_period: %" PRIu32,
+                   purge_obsolete_files_period);
 }
 
-TitanCFOptions::TitanCFOptions(const ImmutableTitanCFOptions& immutable_opts,
+TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
+                               const ImmutableTitanCFOptions& immutable_opts,
                                const MutableTitanCFOptions& mutable_opts)
-    : min_blob_size(immutable_opts.min_blob_size),
+    : ColumnFamilyOptions(cf_opts),
+      min_blob_size(immutable_opts.min_blob_size),
       blob_file_compression(immutable_opts.blob_file_compression),
       blob_file_target_size(immutable_opts.blob_file_target_size),
       blob_cache(immutable_opts.blob_cache),
@@ -34,24 +40,6 @@ TitanCFOptions::TitanCFOptions(const ImmutableTitanCFOptions& immutable_opts,
       sample_file_size_ratio(immutable_opts.sample_file_size_ratio),
       merge_small_file_threshold(immutable_opts.merge_small_file_threshold),
       blob_run_mode(mutable_opts.blob_run_mode) {}
-
-std::string TitanCFOptions::ToString() const {
-  char buf[256];
-  std::string str;
-  std::string res = "[titandb]\n";
-  snprintf(buf, sizeof(buf), "min_blob_size = %" PRIu64 "\n", min_blob_size);
-  res += buf;
-  GetStringFromCompressionType(&str, blob_file_compression);
-  snprintf(buf, sizeof(buf), "blob_file_compression = %s\n", str.c_str());
-  res += buf;
-  snprintf(buf, sizeof(buf), "blob_file_target_size = %" PRIu64 "\n",
-           blob_file_target_size);
-  res += buf;
-  snprintf(buf, sizeof(buf), "blob_run_mode = %s\n",
-           blob_run_mode_to_string[blob_run_mode].c_str());
-  res += buf;
-  return res;
-}
 
 void TitanCFOptions::Dump(Logger* logger) const {
   ROCKS_LOG_HEADER(logger,

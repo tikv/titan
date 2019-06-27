@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "blob_file_manager.h"
 #include "rocksdb/table.h"
 #include "titan/options.h"
@@ -16,8 +18,8 @@ class TitanTableFactory : public TableFactory {
                     std::shared_ptr<BlobFileManager> blob_manager,
                     port::Mutex* db_mutex, VersionSet* vset, TitanStats* stats)
       : db_options_(db_options),
-        immutable_cf_options_(cf_options),
-        mutable_cf_options_(cf_options),
+        cf_options_(cf_options),
+        blob_run_mode_(cf_options.blob_run_mode),
         base_factory_(cf_options.table_factory),
         blob_manager_(blob_manager),
         db_mutex_(db_mutex),
@@ -52,21 +54,16 @@ class TitanTableFactory : public TableFactory {
 
   void* GetOptions() override { return base_factory_->GetOptions(); }
 
-  void SetBlobRunMode(TitanBlobRunMode mode) {
-    MutexLock l(&mutex_);
-    mutable_cf_options_.blob_run_mode = mode;
-  }
+  void SetBlobRunMode(TitanBlobRunMode mode) { blob_run_mode_.store(mode); }
 
   bool IsDeleteRangeSupported() const override {
     return base_factory_->IsDeleteRangeSupported();
   }
 
  private:
-  mutable port::Mutex mutex_;
-
-  TitanDBOptions db_options_;
-  ImmutableTitanCFOptions immutable_cf_options_;
-  MutableTitanCFOptions mutable_cf_options_;
+  const TitanDBOptions db_options_;
+  const TitanCFOptions cf_options_;
+  std::atomic<TitanBlobRunMode> blob_run_mode_;
   std::shared_ptr<TableFactory> base_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
   port::Mutex* db_mutex_;
