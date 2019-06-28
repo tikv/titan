@@ -661,7 +661,7 @@ TitanDBOptions TitanDBImpl::GetTitanDBOptions() const {
   // Titan db_options_ is not mutable after DB open.
   TitanDBOptions result = db_options_;
   *static_cast<DBOptions*>(&result) = db_impl_->GetDBOptions();
-  return db_options_;
+  return result;
 }
 
 bool TitanDBImpl::GetProperty(ColumnFamilyHandle* column_family,

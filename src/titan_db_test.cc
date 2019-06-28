@@ -645,6 +645,8 @@ TEST_F(TitanDBTest, SetOptions) {
   ASSERT_OK(db_->SetDBOptions(opts));
   titan_options = db_->GetTitanOptions();
   ASSERT_EQ(15, titan_options.max_background_jobs);
+  TitanDBOptions titan_db_options = db_->GetTitanDBOptions();
+  ASSERT_EQ(15, titan_db_options.max_background_jobs);
 }
 
 TEST_F(TitanDBTest, BlobRunModeBasic) {
