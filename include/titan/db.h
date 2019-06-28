@@ -127,10 +127,18 @@ class TitanDB : public StackableDB {
   using rocksdb::StackableDB::GetOptions;
   Options GetOptions(ColumnFamilyHandle* column_family) const override = 0;
 
+  virtual TitanOptions GetTitanOptions(
+      ColumnFamilyHandle* column_family) const = 0;
+  virtual TitanOptions GetTitanOptions() const {
+    return GetTitanOptions(DefaultColumnFamily());
+  }
+
   using rocksdb::StackableDB::SetOptions;
   Status SetOptions(ColumnFamilyHandle* column_family,
                     const std::unordered_map<std::string, std::string>&
                         new_options) override = 0;
+
+  virtual TitanDBOptions GetTitanDBOptions() const = 0;
 
   struct Properties {
     //  "rocksdb.titandb.live-blob-size" - returns total blob value size

@@ -20,11 +20,8 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
     WritableFileWriter* file) const {
   std::unique_ptr<TableBuilder> base_builder(
       base_factory_->NewTableBuilder(options, column_family_id, file));
-  TitanCFOptions cf_options;
-  {
-    MutexLock l(&mutex_);
-    cf_options = TitanCFOptions(immutable_cf_options_, mutable_cf_options_);
-  }
+  TitanCFOptions cf_options = cf_options_;
+  cf_options.blob_run_mode = blob_run_mode_.load();
   std::weak_ptr<BlobStorage> blob_storage;
   {
     MutexLock l(db_mutex_);
@@ -36,9 +33,9 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
 }
 
 std::string TitanTableFactory::GetPrintableTableOptions() const {
-  MutexLock l(&mutex_);
-  return base_factory_->GetPrintableTableOptions() +
-         TitanCFOptions(immutable_cf_options_, mutable_cf_options_).ToString();
+  assert(blob_run_mode_to_string.count(blob_run_mode_.load()) > 0);
+  return base_factory_->GetPrintableTableOptions() + "  blob_run_mode: " +
+         blob_run_mode_to_string.at(blob_run_mode_.load());
 }
 
 }  // namespace titandb
