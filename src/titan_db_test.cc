@@ -613,15 +613,40 @@ TEST_F(TitanDBTest, BlobFileCorruptionErrorHandling) {
 }
 #endif  // !NDEBUG
 
-TEST_F(TitanDBTest, Options) {
+TEST_F(TitanDBTest, SetOptions) {
+  options_.write_buffer_size = 42000000;
+  options_.min_blob_size = 123;
+  options_.blob_run_mode = TitanBlobRunMode::kReadOnly;
   Open();
 
+  TitanOptions titan_options = db_->GetTitanOptions();
+  ASSERT_EQ(42000000, titan_options.write_buffer_size);
+  ASSERT_EQ(123, titan_options.min_blob_size);
+  ASSERT_EQ(TitanBlobRunMode::kReadOnly, titan_options.blob_run_mode);
+
   std::unordered_map<std::string, std::string> opts;
+
+  // Set titan options.
   opts["blob_run_mode"] = "kReadOnly";
   ASSERT_OK(db_->SetOptions(opts));
+  titan_options = db_->GetTitanOptions();
+  ASSERT_EQ(TitanBlobRunMode::kReadOnly, titan_options.blob_run_mode);
+  opts.clear();
 
+  // Set column family options.
   opts["disable_auto_compactions"] = "true";
   ASSERT_OK(db_->SetOptions(opts));
+  titan_options = db_->GetTitanOptions();
+  ASSERT_TRUE(titan_options.disable_auto_compactions);
+  opts.clear();
+
+  // Set DB options.
+  opts["max_background_jobs"] = "15";
+  ASSERT_OK(db_->SetDBOptions(opts));
+  titan_options = db_->GetTitanOptions();
+  ASSERT_EQ(15, titan_options.max_background_jobs);
+  TitanDBOptions titan_db_options = db_->GetTitanDBOptions();
+  ASSERT_EQ(15, titan_db_options.max_background_jobs);
 }
 
 TEST_F(TitanDBTest, BlobRunModeBasic) {

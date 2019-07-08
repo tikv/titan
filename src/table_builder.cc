@@ -1,5 +1,11 @@
 #include "table_builder.h"
 
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
+
+#include <inttypes.h>
+
 namespace rocksdb {
 namespace titandb {
 
@@ -68,6 +74,9 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
   if (!blob_builder_) {
     status_ = blob_manager_->NewFile(&blob_handle_);
     if (!ok()) return;
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "Titan table builder created new blob file %" PRIu64 ".",
+                   blob_handle_->GetNumber());
     blob_builder_.reset(
         new BlobFileBuilder(db_options_, cf_options_, blob_handle_->GetFile()));
   }
@@ -105,14 +114,26 @@ Status TitanTableBuilder::Finish() {
   if (blob_builder_) {
     blob_builder_->Finish();
     if (ok()) {
+      ROCKS_LOG_INFO(db_options_.info_log,
+                     "Titan table builder finish output file %" PRIu64 ".",
+                     blob_handle_->GetNumber());
       std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
           blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize());
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
       status_ =
           blob_manager_->FinishFile(cf_id_, file, std::move(blob_handle_));
     } else {
+      ROCKS_LOG_WARN(
+          db_options_.info_log,
+          "Titan table builder finish failed. Delete output file %" PRIu64 ".",
+          blob_handle_->GetNumber());
       status_ = blob_manager_->DeleteFile(std::move(blob_handle_));
     }
+  }
+  if (!status_.ok()) {
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "Titan table builder failed on finish: %s",
+                    status_.ToString().c_str());
   }
   return status();
 }
@@ -120,6 +141,10 @@ Status TitanTableBuilder::Finish() {
 void TitanTableBuilder::Abandon() {
   base_builder_->Abandon();
   if (blob_builder_) {
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "Titan table builder abandoned. Delete output file %" PRIu64
+                   ".",
+                   blob_handle_->GetNumber());
     blob_builder_->Abandon();
     status_ = blob_manager_->DeleteFile(std::move(blob_handle_));
   }
