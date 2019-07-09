@@ -15,6 +15,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   std::vector<BlobFileMeta*> blob_files;
 
   uint64_t batch_size = 0;
+  uint64_t min_output_threshold = std::max(cf_options_.merge_small_file_threshold, cf_options_.blob_file_target_size / 4);
+  uint64_t estimate_output_size = 0;
   //  ROCKS_LOG_INFO(db_options_.info_log, "blob file num:%lu gc score:%lu",
   //                 blob_storage->NumBlobFiles(),
   //                 blob_storage->gc_score().size());
@@ -40,7 +42,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     blob_files.push_back(blob_file.get());
 
     batch_size += blob_file->file_size();
-    if (batch_size >= cf_options_.max_gc_batch_size) break;
+    estimate_output_size += (blob_file->file_size() - blob_file->discardable_size());
+    if (batch_size >= cf_options_.max_gc_batch_size && estimate_output_size >= min_output_threshold) break;
   }
 
   if (blob_files.empty() || batch_size < cf_options_.min_gc_batch_size)
