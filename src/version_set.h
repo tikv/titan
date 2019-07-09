@@ -75,6 +75,8 @@ class VersionSet {
     }
   }
 
+  std::pair<uint32_t, bool> NeedGC();
+
  private:
   friend class BlobFileSizeCollectorTest;
   friend class VersionTest;

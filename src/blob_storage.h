@@ -98,6 +98,8 @@ class BlobStorage {
   void MarkFileObsolete(std::shared_ptr<BlobFileMeta> file,
                         SequenceNumber obsolete_sequence);
 
+  double PenddingGCSize();
+
  private:
   friend class VersionSet;
   friend class VersionTest;

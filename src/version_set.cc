@@ -300,5 +300,22 @@ void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
   obsolete_manifests_.clear();
 }
 
+std::pair<uint32_t, bool> VersionSet::NeedGC() {
+    typedef std::pair<uint32_t, double> cf_pendding_size;
+    std::vector<cf_pendding_size> pendding_list;
+    for (auto bs : column_families_) {
+        double penddinge_size = bs.second->PenddingGCSize();
+       if (penddinge_size != 0) {
+           pendding_list.emplace_back(std::make_pair(bs.first, penddinge_size));
+       }
+    }
+    if (pendding_list.empty()) return std::make_pair(0, false);
+    if (pendding_list.size() == 1) return std::make_pair(pendding_list[0].first, true);
+    std::sort(pendding_list.begin(), pendding_list.end(), [](cf_pendding_size a, cf_pendding_size b){
+        return a.second < b.second;
+    });
+    return std::make_pair(pendding_list.front().first, true);
+}
+
 }  // namespace titandb
 }  // namespace rocksdb

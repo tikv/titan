@@ -44,6 +44,11 @@ void TitanDBImpl::BackgroundCallGC() {
     }
 
     bg_gc_scheduled_--;
+    std::pair<uint32_t, bool> need_gc = vset_->NeedGC();
+    if (need_gc.second) {
+        AddToGCQueue(need_gc.first);
+        MaybeScheduleGC();
+    }
     if (bg_gc_scheduled_ == 0) {
       // signal if
       // * bg_gc_scheduled_ == 0 -- need to wakeup ~TitanDBImpl
