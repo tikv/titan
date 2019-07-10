@@ -69,8 +69,7 @@ Slice Compress(const CompressionContext& ctx, const Slice& input,
         return *output;
       }
       break;
-    default: {
-    }  // Do not recognize this compression type
+    default: {}  // Do not recognize this compression type
   }
 
   // Compression method is not supported, or not good compression
