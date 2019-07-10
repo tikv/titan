@@ -98,6 +98,10 @@ class TitanDBTest : public testing::Test {
     }
   }
 
+  Status LogAndApply(VersionEdit& edit) {
+    return db_impl_->vset_->LogAndApply(edit);
+  }
+
   void Put(uint64_t k, std::map<std::string, std::string>* data = nullptr) {
     WriteOptions wopts;
     std::string key = GenKey(k);
@@ -422,6 +426,32 @@ TEST_F(TitanDBTest, DropColumnFamily) {
   }
 
   Close();
+}
+
+TEST_F(TitanDBTest, VersionEditError) {
+  Open();
+
+  std::map<std::string, std::string> data;
+  Put(1, &data);
+  ASSERT_EQ(1, data.size());
+  VerifyDB(data);
+
+  auto cf_id = db_->DefaultColumnFamily()->GetID();
+  VersionEdit edit;
+  edit.SetColumnFamilyID(cf_id);
+  edit.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1));
+  ASSERT_OK(LogAndApply(edit));
+
+  VerifyDB(data);
+
+  // add same blob file twice
+  VersionEdit edit1;
+  edit1.SetColumnFamilyID(cf_id);
+  edit1.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1));
+  ASSERT_NOK(LogAndApply(edit));
+
+  Reopen();
+  VerifyDB(data);
 }
 
 #ifndef NDEBUG

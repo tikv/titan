@@ -17,22 +17,22 @@ class EditCollector {
     auto cf_id = edit.column_family_id_;
     auto& collector = column_families_[cf_id];
 
-    Status s;
     for (auto& file : edit.added_files_) {
-      s = collector.AddFile(file);
-      if (!s.ok()) return s;
+      status_ = collector.AddFile(file);
+      if (!status_.ok()) return status_;
     }
     for (auto& file : edit.deleted_files_) {
-      collector.DeleteFile(file.first, file.second);
-      if (!s.ok()) return s;
+      status_ = collector.DeleteFile(file.first, file.second);
+      if (!status_.ok()) return status_;
     }
 
     if (edit.has_next_file_number_) {
       if (edit.next_file_number_ < next_file_number_) {
-        return Status::Corruption("Edit has a smaller next file number " +
-                                  ToString(edit.next_file_number_) +
-                                  " than current " +
-                                  ToString(next_file_number_));
+        status_ =
+            Status::Corruption("Edit has a smaller next file number " +
+                               ToString(edit.next_file_number_) +
+                               " than current " + ToString(next_file_number_));
+        return status_;
       }
       next_file_number_ = edit.next_file_number_;
       has_next_file_number_ = true;
@@ -40,7 +40,11 @@ class EditCollector {
     return Status::OK();
   }
 
-  Status Apply(VersionSet& vset) {
+  Status Check(VersionSet& vset) {
+    if (!status_.ok()) {
+      return status_;
+    }
+
     for (auto& cf : column_families_) {
       auto cf_id = cf.first;
       auto storage = vset.GetBlobStorage(cf_id).lock();
@@ -51,14 +55,46 @@ class EditCollector {
         // will be regarded as obsolete and deleted.
         continue;
       }
-      Status s = cf.second.Apply(storage);
-      if (!s.ok()) return s;
+      status_ = cf.second.Check(storage);
+      if (!status_.ok()) return status_;
+    }
+
+    checked_ = true;
+    return Status::OK();
+  }
+
+  Status Apply(VersionSet& vset) {
+    if (!status_.ok()) {
+      return status_;
+    }
+
+    if (!checked_) {
+      status_ = Check(vset);
+      if (!status_.ok()) {
+        return status_;
+      }
+    }
+
+    for (auto& cf : column_families_) {
+      auto cf_id = cf.first;
+      auto storage = vset.GetBlobStorage(cf_id).lock();
+      if (!storage) {
+        // TODO: support OpenForReadOnly which doesn't open DB with all column
+        // family so there are maybe some invalid column family, but we can't
+        // just skip it otherwise blob files of the non-open column families
+        // will be regarded as obsolete and deleted.
+        continue;
+      }
+      status_ = cf.second.Apply(storage);
+      if (!status_.ok()) return status_;
     }
 
     return Status::OK();
   }
 
   Status GetNextFileNumber(uint64_t* next_file_number) {
+    if (!status_.ok()) return status_;
+
     if (has_next_file_number_) {
       *next_file_number = next_file_number_;
       return Status::OK();
@@ -88,7 +124,7 @@ class EditCollector {
       return Status::OK();
     }
 
-    Status Apply(shared_ptr<BlobStorage>& storage) {
+    Status Check(shared_ptr<BlobStorage>& storage) {
       for (auto& file : added_files_) {
         auto number = file.first;
         auto blob = storage->FindFile(number).lock();
@@ -107,11 +143,13 @@ class EditCollector {
                                       " has been added before");
           }
         }
-        storage->AddBlobFile(file.second);
       }
 
       for (auto& file : deleted_files_) {
         auto number = file.first;
+        if (added_files_.count(number) > 0) {
+          continue;
+        }
         auto blob = storage->FindFile(number).lock();
         if (!blob) {
           ROCKS_LOG_ERROR(storage->db_options().info_log,
@@ -126,6 +164,30 @@ class EditCollector {
           return Status::Corruption("Blob file " + ToString(number) +
                                     " has been deleted already");
         }
+      }
+
+      return Status::OK();
+    }
+
+    Status Apply(shared_ptr<BlobStorage>& storage) {
+      for (auto& file : added_files_) {
+        // just skip paired added and deleted files
+        if (deleted_files_.count(file.first) > 0) {
+          continue;
+        }
+        storage->AddBlobFile(file.second);
+      }
+
+      for (auto& file : deleted_files_) {
+        auto number = file.first;
+        // just skip paired added and deleted files
+        if (added_files_.count(number) > 0) {
+          continue;
+        }
+        auto blob = storage->FindFile(number).lock();
+        if (!blob) {
+          return Status::NotFound("invalid file number");
+        }
         storage->MarkFileObsolete(blob, file.second);
       }
 
@@ -138,6 +200,8 @@ class EditCollector {
     std::unordered_map<uint64_t, SequenceNumber> deleted_files_;
   };
 
+  Status status_{Status::OK()};
+  bool checked_{false};
   bool has_next_file_number_{false};
   uint64_t next_file_number_{0};
   std::unordered_map<uint32_t, CFEditCollector> column_families_;
