@@ -4,10 +4,10 @@ namespace rocksdb {
 namespace titandb {
 
 BlobGC::BlobGC(std::vector<BlobFileMeta*>&& blob_files,
-               TitanCFOptions&& _titan_cf_options, bool trigger_next)
+               TitanCFOptions&& _titan_cf_options, bool need_trigger_next)
     : inputs_(std::move(blob_files)),
       titan_cf_options_(std::move(_titan_cf_options)),
-      trigger_next_(trigger_next){
+      trigger_next_(need_trigger_next){
   MarkFilesBeingGC();
 }
 
