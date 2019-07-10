@@ -53,7 +53,7 @@ void TitanDBImpl::BackgroundCallGC() {
     }
     // IMPORTANT: there should be no code after calling SignalAll. This call may
     // signal the DB destructor that it's OK to proceed with destruction. In
-    // that case, all DB variables will be dealloacated and referencing them
+    // that case, all DB variables will be deallocated and referencing them
     // will cause trouble.
   }
 }
