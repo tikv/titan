@@ -20,7 +20,7 @@ void TitanDBImpl::MaybeScheduleGC() {
 
   bg_gc_scheduled_.fetch_add(1, std::memory_order_release);
 
-  env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::LOW, this);
+  env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::BOTTOM, this);
 }
 
 void TitanDBImpl::BGWorkGC(void* db) {
