@@ -57,7 +57,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
         stop_picking = true;
       }
     } else {
-      if (blob_file->GetDiscardableRatio() >
+      if (blob_file->GetDiscardableRatio() >=
           cf_options_.blob_file_discardable_ratio) {
         next_gc_size += blob_file->file_size();
       }
