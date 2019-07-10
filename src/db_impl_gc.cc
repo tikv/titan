@@ -14,11 +14,11 @@ void TitanDBImpl::MaybeScheduleGC() {
 
   if (shuting_down_.load(std::memory_order_acquire)) return;
 
-  while(unscheduled_gc_ > 0 &&
-            bg_gc_scheduled_ < db_options_.max_background_gc){
-      unscheduled_gc_--;
-      bg_gc_scheduled_++;
-      env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::LOW, this);
+  while (unscheduled_gc_ > 0 &&
+         bg_gc_scheduled_ < db_options_.max_background_gc) {
+    unscheduled_gc_--;
+    bg_gc_scheduled_++;
+    env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::LOW, this);
   }
 }
 
@@ -82,11 +82,12 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
         blob_gc->SetColumnFamily(cfh.get());
       }
 
-      if(blob_gc->trigger_next()){
-          // there is still data remain to be GC
-          // and put this cf back to GC queue and tigger MaybeScheduleGC to wake up another gc
-          AddToGCQueue(column_family_id);
-          MaybeScheduleGC();
+      if (blob_gc->trigger_next()) {
+        // there is still data remain to be GC
+        // and put this cf back to GC queue and tigger MaybeScheduleGC to wake
+        // up another gc
+        AddToGCQueue(column_family_id);
+        MaybeScheduleGC();
       }
     }
   }

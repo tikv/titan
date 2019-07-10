@@ -43,9 +43,7 @@ class BlobGC {
 
   void ReleaseGcFiles();
 
-  bool trigger_next(){
-      return trigger_next_;
-  }
+  bool trigger_next() { return trigger_next_; }
 
  private:
   std::vector<BlobFileMeta*> inputs_;
@@ -53,7 +51,7 @@ class BlobGC {
   std::vector<BlobFileMeta*> outputs_;
   TitanCFOptions titan_cf_options_;
   ColumnFamilyHandle* cfh_{nullptr};
-  const bool trigger_next_;// whether need to trigger gc after this gc or not
+  const bool trigger_next_;  // whether need to trigger gc after this gc or not
 };
 
 struct GCScore {

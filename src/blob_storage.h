@@ -1,6 +1,6 @@
 #pragma once
 #ifndef __STDC_FORMAT_MACROS
-#define  __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
 #endif
 #include <inttypes.h>
 #include "blob_file_cache.h"
