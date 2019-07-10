@@ -15,6 +15,7 @@
 #include "blob_gc.h"
 #include "db_iter.h"
 #include "table_factory.h"
+#include "titan_build_version.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -244,6 +245,8 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       stats_->Initialize(column_families, db_->DefaultColumnFamily()->GetID());
     }
     ROCKS_LOG_INFO(db_options_.info_log, "Titan DB open.");
+    ROCKS_LOG_HEADER(db_options_.info_log, "Titan git sha: %s",
+                     titan_build_git_sha);
     db_options_.Dump(db_options_.info_log.get());
     for (auto& desc : descs) {
       ROCKS_LOG_HEADER(db_options_.info_log,
