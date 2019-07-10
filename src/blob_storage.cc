@@ -135,7 +135,7 @@ void BlobStorage::ComputeGCScore() {
 }
 
 double BlobStorage::PenddingGCSize() {
-    uint64_t pendding_size = 0;
+    double pendding_size = 0;
     for (size_t i = 0; i < gc_score_.size(); i++){
         if (gc_score_[i].score < cf_options_.blob_file_discardable_ratio) {
             break;
