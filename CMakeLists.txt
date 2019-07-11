@@ -58,8 +58,8 @@ if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
   add_subdirectory(${ROCKSDB_DIR} rocksdb EXCLUDE_FROM_ALL)
   # -latomic is needed when building titandb_stress using clang.
   # check if libatomic exist before link
-  find_library(ATOMIC_EXIST NAMES atomic libatomic.so.1 atomic.so.1)
-  if(ATOMIC_EXIST)
+  find_library(HAS_ATOMIC NAMES atomic libatomic.so.1 atomic.so.1)
+  if (HAS_ATOMIC)
     link_libraries(atomic)
   endif()
 endif()
@@ -102,8 +102,7 @@ if (WITH_TITAN_TOOLS)
   else()
     # Hack: On Travis (with Ubuntu xenial or before), libgflags-dev package doesn't come with
     # gflags-config.cmake, so find_package will fail. Hard-code gflag path for now.
-    if(APPLE)
-    else()
+    if (NOT APPLE)
       set(gflags_INCLUDE_DIR "/usr/include/gflags")
       list(APPEND TOOLS_LIBS "/usr/lib/x86_64-linux-gnu/libgflags.a")
     endif()

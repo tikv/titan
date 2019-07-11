@@ -27,10 +27,13 @@ env:
 
 # For GCC build, we also report code coverage to codecov.
 matrix:
-  # For osx, there is a unused-command-line-argument error in RocksDB cmake file with TSAN
   exclude:
     - os: osx
       env: SANITIZER="TSAN"
+    - os: osx
+      env: SANITIZER="UBSAN"
+    - os: osx
+      env: BUILD_TYPE="Release"
   include:
     - os: linux
       compiler:
@@ -45,7 +48,7 @@ matrix:
 install:
   # osx dependencies
   - if [ "${TRAVIS_OS_NAME}" == osx ]; then
-    brew install gflags zstd lz4 snappy xz;
+      brew install gflags zstd lz4 snappy xz;
     fi
   - git clone --depth=1 --branch=tikv-3.0 https://github.com/pingcap/rocksdb.git
   - export CTEST_OUTPUT_ON_FAILURE=1

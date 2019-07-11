@@ -167,12 +167,14 @@ void BlobFileMergeIterator::SeekToFirst() {
 }
 
 void BlobFileMergeIterator::Next() {
-  assert(current_ != nullptr);
+  assert(Valid());
   current_->Next();
   if (current_->status().ok() && current_->Valid()) min_heap_.push(current_);
   if (!min_heap_.empty()) {
     current_ = min_heap_.top();
     min_heap_.pop();
+  } else {
+    current_ = nullptr;
   }
 }
 
