@@ -60,20 +60,21 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       if (blob_file->GetDiscardableRatio() >=
           cf_options_.blob_file_discardable_ratio) {
         next_gc_size += blob_file->file_size();
-      }
-      if (next_gc_size > cf_options_.min_gc_batch_size) {
-        maybe_continue_next_time = true;
-        ROCKS_LOG_INFO(db_options_.info_log,
-                       "remain %zu bytes to be gc and trigger after this gc",
-                       next_gc_size);
-        break;
+        if (next_gc_size > cf_options_.min_gc_batch_size) {
+          maybe_continue_next_time = true;
+          ROCKS_LOG_INFO(db_options_.info_log,
+                         "remain more than %" PRIu64
+                         " bytes to be gc and trigger after this gc",
+                         next_gc_size);
+          break;
+        }
       }
     }
   }
-  ROCKS_LOG_INFO(
-      db_options_.info_log,
-      "got batch size %zu, min output threshold:%zu, estimate output %zu bytes",
-      batch_size, min_output_threshold, estimate_output_size);
+  ROCKS_LOG_INFO(db_options_.info_log,
+                 "got batch size %" PRIu64 ", min output threshold:%" PRIu64
+                 ", estimate output %" PRIu64 " bytes",
+                 batch_size, min_output_threshold, estimate_output_size);
   if (blob_files.empty() || batch_size < cf_options_.min_gc_batch_size)
     return nullptr;
 
