@@ -200,7 +200,7 @@ class TitanDBImpl : public TitanDB {
   // gc_queue_ hold column families that we need to gc.
   // pending_gc_ hold column families that already on gc_queue_.
   std::deque<uint32_t> gc_queue_;
-  
+
   // Guarded by mutex_.
   int bg_gc_scheduled_{0};
 
