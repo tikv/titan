@@ -106,6 +106,39 @@ TEST_F(BlobGCPickerTest, TriggerNext) {
   ASSERT_EQ(blob_gc->trigger_next(), true);
 }
 
+TEST_F(BlobGCPickerTest, NotTriggerNext) {
+  TitanDBOptions titan_db_options;
+  TitanCFOptions titan_cf_options;
+  titan_cf_options.max_gc_batch_size = 1 << 30;
+  titan_cf_options.blob_file_target_size = 256 << 20;
+  NewBlobStorageAndPicker(titan_db_options, titan_cf_options);
+  AddBlobFile(1U, 1U << 30, 0U);  // valid_size = 1GB
+  AddBlobFile(2U, 1U << 30, 0U);  // valid_size = 1GB
+  AddBlobFile(3U, 1U << 30, 0U);  // valid_size = 1GB
+  AddBlobFile(4U, 1U << 30, 0U);  // valid_size = 1GB
+  UpdateBlobStorage();
+  auto blob_gc = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  ASSERT_TRUE(blob_gc != nullptr);
+  ASSERT_EQ(blob_gc->trigger_next(), false);
+}
+
+TEST_F(BlobGCPickerTest, PickFileAndTriggerNext) {
+  TitanDBOptions titan_db_options;
+  TitanCFOptions titan_cf_options;
+  titan_cf_options.max_gc_batch_size = 1 << 30;
+  titan_cf_options.blob_file_target_size = 256 << 20;
+  NewBlobStorageAndPicker(titan_db_options, titan_cf_options);
+  AddBlobFile(1U, 1U << 30, 1000U << 20);  // valid_size = 24MB
+  AddBlobFile(2U, 1U << 30, 900U << 20);   // valid_size = 124MB
+  AddBlobFile(3U, 1U << 30, 950U << 20);   // valid_size = 74MB
+  AddBlobFile(4U, 1U << 30, 1000U << 20);  // valid_size = 24MB
+  UpdateBlobStorage();
+  auto blob_gc = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  ASSERT_TRUE(blob_gc != nullptr);
+  ASSERT_EQ(blob_gc->trigger_next(), true);
+  ASSERT_EQ(blob_gc->inputs().size(), 3);
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
 
