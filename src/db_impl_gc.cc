@@ -80,14 +80,13 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
         cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
         assert(column_family_id == cfh->GetID());
         blob_gc->SetColumnFamily(cfh.get());
-      }
-
-      if (blob_gc->trigger_next()) {
-        // there is still data remain to be GC
-        // and put this cf back to GC queue and tigger MaybeScheduleGC to wake
-        // up another gc
-        AddToGCQueue(column_family_id);
-        MaybeScheduleGC();
+        if (blob_gc->trigger_next()) {
+          // there is still data remain to be GC
+          // and put this cf back to GC queue and tigger MaybeScheduleGC to wake
+          // up another gc
+          AddToGCQueue(column_family_id);
+          MaybeScheduleGC();
+        }
       }
     }
   }
