@@ -209,13 +209,17 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
   BlobFileMergeIterator iter(std::move(iters));
 
   iter.SeekToFirst();
-  for (int i = 1; i < kMaxKeyNum; i++, iter.Next()) {
+  int i = 1;
+  while (iter.Valid()) {
     ASSERT_OK(iter.status());
     ASSERT_TRUE(iter.Valid());
     ASSERT_EQ(iter.key(), GenKey(i));
     ASSERT_EQ(iter.value(), GenValue(i));
     ASSERT_EQ(iter.GetBlobIndex().blob_handle, handles[i]);
+    i++;
+    iter.Next();
   }
+  ASSERT_EQ(i, kMaxKeyNum);
 }
 
 }  // namespace titandb
