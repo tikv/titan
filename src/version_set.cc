@@ -213,11 +213,12 @@ Status VersionSet::LogAndApply(VersionEdit& edit) {
     ImmutableDBOptions ioptions(db_options_);
     s = SyncManifest(env_, &ioptions, manifest_->file());
   }
-  if (!s.ok()) return s;
-
-  EditCollector collector;
-  collector.AddEdit(edit);
-  return collector.Apply(*this);
+  if (s.ok()) {
+    EditCollector collector;
+    collector.AddEdit(edit);
+    s = collector.Apply(*this);
+  }
+  return s;
 }
 
 void VersionSet::AddColumnFamilies(

@@ -73,6 +73,9 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     {
       MutexLock l(&db_->mutex_);
       s = db_->vset_->LogAndApply(edit);
+      if (!s.ok()) {
+        db_->SetBGError(s);
+      }
       for (const auto& file : files)
         db_->pending_outputs_.erase(file.second->GetNumber());
     }
@@ -422,6 +425,7 @@ Status TitanDBImpl::CompactFiles(
     const std::vector<std::string>& input_file_names, const int output_level,
     const int output_path_id, std::vector<std::string>* const output_file_names,
     CompactionJobInfo* compaction_job_info) {
+  if (HasBGError()) return GetBGError();
   std::unique_ptr<CompactionJobInfo> compaction_job_info_ptr;
   if (compaction_job_info == nullptr) {
     compaction_job_info_ptr.reset(new CompactionJobInfo());

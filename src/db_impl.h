@@ -2,6 +2,7 @@
 
 #include "blob_file_manager.h"
 #include "db/db_impl.h"
+#include "iostream"
 #include "rocksdb/statistics.h"
 #include "table_factory.h"
 #include "titan/db.h"
@@ -42,6 +43,47 @@ class TitanDBImpl : public TitanDB {
       CompactionJobInfo* compaction_job_info = nullptr) override;
 
   Status CloseImpl();
+
+  using TitanDB::Put;
+  Status Put(const WriteOptions& options, ColumnFamilyHandle* column_family,
+             const Slice& key, const Slice& val) override {
+    return HasBGError() ? GetBGError()
+                        : db_->Put(options, column_family, key, val);
+  }
+
+  using TitanDB::Write;
+  Status Write(const WriteOptions& opts, WriteBatch* updates) override {
+    return HasBGError() ? GetBGError() : db_->Write(opts, updates);
+  }
+
+  using TitanDB::Delete;
+  Status Delete(const WriteOptions& wopts, ColumnFamilyHandle* column_family,
+                const Slice& key) override {
+    return HasBGError() ? GetBGError() : db_->Delete(wopts, column_family, key);
+  }
+
+  using TitanDB::IngestExternalFile;
+  Status IngestExternalFile(ColumnFamilyHandle* column_family,
+                            const std::vector<std::string>& external_files,
+                            const IngestExternalFileOptions& options) override {
+    return HasBGError() ? GetBGError()
+                        : db_->IngestExternalFile(column_family, external_files,
+                                                  options);
+  }
+
+  using TitanDB::CompactRange;
+  Status CompactRange(const CompactRangeOptions& options,
+                      ColumnFamilyHandle* column_family, const Slice* begin,
+                      const Slice* end) override {
+    return HasBGError() ? GetBGError()
+                        : db_->CompactRange(options, column_family, begin, end);
+  }
+
+  using TitanDB::Flush;
+  Status Flush(const FlushOptions& fopts,
+               ColumnFamilyHandle* column_family) override {
+    return HasBGError() ? GetBGError() : db_->Flush(fopts, column_family);
+  }
 
   using TitanDB::Get;
   Status Get(const ReadOptions& options, ColumnFamilyHandle* handle,
@@ -155,6 +197,15 @@ class TitanDBImpl : public TitanDB {
     return oldest_snapshot;
   }
 
+  Status SetBGError(const Status& s);
+
+  Status GetBGError() {
+    MutexLock l(&mutex_);
+    return bg_error_;
+  }
+
+  bool HasBGError() { return has_bg_error_.load(); }
+
   FileLock* lock_{nullptr};
   // The lock sequence must be Titan.mutex_.Lock() -> Base DB mutex_.Lock()
   // while the unlock sequence must be Base DB mutex.Unlock() ->
@@ -171,6 +222,9 @@ class TitanDBImpl : public TitanDB {
   EnvOptions env_options_;
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
+  // Turn DB into read-only if background happened
+  Status bg_error_{};
+  std::atomic_bool has_bg_error_{false};
 
   // TitanStats is turned on only if statistics field of DBOptions
   // is not null.

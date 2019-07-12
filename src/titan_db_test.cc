@@ -225,6 +225,48 @@ class TitanDBTest : public testing::Test {
     DeleteDir(env_, dbname_);
   }
 
+  void BackgroundErrorHandling() {
+    options_.listeners.emplace_back(std::make_shared<BGErrorListener>());
+    Open();
+    std::map<std::string, std::string> data;
+    const int kNumEntries = 100;
+    for (uint64_t i = 1; i <= kNumEntries; i++) {
+      Put(i, &data);
+    }
+    WriteOptions wops;
+    FlushOptions fops;
+    CompactionOptions cops;
+    CompactRangeOptions crops;
+    std::string key = "key", val;
+    SetBGError(Status::IOError(""));
+    // BG error is restored by listener for first time
+    ASSERT_OK(db_->Put(wops, key, val));
+    SetBGError(Status::IOError(""));
+    ASSERT_OK(db_->Get(ReadOptions(), key, &val));
+    ASSERT_TRUE(db_->Put(wops, key, val).IsIOError());
+    ASSERT_TRUE(db_->Flush(fops).IsIOError());
+    ASSERT_TRUE(db_->Delete(wops, key).IsIOError());
+    ASSERT_TRUE(db_->CompactRange(crops, nullptr, nullptr).IsIOError());
+    ASSERT_TRUE(
+        db_->CompactFiles(cops, std::vector<std::string>(), 1).IsIOError());
+  }
+
+  void SetBGError(const Status& s) {
+    MutexLock l(&db_impl_->mutex_);
+    db_impl_->SetBGError(s);
+  }
+
+  class BGErrorListener : public EventListener {
+   public:
+    void OnBackgroundError(BackgroundErrorReason reason,
+                           Status* error) override {
+      if (++cnt == 1) *error = Status();
+    }
+
+   private:
+    int cnt{0};
+  };
+
   Env* env_{Env::Default()};
   std::string dbname_;
   TitanOptions options_;
@@ -747,6 +789,8 @@ TEST_F(TitanDBTest, FallbackModeEncounterMissingBlobFile) {
   ASSERT_OK(db_->CompactRange(CompactRangeOptions(), &begin, &end));
   VerifyDB({{"bar", "v1"}});
 }
+
+TEST_F(TitanDBTest, BackgroundErrorHandling) { BackgroundErrorHandling(); }
 
 }  // namespace titandb
 }  // namespace rocksdb
