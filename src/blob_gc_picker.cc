@@ -40,7 +40,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     //                   blob_file->marked_for_sample);
 
     if (!CheckBlobFile(blob_file.get())) {
-      ROCKS_LOG_INFO(db_options_.info_log, "file number:%lu no need gc",
+      ROCKS_LOG_DEBUG(db_options_.info_log, "file number:%lu no need gc",
                      blob_file->file_number());
       continue;
     }
@@ -62,7 +62,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
         next_gc_size += blob_file->file_size();
         if (next_gc_size > cf_options_.min_gc_batch_size) {
           maybe_continue_next_time = true;
-          ROCKS_LOG_INFO(db_options_.info_log,
+          ROCKS_LOG_DEBUG(db_options_.info_log,
                          "remain more than %" PRIu64
                          " bytes to be gc and trigger after this gc",
                          next_gc_size);
