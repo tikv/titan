@@ -68,6 +68,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
                          next_gc_size);
           break;
         }
+      }else{
+        break;
       }
     }
   }
