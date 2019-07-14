@@ -2,7 +2,6 @@
 
 #include "blob_file_manager.h"
 #include "db/db_impl.h"
-#include "iostream"
 #include "rocksdb/statistics.h"
 #include "table_factory.h"
 #include "titan/db.h"
@@ -47,8 +46,7 @@ class TitanDBImpl : public TitanDB {
   using TitanDB::Put;
   Status Put(const WriteOptions& options, ColumnFamilyHandle* column_family,
              const Slice& key, const Slice& val) override {
-    return HasBGError() ? GetBGError()
-                        : db_->Put(options, column_family, key, val);
+    return HasBGError() ? GetBGError() : db_->Put(options, column_family, key, val);
   }
 
   using TitanDB::Write;
@@ -67,8 +65,7 @@ class TitanDBImpl : public TitanDB {
                             const std::vector<std::string>& external_files,
                             const IngestExternalFileOptions& options) override {
     return HasBGError() ? GetBGError()
-                        : db_->IngestExternalFile(column_family, external_files,
-                                                  options);
+                        : db_->IngestExternalFile(column_family, external_files, options);
   }
 
   using TitanDB::CompactRange;
@@ -223,7 +220,7 @@ class TitanDBImpl : public TitanDB {
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
   // Turn DB into read-only if background happened
-  Status bg_error_{};
+  Status bg_error_;
   std::atomic_bool has_bg_error_{false};
 
   // TitanStats is turned on only if statistics field of DBOptions

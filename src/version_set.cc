@@ -204,6 +204,7 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
 }
 
 Status VersionSet::LogAndApply(VersionEdit& edit) {
+  TEST_SYNC_POINT("VersionSet::LogAndApply");
   // TODO(@huachao): write manifest file unlocked
   std::string record;
   edit.SetNextFileNumber(next_file_number_.load());

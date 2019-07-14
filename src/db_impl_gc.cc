@@ -65,7 +65,6 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   std::unique_ptr<BlobGC> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;
   Status s;
-
   if (!gc_queue_.empty()) {
     uint32_t column_family_id = PopFirstFromGCQueue();
     auto bs = vset_->GetBlobStorage(column_family_id).lock().get();
