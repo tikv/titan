@@ -269,7 +269,8 @@ class TitanDBTest : public testing::Test {
     ASSERT_TRUE(
         db_->CompactRange(CompactRangeOptions(), nullptr, nullptr).IsIOError());
     ASSERT_TRUE(
-        db_->CompactFiles(CompactionOptions(), std::vector<std::string>(), 1).IsIOError());
+        db_->CompactFiles(CompactionOptions(), std::vector<std::string>(), 1)
+            .IsIOError());
     Close();
   }
 

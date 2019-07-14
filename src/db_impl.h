@@ -46,7 +46,8 @@ class TitanDBImpl : public TitanDB {
   using TitanDB::Put;
   Status Put(const WriteOptions& options, ColumnFamilyHandle* column_family,
              const Slice& key, const Slice& val) override {
-    return HasBGError() ? GetBGError() : db_->Put(options, column_family, key, val);
+    return HasBGError() ? GetBGError()
+                        : db_->Put(options, column_family, key, val);
   }
 
   using TitanDB::Write;
@@ -65,7 +66,8 @@ class TitanDBImpl : public TitanDB {
                             const std::vector<std::string>& external_files,
                             const IngestExternalFileOptions& options) override {
     return HasBGError() ? GetBGError()
-                        : db_->IngestExternalFile(column_family, external_files, options);
+                        : db_->IngestExternalFile(column_family, external_files,
+                                                  options);
   }
 
   using TitanDB::CompactRange;
