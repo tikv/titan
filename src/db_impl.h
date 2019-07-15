@@ -120,7 +120,6 @@ class TitanDBImpl : public TitanDB {
 
   // REQUIRE: mutex_ held
   void AddToGCQueue(uint32_t column_family_id) {
-    unscheduled_gc_++;
     gc_queue_.push_back(column_family_id);
   }
 
@@ -203,7 +202,6 @@ class TitanDBImpl : public TitanDB {
   std::deque<uint32_t> gc_queue_;
 
   int bg_gc_scheduled_{0};
-  int unscheduled_gc_{0};
 
   std::atomic_bool shuting_down_{false};
 };
