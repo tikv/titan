@@ -68,15 +68,15 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
                          next_gc_size);
           break;
         }
-      }else{
+      } else {
         break;
       }
     }
   }
   ROCKS_LOG_DEBUG(db_options_.info_log,
-                 "got batch size %" PRIu64 ", min output threshold:%" PRIu64
-                 ", estimate output %" PRIu64 " bytes",
-                 batch_size, min_output_threshold, estimate_output_size);
+                  "got batch size %" PRIu64 ", min output threshold:%" PRIu64
+                  ", estimate output %" PRIu64 " bytes",
+                  batch_size, min_output_threshold, estimate_output_size);
   if (blob_files.empty() || batch_size < cf_options_.min_gc_batch_size)
     return nullptr;
 
