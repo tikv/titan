@@ -637,8 +637,6 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
             TableFileName(cfd->ioptions()->cf_paths, file_meta->fd.GetNumber(),
                           file_meta->fd.GetPathId());
         if (props.count(fname) == 0) {
-          // 1. If the table is already present in table cache, load table
-          // properties from there.
           std::shared_ptr<const TableProperties> table_properties;
           Status s =
               version->GetTableProperties(&table_properties, file_meta, &fname);

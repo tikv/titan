@@ -35,7 +35,6 @@ class TitanDBTest : public testing::Test {
     options_.min_gc_batch_size = 1;
     options_.merge_small_file_threshold = 0;
     options_.disable_background_gc = true;
-    // options_.disable_auto_compactions = true;
     options_.blob_file_compression = CompressionType::kLZ4Compression;
     DeleteDir(env_, options_.dirname);
     DeleteDir(env_, dbname_);
