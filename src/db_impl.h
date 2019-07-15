@@ -66,6 +66,10 @@ class TitanDBImpl : public TitanDB {
 
   void ReleaseSnapshot(const Snapshot* snapshot) override;
 
+  Status DeleteFilesInRanges(ColumnFamilyHandle* column_family,
+                             const RangePtr* ranges, size_t n,
+                             bool include_end = true) override;
+
   using TitanDB::GetOptions;
   Options GetOptions(ColumnFamilyHandle* column_family) const override;
 
