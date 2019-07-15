@@ -15,6 +15,7 @@
 #include "blob_gc.h"
 #include "db_iter.h"
 #include "table_factory.h"
+#include "titan_build_version.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -224,15 +225,15 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
 
   static bool has_init_background_threads = false;
   if (!has_init_background_threads) {
-    auto low_pri_threads_num = env_->GetBackgroundThreads(Env::Priority::LOW);
-    assert(low_pri_threads_num > 0);
+    auto bottom_pri_threads_num =
+        env_->GetBackgroundThreads(Env::Priority::BOTTOM);
     if (!db_options_.disable_background_gc &&
         db_options_.max_background_gc > 0) {
       env_->IncBackgroundThreadsIfNeeded(
-          db_options_.max_background_gc + low_pri_threads_num,
-          Env::Priority::LOW);
-      assert(env_->GetBackgroundThreads(Env::Priority::LOW) ==
-             low_pri_threads_num + db_options_.max_background_gc);
+          db_options_.max_background_gc + bottom_pri_threads_num,
+          Env::Priority::BOTTOM);
+      assert(env_->GetBackgroundThreads(Env::Priority::BOTTOM) ==
+             bottom_pri_threads_num + db_options_.max_background_gc);
     }
     has_init_background_threads = true;
   }
@@ -244,6 +245,8 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       stats_->Initialize(column_families, db_->DefaultColumnFamily()->GetID());
     }
     ROCKS_LOG_INFO(db_options_.info_log, "Titan DB open.");
+    ROCKS_LOG_HEADER(db_options_.info_log, "Titan git sha: %s",
+                     titan_build_git_sha);
     db_options_.Dump(db_options_.info_log.get());
     for (auto& desc : descs) {
       ROCKS_LOG_HEADER(db_options_.info_log,
@@ -286,7 +289,7 @@ Status TitanDBImpl::CloseImpl() {
     shuting_down_.store(true, std::memory_order_release);
   }
 
-  int gc_unscheduled = env_->UnSchedule(this, Env::Priority::LOW);
+  int gc_unscheduled = env_->UnSchedule(this, Env::Priority::BOTTOM);
   {
     MutexLock l(&mutex_);
     bg_gc_scheduled_ -= gc_unscheduled;

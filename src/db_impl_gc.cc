@@ -14,6 +14,7 @@ void TitanDBImpl::MaybeScheduleGC() {
 
   if (shuting_down_.load(std::memory_order_acquire)) return;
 
+
   while (!gc_queue_.empty() &&
          bg_gc_scheduled_.load(std::memory_order_acquire) < db_options_.max_background_gc) {
     bg_gc_scheduled_.fetch_add(1, std::memory_order_release);
@@ -52,7 +53,7 @@ void TitanDBImpl::BackgroundCallGC() {
     }
     // IMPORTANT: there should be no code after calling SignalAll. This call may
     // signal the DB destructor that it's OK to proceed with destruction. In
-    // that case, all DB variables will be dealloacated and referencing them
+    // that case, all DB variables will be deallocated and referencing them
     // will cause trouble.
   }
 }
