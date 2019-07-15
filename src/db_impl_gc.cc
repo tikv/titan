@@ -18,11 +18,10 @@ void TitanDBImpl::MaybeScheduleGC() {
       db_options_.max_background_gc)
     return;
 
-  bg_gc_scheduled_.fetch_add(1, std::memory_order_release);
-
-  auto i = min(gc_queue_.size(), db_options_.max_background_gc - bg_gc_scheduled_);
+  auto i = std::min((int32_t)gc_queue_.size(),
+                    db_options_.max_background_gc - bg_gc_scheduled_);
   while (i--) {
-    bg_gc_scheduled_++;
+    bg_gc_scheduled_.fetch_add(1, std::memory_order_release);
     env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::BOTTOM, this);
   }
 }
