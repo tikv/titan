@@ -196,6 +196,7 @@ class TitanDBImpl : public TitanDB {
     return oldest_snapshot;
   }
 
+  // REQUIRE: mutex_ held
   Status SetBGError(const Status& s);
 
   Status GetBGError() {
