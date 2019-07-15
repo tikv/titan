@@ -20,7 +20,11 @@ void TitanDBImpl::MaybeScheduleGC() {
 
   bg_gc_scheduled_.fetch_add(1, std::memory_order_release);
 
-  env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::BOTTOM, this);
+  auto i = min(gc_queue_.size(), db_options_.max_background_gc - bg_gc_scheduled_);
+  while (i--) {
+    bg_gc_scheduled_++;
+    env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::BOTTOM, this);
+  }
 }
 
 void TitanDBImpl::BGWorkGC(void* db) {
@@ -44,6 +48,7 @@ void TitanDBImpl::BackgroundCallGC() {
     }
 
     bg_gc_scheduled_--;
+    MaybeScheduleGC();
     if (bg_gc_scheduled_ == 0) {
       // signal if
       // * bg_gc_scheduled_ == 0 -- need to wakeup ~TitanDBImpl
@@ -80,6 +85,11 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
         cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
         assert(column_family_id == cfh->GetID());
         blob_gc->SetColumnFamily(cfh.get());
+        if (blob_gc->trigger_next()) {
+          // there is still data remain to be GC
+          // and put this cf back to GC queue
+          AddToGCQueue(column_family_id);
+        }
       }
     }
   }
@@ -118,7 +128,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
 Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
   {
     MutexLock l(&mutex_);
-    bg_gc_scheduled_.fetch_add(1, std::memory_order_release);
+    bg_gc_scheduled_++;
   }
   // BackgroundCallGC
   Status s;
