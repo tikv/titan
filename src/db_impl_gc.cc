@@ -115,25 +115,6 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   return s;
 }
 
-Status TitanDBImpl::SetBGError(const Status& s) {
-  if (s.ok()) return s;
-  mutex_.AssertHeld();
-  Status bg_err = s;
-  if (!db_options_.listeners.empty()) {
-    // TODO(@jiayu) : check if mutex_ is freeable for futrue use case
-    mutex_.Unlock();
-    for (auto& listener : db_options_.listeners) {
-      listener->OnBackgroundError(BackgroundErrorReason::kCompaction, &bg_err);
-    }
-    mutex_.Lock();
-  }
-  if (!bg_err.ok()) {
-    bg_error_ = bg_err;
-    has_bg_error_.store(true);
-  }
-  return bg_err;
-}
-
 Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
   {
     MutexLock l(&mutex_);
