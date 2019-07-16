@@ -209,6 +209,7 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
   BlobFileMergeIterator iter(std::move(iters));
 
   iter.SeekToFirst();
+  int i = 1;
   for (;iter.Valid(); i++, iter.Next()) {
     ASSERT_OK(iter.status());
     ASSERT_TRUE(iter.Valid());
