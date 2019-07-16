@@ -14,9 +14,10 @@ void TitanDBImpl::MaybeScheduleGC() {
 
   if (shuting_down_.load(std::memory_order_acquire)) return;
 
-  auto i = std::min((int32_t)gc_queue_.size(),
-                    db_options_.max_background_gc - bg_gc_scheduled_.load(std::memory_order_acquire));
-  while (i--) {
+  while (unscheduled_gc_ > 0 &&
+         bg_gc_scheduled_.load(std::memory_order_acquire) <
+             db_options_.max_background_gc) {
+    unscheduled_gc_--;
     bg_gc_scheduled_.fetch_add(1, std::memory_order_release);
     env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::BOTTOM, this);
   }
@@ -123,7 +124,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
 Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
   {
     MutexLock l(&mutex_);
-    bg_gc_scheduled_++;
+    bg_gc_scheduled_.fetch_add(1, std::memory_order_release);
   }
   // BackgroundCallGC
   Status s;
