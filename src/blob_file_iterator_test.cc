@@ -210,7 +210,7 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
 
   iter.SeekToFirst();
   int i = 1;
-  for (;iter.Valid(); i++, iter.Next()) {
+  for (; iter.Valid(); i++, iter.Next()) {
     ASSERT_OK(iter.status());
     ASSERT_TRUE(iter.Valid());
     ASSERT_EQ(iter.key(), GenKey(i));
