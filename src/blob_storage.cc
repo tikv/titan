@@ -121,11 +121,11 @@ void BlobStorage::ComputeGCScore() {
     gc_score_.push_back({});
     auto& gcs = gc_score_.back();
     gcs.file_number = file.first;
+    gcs.score = 0;
     if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
-      gcs.score = 1;
-    } else {
-      gcs.score = file.second->GetDiscardableRatio();
+      gcs.score += 1;
     }
+    gcs.score += file.second->GetDiscardableRatio();
   }
 
   std::sort(gc_score_.begin(), gc_score_.end(),
