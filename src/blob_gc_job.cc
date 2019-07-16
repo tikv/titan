@@ -153,6 +153,7 @@ Status BlobGCJob::SampleCandidateFiles() {
     if (!s.ok()) {
       return s;
     }
+    file->UnsetGCMark();
     if (selected) {
       result.push_back(file);
     }
@@ -165,8 +166,10 @@ Status BlobGCJob::SampleCandidateFiles() {
 
 Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   assert(selected != nullptr);
-  if (file->GetDiscardableRatio() >=
-      blob_gc_->titan_cf_options().blob_file_discardable_ratio) {
+  if (file->file_size() <=
+          blob_gc_->titan_cf_options().merge_small_file_threshold ||
+      file->GetDiscardableRatio() >=
+          blob_gc_->titan_cf_options().blob_file_discardable_ratio) {
     *selected = true;
     return Status::OK();
   }
