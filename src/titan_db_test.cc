@@ -775,12 +775,13 @@ TEST_F(TitanDBTest, FallbackModeEncounterMissingBlobFile) {
 TEST_F(TitanDBTest, BackgroundErrorHandling) {
   options_.listeners.emplace_back(std::make_shared<BGErrorListener>());
   Open();
-  std::string key = "key", val;
+  std::string key = "key", val = "val";
   SetBGError(Status::IOError(""));
   // BG error is restored by listener for first time
   ASSERT_OK(db_->Put(WriteOptions(), key, val));
   SetBGError(Status::IOError(""));
   ASSERT_OK(db_->Get(ReadOptions(), key, &val));
+  ASSERT_EQ(val, "val");
   ASSERT_TRUE(db_->Put(WriteOptions(), key, val).IsIOError());
   ASSERT_TRUE(db_->Flush(FlushOptions()).IsIOError());
   ASSERT_TRUE(db_->Delete(WriteOptions(), key).IsIOError());

@@ -441,6 +441,47 @@ Status TitanDBImpl::CompactFiles(
   return s;
 }
 
+Status TitanDBImpl::Put(const rocksdb::WriteOptions& options,
+                        rocksdb::ColumnFamilyHandle* column_family,
+                        const rocksdb::Slice& key,
+                        const rocksdb::Slice& value) {
+  return HasBGError() ? GetBGError()
+                      : db_->Put(options, column_family, key, value);
+}
+
+Status TitanDBImpl::Write(const rocksdb::WriteOptions& options,
+                          rocksdb::WriteBatch* updates) {
+  return HasBGError() ? GetBGError() : db_->Write(options, updates);
+}
+
+Status TitanDBImpl::Delete(const rocksdb::WriteOptions& options,
+                           rocksdb::ColumnFamilyHandle* column_family,
+                           const rocksdb::Slice& key) {
+  return HasBGError() ? GetBGError() : db_->Delete(options, column_family, key);
+}
+
+Status TitanDBImpl::IngestExternalFile(
+    rocksdb::ColumnFamilyHandle* column_family,
+    const std::vector<std::string>& external_files,
+    const rocksdb::IngestExternalFileOptions& options) {
+  return HasBGError()
+             ? GetBGError()
+             : db_->IngestExternalFile(column_family, external_files, options);
+}
+
+Status TitanDBImpl::CompactRange(const rocksdb::CompactRangeOptions& options,
+                                 rocksdb::ColumnFamilyHandle* column_family,
+                                 const rocksdb::Slice* begin,
+                                 const rocksdb::Slice* end) {
+  return HasBGError() ? GetBGError()
+                      : db_->CompactRange(options, column_family, begin, end);
+}
+
+Status TitanDBImpl::Flush(const rocksdb::FlushOptions& options,
+                          rocksdb::ColumnFamilyHandle* column_family) {
+  return HasBGError() ? GetBGError() : db_->Flush(options, column_family);
+}
+
 Status TitanDBImpl::Get(const ReadOptions& options, ColumnFamilyHandle* handle,
                         const Slice& key, PinnableSlice* value) {
   if (options.snapshot) {

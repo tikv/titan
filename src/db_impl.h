@@ -45,44 +45,28 @@ class TitanDBImpl : public TitanDB {
 
   using TitanDB::Put;
   Status Put(const WriteOptions& options, ColumnFamilyHandle* column_family,
-             const Slice& key, const Slice& val) override {
-    return HasBGError() ? GetBGError()
-                        : db_->Put(options, column_family, key, val);
-  }
+             const Slice& key, const Slice& value) override;
 
   using TitanDB::Write;
-  Status Write(const WriteOptions& opts, WriteBatch* updates) override {
-    return HasBGError() ? GetBGError() : db_->Write(opts, updates);
-  }
+  Status Write(const WriteOptions& options, WriteBatch* updates) override;
 
   using TitanDB::Delete;
-  Status Delete(const WriteOptions& wopts, ColumnFamilyHandle* column_family,
-                const Slice& key) override {
-    return HasBGError() ? GetBGError() : db_->Delete(wopts, column_family, key);
-  }
+  Status Delete(const WriteOptions& options, ColumnFamilyHandle* column_family,
+                const Slice& key) override;
 
   using TitanDB::IngestExternalFile;
   Status IngestExternalFile(ColumnFamilyHandle* column_family,
                             const std::vector<std::string>& external_files,
-                            const IngestExternalFileOptions& options) override {
-    return HasBGError() ? GetBGError()
-                        : db_->IngestExternalFile(column_family, external_files,
-                                                  options);
-  }
+                            const IngestExternalFileOptions& options) override;
 
   using TitanDB::CompactRange;
   Status CompactRange(const CompactRangeOptions& options,
                       ColumnFamilyHandle* column_family, const Slice* begin,
-                      const Slice* end) override {
-    return HasBGError() ? GetBGError()
-                        : db_->CompactRange(options, column_family, begin, end);
-  }
+                      const Slice* end) override;
 
   using TitanDB::Flush;
   Status Flush(const FlushOptions& fopts,
-               ColumnFamilyHandle* column_family) override {
-    return HasBGError() ? GetBGError() : db_->Flush(fopts, column_family);
-  }
+               ColumnFamilyHandle* column_family) override;
 
   using TitanDB::Get;
   Status Get(const ReadOptions& options, ColumnFamilyHandle* handle,
