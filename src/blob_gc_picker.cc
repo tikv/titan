@@ -27,6 +27,9 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   uint64_t next_gc_size = 0;
   for (auto& gc_score : blob_storage->gc_score()) {
     auto blob_file = blob_storage->FindFile(gc_score.file_number).lock();
+    // maybe already GCed and deleted
+    if (!blob_file) continue;
+
     assert(blob_file);
 
     //    ROCKS_LOG_INFO(db_options_.info_log,
