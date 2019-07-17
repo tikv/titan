@@ -13,7 +13,7 @@ namespace titandb {
 class BlobGC {
  public:
   BlobGC(std::vector<BlobFileMeta*>&& blob_files,
-         TitanCFOptions&& _titan_cf_options, bool need_trigger_next = false);
+         TitanCFOptions&& _titan_cf_options, bool need_trigger_next);
 
   // No copying allowed
   BlobGC(const BlobGC&) = delete;

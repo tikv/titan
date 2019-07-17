@@ -203,6 +203,7 @@ class TitanDBImpl : public TitanDB {
   std::deque<uint32_t> gc_queue_;
 
   std::atomic_int bg_gc_scheduled_{0};
+  // REQUIRE: mutex_ held
   int unscheduled_gc_{0};
 
   std::atomic_bool shuting_down_{false};
