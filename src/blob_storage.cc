@@ -121,7 +121,8 @@ void BlobStorage::ComputeGCScore() {
     gc_score_.push_back({});
     auto& gcs = gc_score_.back();
     gcs.file_number = file.first;
-    if (file.second->file_size() < cf_options_.merge_small_file_threshold || file.second->gc_mark()) {
+    if (file.second->file_size() < cf_options_.merge_small_file_threshold ||
+        file.second->gc_mark()) {
       gcs.score = cf_options_.blob_file_discardable_ratio;
     } else {
       gcs.score = file.second->GetDiscardableRatio();

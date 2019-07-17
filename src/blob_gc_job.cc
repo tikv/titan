@@ -156,7 +156,7 @@ Status BlobGCJob::SampleCandidateFiles() {
     }
     if (selected) {
       result.push_back(file);
-    }else{
+    } else {
       // this update the discardable size of this file according to sample
       file->AddDiscardableSize(estimate_discardable_size);
     };
@@ -167,7 +167,8 @@ Status BlobGCJob::SampleCandidateFiles() {
   return Status::OK();
 }
 
-Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected, uint64_t &estimate_discardable_size) {
+Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected,
+                           uint64_t& estimate_discardable_size) {
   assert(selected != nullptr);
   if (file->file_size() <=
           blob_gc_->titan_cf_options().merge_small_file_threshold ||
@@ -233,7 +234,8 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected, uint64_t &e
   metrics_.blob_db_bytes_read += iterated_size;
   assert(iter.status().ok());
 
-  estimate_discardable_size = discardable_size / sample_size_window * file->file_size();
+  estimate_discardable_size =
+      discardable_size / sample_size_window * file->file_size();
   *selected =
       discardable_size >=
       std::ceil(sample_size_window *

@@ -137,9 +137,9 @@ class BlobFileMeta {
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
   uint64_t discardable_size() const { return discardable_size_; }
 
-  bool gc_mark() const {return gc_mark_;}
-  void SetGCMark() {gc_mark_ = true;}
-  void UnsetGCMark() {gc_mark_ = false;}
+  bool gc_mark() const { return gc_mark_; }
+  void SetGCMark() { gc_mark_ = true; }
+  void UnsetGCMark() { gc_mark_ = false; }
 
   void FileStateTransit(const FileEvent& event);
 

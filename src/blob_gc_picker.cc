@@ -28,7 +28,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   for (auto& gc_score : blob_storage->gc_score()) {
     auto blob_file = blob_storage->FindFile(gc_score.file_number).lock();
     assert(blob_file);
-    if(!blob_file || blob_file->file_state() == BlobFileMeta::FileState::kBeingGC){
+    if (!blob_file ||
+        blob_file->file_state() == BlobFileMeta::FileState::kBeingGC) {
       // skip this file id this file is being GC
       // or this file had been GC
       continue;
