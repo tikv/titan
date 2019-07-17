@@ -58,6 +58,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       }
     } else {
       if (blob_file->file_size() <= cf_options_.merge_small_file_threshold ||
+          blob_file->gc_mark() ||
           blob_file->GetDiscardableRatio() >=
               cf_options_.blob_file_discardable_ratio) {
         next_gc_size += blob_file->file_size();
