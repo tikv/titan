@@ -81,9 +81,10 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
         cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
         assert(column_family_id == cfh->GetID());
         blob_gc->SetColumnFamily(cfh.get());
-        if (blob_gc->trigger_next()) {
+        if (blob_gc->trigger_next() && gc_queue_.size() < 50) {
           // there is still data remain to be GC
-          // and put this cf back to GC queue
+          // and the queue is not overwhelmed
+          // then put this cf to GC queue for next GC
           AddToGCQueue(column_family_id);
         }
       }
