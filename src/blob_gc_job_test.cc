@@ -185,7 +185,7 @@ class BlobGCJobTest : public testing::Test {
     auto rewrite_status = base_db_->Write(WriteOptions(), &wb);
 
     std::vector<BlobFileMeta*> tmp;
-    BlobGC blob_gc(std::move(tmp), TitanCFOptions());
+    BlobGC blob_gc(std::move(tmp), TitanCFOptions(), false);
     blob_gc.SetColumnFamily(cfh);
     BlobGCJob blob_gc_job(&blob_gc, base_db_, mutex_, TitanDBOptions(),
                           Env::Default(), EnvOptions(), nullptr, version_set_,
