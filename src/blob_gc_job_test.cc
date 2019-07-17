@@ -294,19 +294,19 @@ TEST_F(BlobGCJobTest, PurgeBlobs) {
 
   db_->ReleaseSnapshot(snap2);
   RunGC();
-  CheckBlobNumber(2);
+  CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap3);
   RunGC();
-  CheckBlobNumber(2);
+  CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap1);
   RunGC();
-  CheckBlobNumber(2);
+  CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap4);
   RunGC();
-  CheckBlobNumber(1);
+  CheckBlobNumber(2);
 
   db_->ReleaseSnapshot(snap5);
   RunGC();
