@@ -8,3 +8,4 @@ titandb_stress
 build/
 .idea/
 .vscode/
+cmake-build-debug/

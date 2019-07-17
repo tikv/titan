@@ -96,7 +96,7 @@ void BlobFileIterator::GetBlobRecord() {
 
   Slice record_slice;
   auto record_size = decoder_.GetRecordSize();
-  buffer_.reserve(record_size);
+  buffer_.resize(record_size);
   status_ = file_->Read(iterate_offset_ + kBlobHeaderSize, record_size,
                         &record_slice, buffer_.data());
   if (status_.ok()) {
@@ -167,11 +167,15 @@ void BlobFileMergeIterator::SeekToFirst() {
 }
 
 void BlobFileMergeIterator::Next() {
-  assert(current_ != nullptr);
+  assert(Valid());
   current_->Next();
   if (current_->status().ok() && current_->Valid()) min_heap_.push(current_);
-  current_ = min_heap_.top();
-  min_heap_.pop();
+  if (!min_heap_.empty()) {
+    current_ = min_heap_.top();
+    min_heap_.pop();
+  } else {
+    current_ = nullptr;
+  }
 }
 
 Slice BlobFileMergeIterator::key() const {

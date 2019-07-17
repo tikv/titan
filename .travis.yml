@@ -4,6 +4,9 @@ language: cpp
 
 os:
   - linux
+  - osx
+compiler: clang
+osx_image: xcode10.2
 
 addons:
   apt:
@@ -16,21 +19,37 @@ addons:
       - lcov
       - clang-format-7
 
+env:
+  - BUILD_TYPE="Release"
+  - SANITIZER="ASAN"
+  - SANITIZER="TSAN"
+  - SANITIZER="UBSAN"
+
 # For GCC build, we also report code coverage to codecov.
 matrix:
-  include:
-    - compiler: clang
-      env: BUILD_TYPE="Release"
-    - compiler: clang
-      env: SANITIZER="ASAN"
-    - compiler: clang
+  exclude:
+    - os: osx
       env: SANITIZER="TSAN"
-    - compiler: clang
+    - os: osx
       env: SANITIZER="UBSAN"
-    - env: COMPILER=gcc7
-    - env: FORMATTER=ON
+    - os: osx
+      env: BUILD_TYPE="Release"
+  include:
+    - os: linux
+      compiler:
+      env:
+        - COMPILER=gcc7
+    - os: linux
+      compiler:
+      env:
+        - FORMATTER=ON
+
 
 install:
+  # osx dependencies
+  - if [ "${TRAVIS_OS_NAME}" == osx ]; then
+      brew install gflags zstd lz4 snappy xz;
+    fi
   - git clone --depth=1 --branch=tikv-3.0 https://github.com/pingcap/rocksdb.git
   - export CTEST_OUTPUT_ON_FAILURE=1
   - if [ "${COMPILER}" == gcc7 ]; then
