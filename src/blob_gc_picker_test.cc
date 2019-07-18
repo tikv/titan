@@ -149,6 +149,34 @@ TEST_F(BlobGCPickerTest, PickFileAndTriggerNext) {
   ASSERT_EQ(blob_gc->inputs().size(), 7);
 }
 
+TEST_F(BlobGCPickerTest, ParallelPickGC) {
+  TitanDBOptions titan_db_options;
+  TitanCFOptions titan_cf_options;
+  titan_cf_options.max_gc_batch_size = 1 << 30;
+  titan_cf_options.blob_file_target_size = 256 << 20;
+  NewBlobStorageAndPicker(titan_db_options, titan_cf_options);
+  for (size_t i = 1; i < 15; i++) {
+    // add 70 files with 10MB valid data each file
+    AddBlobFile(i, titan_cf_options.blob_file_target_size, 246 << 20);
+  }
+  UpdateBlobStorage();
+  auto blob_gc1 = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  ASSERT_TRUE(blob_gc1 != nullptr);
+  ASSERT_EQ(blob_gc1->trigger_next(), true);
+  ASSERT_EQ(blob_gc1->inputs().size(), 7);
+  auto blob_gc2 = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  ASSERT_TRUE(blob_gc2 != nullptr);
+  ASSERT_EQ(blob_gc2->trigger_next(), false);
+  ASSERT_EQ(blob_gc2->inputs().size(), 7);
+  for (auto file : blob_gc1->inputs()) {
+    RemoveBlobFile(file->file_number());
+  }
+  for (auto file : blob_gc2->inputs()) {
+    RemoveBlobFile(file->file_number());
+  }
+  UpdateBlobStorage();
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
 
