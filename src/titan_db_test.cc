@@ -225,6 +225,30 @@ class TitanDBTest : public testing::Test {
     DeleteDir(env_, dbname_);
   }
 
+  void SetBGError(const Status& s) {
+    MutexLock l(&db_impl_->mutex_);
+    db_impl_->SetBGError(s);
+  }
+
+  void CallGC() {
+    db_impl_->bg_gc_scheduled_++;
+    db_impl_->BackgroundCallGC();
+    while (db_impl_->bg_gc_scheduled_)
+      ;
+  }
+
+  // Make db ignore first bg_error
+  class BGErrorListener : public EventListener {
+   public:
+    void OnBackgroundError(BackgroundErrorReason reason,
+                           Status* error) override {
+      if (++cnt == 1) *error = Status();
+    }
+
+   private:
+    int cnt{0};
+  };
+
   Env* env_{Env::Default()};
   std::string dbname_;
   TitanOptions options_;
@@ -746,6 +770,49 @@ TEST_F(TitanDBTest, FallbackModeEncounterMissingBlobFile) {
   Slice end("foo1");
   ASSERT_OK(db_->CompactRange(CompactRangeOptions(), &begin, &end));
   VerifyDB({{"bar", "v1"}});
+}
+
+TEST_F(TitanDBTest, BackgroundErrorHandling) {
+  options_.listeners.emplace_back(std::make_shared<BGErrorListener>());
+  Open();
+  std::string key = "key", val = "val";
+  SetBGError(Status::IOError(""));
+  // BG error is restored by listener for first time
+  ASSERT_OK(db_->Put(WriteOptions(), key, val));
+  SetBGError(Status::IOError(""));
+  ASSERT_OK(db_->Get(ReadOptions(), key, &val));
+  ASSERT_EQ(val, "val");
+  ASSERT_TRUE(db_->Put(WriteOptions(), key, val).IsIOError());
+  ASSERT_TRUE(db_->Flush(FlushOptions()).IsIOError());
+  ASSERT_TRUE(db_->Delete(WriteOptions(), key).IsIOError());
+  ASSERT_TRUE(
+      db_->CompactRange(CompactRangeOptions(), nullptr, nullptr).IsIOError());
+  ASSERT_TRUE(
+      db_->CompactFiles(CompactionOptions(), std::vector<std::string>(), 1)
+          .IsIOError());
+  Close();
+}
+TEST_F(TitanDBTest, BackgroundErrorTrigger) {
+  std::unique_ptr<TitanFaultInjectionTestEnv> mock_env(
+      new TitanFaultInjectionTestEnv(env_));
+  options_.env = mock_env.get();
+  Open();
+  std::map<std::string, std::string> data;
+  const int kNumEntries = 100;
+  for (uint64_t i = 1; i <= kNumEntries; i++) {
+    Put(i, &data);
+  }
+  Flush();
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+  SyncPoint::GetInstance()->SetCallBack("VersionSet::LogAndApply", [&](void*) {
+    mock_env->SetFilesystemActive(false, Status::IOError("Injected error"));
+  });
+  SyncPoint::GetInstance()->EnableProcessing();
+  CallGC();
+  mock_env->SetFilesystemActive(true);
+  // Still failed for bg error
+  ASSERT_TRUE(db_impl_->Put(WriteOptions(), "key", "val").IsIOError());
+  Close();
 }
 
 }  // namespace titandb
