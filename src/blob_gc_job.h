@@ -73,8 +73,7 @@ class BlobGCJob {
   } metrics_;
 
   Status SampleCandidateFiles();
-  Status DoSample(const BlobFileMeta* file, bool* selected,
-                  uint64_t& estimate_disacrdable_size);
+  Status DoSample(const BlobFileMeta* file, bool* selected);
   Status DoRunGC();
   Status BuildIterator(std::unique_ptr<BlobFileMergeIterator>* result);
   Status DiscardEntry(const Slice& key, const BlobIndex& blob_index,

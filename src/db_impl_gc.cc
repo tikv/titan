@@ -81,12 +81,6 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
         cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
         assert(column_family_id == cfh->GetID());
         blob_gc->SetColumnFamily(cfh.get());
-        if (blob_gc->trigger_next() && gc_queue_.size() < 50) {
-          // there is still data remain to be GC
-          // and the queue is not overwhelmed
-          // then put this cf to GC queue for next GC
-          AddToGCQueue(column_family_id);
-        }
       }
     }
   }
@@ -110,6 +104,15 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
       s = blob_gc_job.Finish();
     }
     blob_gc->ReleaseGcFiles();
+
+    if (blob_gc->trigger_next() &&
+        (bg_gc_scheduled_ - 1 + gc_queue_.size() <
+         2 * static_cast<uint32_t>(db_options_.max_background_gc))) {
+      // there is still data remain to be GC
+      // and the queue is not overwhelmed
+      // then put this cf to GC queue for next GC
+      AddToGCQueue(blob_gc->column_family_handle()->GetID());
+    }
   }
 
   if (s.ok()) {
