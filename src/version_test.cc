@@ -83,7 +83,7 @@ class VersionTest : public testing::Test {
     for (auto& edit : edits) {
       ASSERT_OK(collector.AddEdit(edit));
     }
-    ASSERT_OK(collector.Check(*vset_.get()));
+    ASSERT_OK(collector.Seal(*vset_.get()));
     ASSERT_OK(collector.Apply(*vset_.get()));
     for (auto& it : vset_->column_families_) {
       auto& storage = column_families_[it.first];
@@ -148,7 +148,7 @@ TEST_F(VersionTest, InvalidEdit) {
     auto add1_0_4 = AddBlobFilesEdit(1, 0, 4);
     EditCollector collector;
     ASSERT_OK(collector.AddEdit(add1_0_4));
-    ASSERT_OK(collector.Check(*vset_.get()));
+    ASSERT_OK(collector.Seal(*vset_.get()));
     ASSERT_OK(collector.Apply(*vset_.get()));
   }
 
@@ -157,7 +157,7 @@ TEST_F(VersionTest, InvalidEdit) {
     auto del1_4_6 = DeleteBlobFilesEdit(1, 4, 6);
     EditCollector collector;
     ASSERT_OK(collector.AddEdit(del1_4_6));
-    ASSERT_NOK(collector.Check(*vset_.get()));
+    ASSERT_NOK(collector.Seal(*vset_.get()));
     ASSERT_NOK(collector.Apply(*vset_.get()));
   }
 
@@ -166,7 +166,7 @@ TEST_F(VersionTest, InvalidEdit) {
     auto add1_1_3 = AddBlobFilesEdit(1, 1, 3);
     EditCollector collector;
     ASSERT_OK(collector.AddEdit(add1_1_3));
-    ASSERT_NOK(collector.Check(*vset_.get()));
+    ASSERT_NOK(collector.Seal(*vset_.get()));
     ASSERT_NOK(collector.Apply(*vset_.get()));
   }
 
@@ -177,7 +177,7 @@ TEST_F(VersionTest, InvalidEdit) {
     EditCollector collector;
     ASSERT_OK(collector.AddEdit(add1_4_5_1));
     ASSERT_NOK(collector.AddEdit(add1_4_5_2));
-    ASSERT_NOK(collector.Check(*vset_.get()));
+    ASSERT_NOK(collector.Seal(*vset_.get()));
     ASSERT_NOK(collector.Apply(*vset_.get()));
   }
 
@@ -188,7 +188,7 @@ TEST_F(VersionTest, InvalidEdit) {
     EditCollector collector;
     ASSERT_OK(collector.AddEdit(del1_3_4_1));
     ASSERT_NOK(collector.AddEdit(del1_3_4_2));
-    ASSERT_NOK(collector.Check(*vset_.get()));
+    ASSERT_NOK(collector.Seal(*vset_.get()));
     ASSERT_NOK(collector.Apply(*vset_.get()));
   }
 }

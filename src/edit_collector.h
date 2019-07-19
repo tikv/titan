@@ -11,9 +11,17 @@
 namespace rocksdb {
 namespace titandb {
 
+// A collector to apply edits in batch.
+// The functions should be called in the sequence:
+//    AddEdit() -> Seal() -> Apply()
 class EditCollector {
  public:
+  // Add the edit into the batch.
   Status AddEdit(const VersionEdit& edit) {
+    if (sealed_)
+      return Status::Corruption(
+          "Should be not called after Sealed() is called.");
+
     auto cf_id = edit.column_family_id_;
     auto& collector = column_families_[cf_id];
 
@@ -40,10 +48,9 @@ class EditCollector {
     return Status::OK();
   }
 
-  Status Check(VersionSet& vset) {
-    if (!status_.ok()) {
-      return status_;
-    }
+  // Seal the batch and check the validation of the edits.
+  Status Seal(VersionSet& vset) {
+    if (!status_.ok()) return status_;
 
     for (auto& cf : column_families_) {
       auto cf_id = cf.first;
@@ -55,25 +62,20 @@ class EditCollector {
         // will be regarded as obsolete and deleted.
         continue;
       }
-      status_ = cf.second.Check(storage);
+      status_ = cf.second.Seal(storage.get());
       if (!status_.ok()) return status_;
     }
 
-    checked_ = true;
+    sealed_ = true;
     return Status::OK();
   }
 
+  // Apply the edits of the batch.
   Status Apply(VersionSet& vset) {
-    if (!status_.ok()) {
-      return status_;
-    }
-
-    if (!checked_) {
-      status_ = Check(vset);
-      if (!status_.ok()) {
-        return status_;
-      }
-    }
+    if (!status_.ok()) return status_;
+    if (!sealed_)
+      return Status::Corruption(
+          "Should be not called until Sealed() is called.");
 
     for (auto& cf : column_families_) {
       auto cf_id = cf.first;
@@ -85,7 +87,7 @@ class EditCollector {
         // will be regarded as obsolete and deleted.
         continue;
       }
-      status_ = cf.second.Apply(storage);
+      status_ = cf.second.Apply(storage.get());
       if (!status_.ok()) return status_;
     }
 
@@ -124,7 +126,7 @@ class EditCollector {
       return Status::OK();
     }
 
-    Status Check(shared_ptr<BlobStorage>& storage) {
+    Status Seal(BlobStorage* storage) {
       for (auto& file : added_files_) {
         auto number = file.first;
         auto blob = storage->FindFile(number).lock();
@@ -169,7 +171,7 @@ class EditCollector {
       return Status::OK();
     }
 
-    Status Apply(shared_ptr<BlobStorage>& storage) {
+    Status Apply(BlobStorage* storage) {
       for (auto& file : added_files_) {
         // just skip paired added and deleted files
         if (deleted_files_.count(file.first) > 0) {
@@ -201,7 +203,8 @@ class EditCollector {
   };
 
   Status status_{Status::OK()};
-  bool checked_{false};
+  //
+  bool sealed_{false};
   bool has_next_file_number_{false};
   uint64_t next_file_number_{0};
   std::unordered_map<uint32_t, CFEditCollector> column_families_;

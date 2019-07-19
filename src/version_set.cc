@@ -82,7 +82,7 @@ Status VersionSet::Recover() {
       s = collector.AddEdit(edit);
       if (!s.ok()) return s;
     }
-    s = collector.Check(*this);
+    s = collector.Seal(*this);
     if (!s.ok()) return s;
     s = collector.Apply(*this);
     if (!s.ok()) return s;
@@ -216,7 +216,7 @@ Status VersionSet::LogAndApply(VersionEdit& edit) {
   EditCollector collector;
   Status s = collector.AddEdit(edit);
   if (!s.ok()) return s;
-  s = collector.Check(*this);
+  s = collector.Seal(*this);
   if (!s.ok()) return s;
   s = manifest_->AddRecord(record);
   if (!s.ok()) return s;
