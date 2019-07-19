@@ -20,7 +20,7 @@ class EditCollector {
   Status AddEdit(const VersionEdit& edit) {
     if (sealed_)
       return Status::Corruption(
-          "Should be not called after Sealed() is called.");
+          "Should be not called after Sealed() is called");
 
     auto cf_id = edit.column_family_id_;
     auto& collector = column_families_[cf_id];
@@ -75,7 +75,7 @@ class EditCollector {
     if (!status_.ok()) return status_;
     if (!sealed_)
       return Status::Corruption(
-          "Should be not called until Sealed() is called.");
+          "Should be not called until Sealed() is called");
 
     for (auto& cf : column_families_) {
       auto cf_id = cf.first;
@@ -188,7 +188,8 @@ class EditCollector {
         }
         auto blob = storage->FindFile(number).lock();
         if (!blob) {
-          return Status::NotFound("invalid file number");
+          return Status::NotFound("Invalid file number " +
+                                  std::to_string(number));
         }
         storage->MarkFileObsolete(blob, file.second);
       }
