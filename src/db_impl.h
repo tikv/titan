@@ -43,6 +43,31 @@ class TitanDBImpl : public TitanDB {
 
   Status CloseImpl();
 
+  using TitanDB::Put;
+  Status Put(const WriteOptions& options, ColumnFamilyHandle* column_family,
+             const Slice& key, const Slice& value) override;
+
+  using TitanDB::Write;
+  Status Write(const WriteOptions& options, WriteBatch* updates) override;
+
+  using TitanDB::Delete;
+  Status Delete(const WriteOptions& options, ColumnFamilyHandle* column_family,
+                const Slice& key) override;
+
+  using TitanDB::IngestExternalFile;
+  Status IngestExternalFile(ColumnFamilyHandle* column_family,
+                            const std::vector<std::string>& external_files,
+                            const IngestExternalFileOptions& options) override;
+
+  using TitanDB::CompactRange;
+  Status CompactRange(const CompactRangeOptions& options,
+                      ColumnFamilyHandle* column_family, const Slice* begin,
+                      const Slice* end) override;
+
+  using TitanDB::Flush;
+  Status Flush(const FlushOptions& fopts,
+               ColumnFamilyHandle* column_family) override;
+
   using TitanDB::Get;
   Status Get(const ReadOptions& options, ColumnFamilyHandle* handle,
              const Slice& key, PinnableSlice* value) override;
@@ -155,6 +180,16 @@ class TitanDBImpl : public TitanDB {
     return oldest_snapshot;
   }
 
+  // REQUIRE: mutex_ held
+  Status SetBGError(const Status& s);
+
+  Status GetBGError() {
+    MutexLock l(&mutex_);
+    return bg_error_;
+  }
+
+  bool HasBGError() { return has_bg_error_.load(); }
+
   FileLock* lock_{nullptr};
   // The lock sequence must be Titan.mutex_.Lock() -> Base DB mutex_.Lock()
   // while the unlock sequence must be Base DB mutex.Unlock() ->
@@ -171,6 +206,9 @@ class TitanDBImpl : public TitanDB {
   EnvOptions env_options_;
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
+  // Turn DB into read-only if background error happened
+  Status bg_error_;
+  std::atomic_bool has_bg_error_{false};
 
   // TitanStats is turned on only if statistics field of DBOptions
   // is not null.

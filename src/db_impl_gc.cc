@@ -20,7 +20,7 @@ void TitanDBImpl::MaybeScheduleGC() {
 
   bg_gc_scheduled_.fetch_add(1, std::memory_order_release);
 
-  env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::LOW, this);
+  env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::BOTTOM, this);
 }
 
 void TitanDBImpl::BGWorkGC(void* db) {
@@ -53,7 +53,7 @@ void TitanDBImpl::BackgroundCallGC() {
     }
     // IMPORTANT: there should be no code after calling SignalAll. This call may
     // signal the DB destructor that it's OK to proceed with destruction. In
-    // that case, all DB variables will be dealloacated and referencing them
+    // that case, all DB variables will be deallocated and referencing them
     // will cause trouble.
   }
 }
@@ -65,7 +65,6 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   std::unique_ptr<BlobGC> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;
   Status s;
-
   if (!gc_queue_.empty()) {
     uint32_t column_family_id = PopFirstFromGCQueue();
     auto bs = vset_->GetBlobStorage(column_family_id).lock().get();
@@ -108,6 +107,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   if (s.ok()) {
     // Done
   } else {
+    SetBGError(s);
     ROCKS_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
                    s.ToString().c_str());
   }

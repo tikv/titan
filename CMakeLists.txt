@@ -14,12 +14,13 @@ include_directories(${ROCKSDB_DIR})
 include_directories(${ROCKSDB_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/src)
+include_directories(${PROJECT_SOURCE_DIR}/util)
 
 file(GLOB SOURCES src/*.cc)
 file(GLOB TEST_SOURCES src/*test.cc)
 list(REMOVE_ITEM SOURCES ${TEST_SOURCES})
 
-add_library(titan STATIC ${SOURCES})
+add_library(titan STATIC ${SOURCES} $<TARGET_OBJECTS:titan_build_version>)
 
 option(WITH_TITAN_TESTS "Build with tests." ON)
 option(WITH_TITAN_TOOLS "Build with tools." ON)
@@ -30,6 +31,24 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(WITH_TITAN_TESTS OFF)
 endif()
 
+find_package(Git)
+if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+  if(WIN32)
+    execute_process(COMMAND $ENV{COMSPEC} /C ${GIT_EXECUTABLE} rev-parse HEAD OUTPUT_VARIABLE GIT_SHA)
+  else()
+    execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse HEAD OUTPUT_VARIABLE GIT_SHA)
+  endif()
+else()
+  set(GIT_SHA 0)
+endif()
+string(REGEX REPLACE "[^0-9a-f]+" "" GIT_SHA "${GIT_SHA}")
+
+set(TITAN_BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/titan_build_version.cc)
+configure_file(util/titan_build_version.cc.in ${TITAN_BUILD_VERSION_CC} @ONLY)
+add_library(titan_build_version OBJECT ${TITAN_BUILD_VERSION_CC})
+target_include_directories(titan_build_version PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/util)
+
 if (CODE_COVERAGE)
   target_compile_options(titan PRIVATE "--coverage")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
@@ -38,7 +57,11 @@ endif()
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
   add_subdirectory(${ROCKSDB_DIR} rocksdb EXCLUDE_FROM_ALL)
   # -latomic is needed when building titandb_stress using clang.
-  link_libraries(atomic)
+  # check if libatomic exist before link
+  find_library(HAS_ATOMIC NAMES atomic libatomic.so.1 atomic.so.1)
+  if (HAS_ATOMIC)
+    link_libraries(atomic)
+  endif()
 endif()
 
 if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
@@ -79,8 +102,10 @@ if (WITH_TITAN_TOOLS)
   else()
     # Hack: On Travis (with Ubuntu xenial or before), libgflags-dev package doesn't come with
     # gflags-config.cmake, so find_package will fail. Hard-code gflag path for now.
-    set(gflags_INCLUDE_DIR "/usr/include/gflags")
-    list(APPEND TOOLS_LIBS "/usr/lib/x86_64-linux-gnu/libgflags.a")
+    if (NOT APPLE)
+      set(gflags_INCLUDE_DIR "/usr/include/gflags")
+      list(APPEND TOOLS_LIBS "/usr/lib/x86_64-linux-gnu/libgflags.a")
+    endif()
   endif()
   add_definitions(-DGFLAGS)
 
