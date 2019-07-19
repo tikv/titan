@@ -73,6 +73,9 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     {
       MutexLock l(&db_->mutex_);
       s = db_->vset_->LogAndApply(edit);
+      if (!s.ok()) {
+        db_->SetBGError(s);
+      }
       for (const auto& file : files)
         db_->pending_outputs_.erase(file.second->GetNumber());
     }
@@ -422,6 +425,7 @@ Status TitanDBImpl::CompactFiles(
     const std::vector<std::string>& input_file_names, const int output_level,
     const int output_path_id, std::vector<std::string>* const output_file_names,
     CompactionJobInfo* compaction_job_info) {
+  if (HasBGError()) return GetBGError();
   std::unique_ptr<CompactionJobInfo> compaction_job_info_ptr;
   if (compaction_job_info == nullptr) {
     compaction_job_info_ptr.reset(new CompactionJobInfo());
@@ -435,6 +439,47 @@ Status TitanDBImpl::CompactFiles(
   }
 
   return s;
+}
+
+Status TitanDBImpl::Put(const rocksdb::WriteOptions& options,
+                        rocksdb::ColumnFamilyHandle* column_family,
+                        const rocksdb::Slice& key,
+                        const rocksdb::Slice& value) {
+  return HasBGError() ? GetBGError()
+                      : db_->Put(options, column_family, key, value);
+}
+
+Status TitanDBImpl::Write(const rocksdb::WriteOptions& options,
+                          rocksdb::WriteBatch* updates) {
+  return HasBGError() ? GetBGError() : db_->Write(options, updates);
+}
+
+Status TitanDBImpl::Delete(const rocksdb::WriteOptions& options,
+                           rocksdb::ColumnFamilyHandle* column_family,
+                           const rocksdb::Slice& key) {
+  return HasBGError() ? GetBGError() : db_->Delete(options, column_family, key);
+}
+
+Status TitanDBImpl::IngestExternalFile(
+    rocksdb::ColumnFamilyHandle* column_family,
+    const std::vector<std::string>& external_files,
+    const rocksdb::IngestExternalFileOptions& options) {
+  return HasBGError()
+             ? GetBGError()
+             : db_->IngestExternalFile(column_family, external_files, options);
+}
+
+Status TitanDBImpl::CompactRange(const rocksdb::CompactRangeOptions& options,
+                                 rocksdb::ColumnFamilyHandle* column_family,
+                                 const rocksdb::Slice* begin,
+                                 const rocksdb::Slice* end) {
+  return HasBGError() ? GetBGError()
+                      : db_->CompactRange(options, column_family, begin, end);
+}
+
+Status TitanDBImpl::Flush(const rocksdb::FlushOptions& options,
+                          rocksdb::ColumnFamilyHandle* column_family) {
+  return HasBGError() ? GetBGError() : db_->Flush(options, column_family);
 }
 
 Status TitanDBImpl::Get(const ReadOptions& options, ColumnFamilyHandle* handle,
@@ -865,6 +910,25 @@ void TitanDBImpl::OnCompactionCompleted(
     AddToGCQueue(compaction_job_info.cf_id);
     MaybeScheduleGC();
   }
+}
+
+Status TitanDBImpl::SetBGError(const Status& s) {
+  if (s.ok()) return s;
+  mutex_.AssertHeld();
+  Status bg_err = s;
+  if (!db_options_.listeners.empty()) {
+    // TODO(@jiayu) : check if mutex_ is freeable for future use case
+    mutex_.Unlock();
+    for (auto& listener : db_options_.listeners) {
+      listener->OnBackgroundError(BackgroundErrorReason::kCompaction, &bg_err);
+    }
+    mutex_.Lock();
+  }
+  if (!bg_err.ok()) {
+    bg_error_ = bg_err;
+    has_bg_error_.store(true);
+  }
+  return bg_err;
 }
 
 }  // namespace titandb
