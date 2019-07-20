@@ -34,12 +34,10 @@ void BlobGC::MarkFilesBeingGC() {
 void BlobGC::ReleaseGcFiles() {
   for (auto& f : inputs_) {
     f->FileStateTransit(BlobFileMeta::FileEvent::kGCCompleted);
-    if (f->gc_mark()) f->UnsetGCMark();
   }
 
   for (auto& f : outputs_) {
     f->FileStateTransit(BlobFileMeta::FileEvent::kGCCompleted);
-    if (f->gc_mark()) f->UnsetGCMark();
   }
 }
 
