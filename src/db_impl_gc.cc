@@ -107,7 +107,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
     if (blob_gc->trigger_next() &&
         (bg_gc_scheduled_ - 1 + gc_queue_.size() <
          2 * static_cast<uint32_t>(db_options_.max_background_gc))) {
-      // there is still data remain to be GC
+      // There is still data remained to be GCed
       // and the queue is not overwhelmed
       // then put this cf to GC queue for next GC
       AddToGCQueue(blob_gc->column_family_handle()->GetID());

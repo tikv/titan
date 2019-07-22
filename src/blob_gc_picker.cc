@@ -30,7 +30,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     assert(blob_file);
     if (!blob_file ||
         blob_file->file_state() == BlobFileMeta::FileState::kBeingGC) {
-      // skip this file id this file is being GC
+      // Skip this file id this file is being GC
       // or this file had been GC
       continue;
     }
@@ -58,7 +58,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
           (blob_file->file_size() - blob_file->discardable_size());
       if (batch_size >= cf_options_.max_gc_batch_size &&
           estimate_output_size >= min_output_threshold) {
-        // stop pick file for this gc, but still check file for whether need
+        // Stop pick file for this gc, but still check file for whether need
         // trigger gc after this
         stop_picking = true;
       }

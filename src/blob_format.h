@@ -155,7 +155,7 @@ class BlobFileMeta {
 
   uint64_t discardable_size_{0};
   // gc_mark is set to true when this file is recovered from re-opening the DB
-  // that means this file need to be gc
+  // that means this file needs to be checked for GC
   bool gc_mark_{false};
 };
 

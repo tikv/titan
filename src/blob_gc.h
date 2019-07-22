@@ -51,7 +51,8 @@ class BlobGC {
   std::vector<BlobFileMeta*> outputs_;
   TitanCFOptions titan_cf_options_;
   ColumnFamilyHandle* cfh_{nullptr};
-  const bool trigger_next_;  // whether need to trigger gc after this gc or not
+  // Whether need to trigger gc after this gc or not
+  const bool trigger_next_;
 };
 
 struct GCScore {
