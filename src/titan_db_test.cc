@@ -204,18 +204,6 @@ class TitanDBTest : public testing::Test {
     ASSERT_OK(db_->CompactRange(compact_opts, nullptr, nullptr));
   }
 
-  // void IngestData(std::vector<uint64_t> data) {
-  //   SstFileWriter sst_file_writer(EnvOptions(), options_);
-  //   std::string sst_file = options_.dirname + "/for_ingest.sst";
-  //   ASSERT_OK(sst_file_writer.Open(sst_file));
-  //   for (auto& k: data) {
-  //    ASSERT_OK(sst_file_writer.Put(GenKey(k), GenValue(k)));
-  //   }
-  //   ASSERT_OK(sst_file_writer.Finish());
-  //   ASSERT_OK(db_->IngestExternalFile({sst_file},
-  //   IngestExternalFileOptions()));
-  // }
-
   void DeleteFilesInRange(const Slice* begin, const Slice* end) {
     RangePtr range(begin, end);
     ASSERT_OK(db_->DeleteFilesInRanges(db_->DefaultColumnFamily(), &range, 1));
