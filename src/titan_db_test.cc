@@ -33,6 +33,7 @@ class TitanDBTest : public testing::Test {
     options_.create_if_missing = true;
     options_.min_blob_size = 32;
     options_.min_gc_batch_size = 1;
+    options_.merge_small_file_threshold = 1;
     options_.blob_file_compression = CompressionType::kLZ4Compression;
     DeleteDir(env_, options_.dirname);
     DeleteDir(env_, dbname_);
