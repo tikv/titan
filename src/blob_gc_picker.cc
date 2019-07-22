@@ -30,8 +30,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     assert(blob_file);
     if (!blob_file ||
         blob_file->file_state() == BlobFileMeta::FileState::kBeingGC) {
-      // Skip this file id this file is being GC
-      // or this file had been GC
+      // Skip this file id this file is being GCed
+      // or this file had been GCed
       continue;
     }
 
