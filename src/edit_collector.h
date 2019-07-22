@@ -19,7 +19,7 @@ class EditCollector {
   // Add the edit into the batch.
   Status AddEdit(const VersionEdit& edit) {
     if (sealed_)
-      return Status::Corruption(
+      return Status::Incomplete(
           "Should be not called after Sealed() is called");
 
     auto cf_id = edit.column_family_id_;
@@ -74,7 +74,7 @@ class EditCollector {
   Status Apply(VersionSet& vset) {
     if (!status_.ok()) return status_;
     if (!sealed_)
-      return Status::Corruption(
+      return Status::Incomplete(
           "Should be not called until Sealed() is called");
 
     for (auto& cf : column_families_) {
