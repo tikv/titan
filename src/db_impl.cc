@@ -732,6 +732,11 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     }
   }
 
+  // Here could be a running compaction install a new version after obtain
+  // current and before we call DeleteFilesInRange for the base DB. In this case
+  // the properties we get could be inaccurate.
+  // TODO: we can use the OnTableFileDeleted callback after adding table
+  // property field to TableFileDeletionInfo.
   Status s =
       db_impl_->DeleteFilesInRanges(column_family, ranges, n, include_end);
   if (!s.ok()) return s;
