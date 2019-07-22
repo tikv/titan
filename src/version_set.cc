@@ -82,8 +82,11 @@ Status VersionSet::Recover() {
       s = collector.AddEdit(edit);
       if (!s.ok()) return s;
     }
+    s = collector.Seal(*this);
+    if (!s.ok()) return s;
     s = collector.Apply(*this);
     if (!s.ok()) return s;
+
     uint64_t next_file_number = 0;
     s = collector.GetNextFileNumber(&next_file_number);
     if (!s.ok()) return s;
@@ -209,17 +212,19 @@ Status VersionSet::LogAndApply(VersionEdit& edit) {
   std::string record;
   edit.SetNextFileNumber(next_file_number_.load());
   edit.EncodeTo(&record);
-  Status s = manifest_->AddRecord(record);
-  if (s.ok()) {
-    ImmutableDBOptions ioptions(db_options_);
-    s = SyncManifest(env_, &ioptions, manifest_->file());
-  }
-  if (s.ok()) {
-    EditCollector collector;
-    collector.AddEdit(edit);
-    s = collector.Apply(*this);
-  }
-  return s;
+
+  EditCollector collector;
+  Status s = collector.AddEdit(edit);
+  if (!s.ok()) return s;
+  s = collector.Seal(*this);
+  if (!s.ok()) return s;
+  s = manifest_->AddRecord(record);
+  if (!s.ok()) return s;
+
+  ImmutableDBOptions ioptions(db_options_);
+  s = SyncManifest(env_, &ioptions, manifest_->file());
+  if (!s.ok()) return s;
+  return collector.Apply(*this);
 }
 
 void VersionSet::AddColumnFamilies(
