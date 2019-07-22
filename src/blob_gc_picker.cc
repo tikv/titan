@@ -15,9 +15,6 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   std::vector<BlobFileMeta*> blob_files;
 
   uint64_t batch_size = 0;
-  uint64_t min_output_threshold =
-      std::max(cf_options_.merge_small_file_threshold,
-               cf_options_.blob_file_target_size / 4);
   uint64_t estimate_output_size = 0;
   //  ROCKS_LOG_INFO(db_options_.info_log, "blob file num:%lu gc score:%lu",
   //                 blob_storage->NumBlobFiles(),
@@ -56,8 +53,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       batch_size += blob_file->file_size();
       estimate_output_size +=
           (blob_file->file_size() - blob_file->discardable_size());
-      if (batch_size >= cf_options_.max_gc_batch_size &&
-          estimate_output_size >= min_output_threshold) {
+      if (batch_size >= cf_options_.max_gc_batch_size ||
+          estimate_output_size >= cf_options_.blob_file_target_size) {
         // Stop pick file for this gc, but still check file for whether need
         // trigger gc after this
         stop_picking = true;
@@ -82,9 +79,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     }
   }
   ROCKS_LOG_DEBUG(db_options_.info_log,
-                  "got batch size %" PRIu64 ", min output threshold:%" PRIu64
-                  ", estimate output %" PRIu64 " bytes",
-                  batch_size, min_output_threshold, estimate_output_size);
+                  "got batch size %" PRIu64 ", estimate output %" PRIu64 " bytes",
+                  batch_size, estimate_output_size);
   if (blob_files.empty() || batch_size < cf_options_.min_gc_batch_size)
     return nullptr;
 
