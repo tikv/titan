@@ -634,7 +634,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   TablePropertiesCollection props;
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   auto cfd = cfh->cfd();
-  Version* version;
+  Version* version = nullptr;
 
   // Increment the ref count
   {
@@ -688,7 +688,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
           std::shared_ptr<const TableProperties> table_properties;
           Status s =
               version->GetTableProperties(&table_properties, file_meta, &fname);
-          if (s.ok()) {
+          if (s.ok() && table_properties) {
             props.insert({fname, table_properties});
           } else {
             return s;
