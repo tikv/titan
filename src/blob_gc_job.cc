@@ -475,7 +475,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
           builder.first->GetNumber(), builder.first->GetFile()->GetFileSize());
 
       if (!tmp.empty()) {
-        tmp.append("");
+        tmp.append(" ");
       }
       tmp.append(std::to_string(file->file_number()));
       // To temporarily hold the ptr of BlobFileMeta
@@ -484,7 +484,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       tmp_file_metas.push_back(file);
       files.emplace_back(std::make_pair(file, std::move(builder.first)));
     }
-    ROCKS_LOG_BUFFER(log_buffer_, "[%s]output[%s]",
+    ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
                      blob_gc_->column_family_handle()->GetName().c_str(),
                      tmp.c_str());
     s = this->blob_file_manager_->BatchFinishFiles(
