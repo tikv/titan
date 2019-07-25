@@ -469,23 +469,31 @@ Status BlobGCJob::InstallOutputBlobFiles() {
                           std::unique_ptr<BlobFileHandle>>>
         files;
     std::string tmp;
+    std::vector<shared_ptr<BlobFileMeta>> tmp_file_metas;
     for (auto& builder : this->blob_file_builders_) {
       auto file = std::make_shared<BlobFileMeta>(
           builder.first->GetNumber(), builder.first->GetFile()->GetFileSize());
 
       if (!tmp.empty()) {
-        tmp.append(" ");
+        tmp.append("");
       }
       tmp.append(std::to_string(file->file_number()));
-
-      blob_gc_->AddOutputFile(file.get());
+      // To temporarily hold the ptr of BlobFileMeta
+      // FilesMeta will be added to blob_gc after successful
+      // BatchFinishFiles
+      tmp_file_metas.push_back(file);
       files.emplace_back(std::make_pair(file, std::move(builder.first)));
     }
-    ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
+    ROCKS_LOG_BUFFER(log_buffer_, "[%s]output[%s]",
                      blob_gc_->column_family_handle()->GetName().c_str(),
                      tmp.c_str());
-    this->blob_file_manager_->BatchFinishFiles(
+    s = this->blob_file_manager_->BatchFinishFiles(
         blob_gc_->column_family_handle()->GetID(), files);
+    if (s.ok()) {
+      for (auto file : tmp_file_metas) {
+        blob_gc_->AddOutputFile(file.get());
+      }
+    }
   } else {
     std::vector<unique_ptr<BlobFileHandle>> handles;
     std::string to_delete_files;
