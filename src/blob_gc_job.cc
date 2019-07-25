@@ -469,7 +469,6 @@ Status BlobGCJob::InstallOutputBlobFiles() {
                           std::unique_ptr<BlobFileHandle>>>
         files;
     std::string tmp;
-    std::vector<shared_ptr<BlobFileMeta>> tmp_file_metas;
     for (auto& builder : this->blob_file_builders_) {
       auto file = std::make_shared<BlobFileMeta>(
           builder.first->GetNumber(), builder.first->GetFile()->GetFileSize());
@@ -478,10 +477,6 @@ Status BlobGCJob::InstallOutputBlobFiles() {
         tmp.append(" ");
       }
       tmp.append(std::to_string(file->file_number()));
-      // To temporarily hold the ptr of BlobFileMeta
-      // FilesMeta will be added to blob_gc after successful
-      // BatchFinishFiles
-      tmp_file_metas.push_back(file);
       files.emplace_back(std::make_pair(file, std::move(builder.first)));
     }
     ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
@@ -490,8 +485,8 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     s = this->blob_file_manager_->BatchFinishFiles(
         blob_gc_->column_family_handle()->GetID(), files);
     if (s.ok()) {
-      for (auto file : tmp_file_metas) {
-        blob_gc_->AddOutputFile(file.get());
+      for (auto& file : files) {
+        blob_gc_->AddOutputFile(file.first.get());
       }
     }
   } else {
@@ -509,7 +504,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
         "[%s] InstallOutputBlobFiles failed. Delete GC output files: %s",
         blob_gc_->column_family_handle()->GetName().c_str(),
         to_delete_files.c_str());
-    this->blob_file_manager_->BatchDeleteFiles(handles);
+    s = this->blob_file_manager_->BatchDeleteFiles(handles);
   }
   return s;
 }
