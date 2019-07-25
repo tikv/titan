@@ -33,6 +33,8 @@ class TitanDBTest : public testing::Test {
     options_.create_if_missing = true;
     options_.min_blob_size = 32;
     options_.min_gc_batch_size = 1;
+    options_.merge_small_file_threshold = 0;
+    options_.disable_background_gc = true;
     options_.blob_file_compression = CompressionType::kLZ4Compression;
     DeleteDir(env_, options_.dirname);
     DeleteDir(env_, dbname_);
@@ -191,6 +193,20 @@ class TitanDBTest : public testing::Test {
       ASSERT_EQ(iter.value(), kv.second);
       iter.Next();
     }
+  }
+
+  void CompactAll() {
+    auto opts = db_->GetOptions();
+    auto compact_opts = CompactRangeOptions();
+    compact_opts.change_level = true;
+    compact_opts.target_level = opts.num_levels - 1;
+    compact_opts.bottommost_level_compaction = BottommostLevelCompaction::kSkip;
+    ASSERT_OK(db_->CompactRange(compact_opts, nullptr, nullptr));
+  }
+
+  void DeleteFilesInRange(const Slice* begin, const Slice* end) {
+    RangePtr range(begin, end);
+    ASSERT_OK(db_->DeleteFilesInRanges(db_->DefaultColumnFamily(), &range, 1));
   }
 
   std::string GenKey(uint64_t i) {
@@ -448,6 +464,79 @@ TEST_F(TitanDBTest, DropColumnFamily) {
     // family handles, so we can still read from the dropped column family.
     VerifyDB(data);
   }
+
+  Close();
+}
+
+TEST_F(TitanDBTest, DeleteFilesInRange) {
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(11), GenValue(1)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(21), GenValue(2)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(31), GenValue(3)));
+  Flush();
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(41), GenValue(4)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(51), GenValue(5)));
+  Flush();
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(61), GenValue(6)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(71), GenValue(7)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(81), GenValue(8)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(91), GenValue(9)));
+  Flush();
+  CompactAll();
+
+  std::string value;
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
+  ASSERT_EQ(value, "0");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_EQ(value, "3");
+
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(12), GenValue(1)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(22), GenValue(2)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(32), GenValue(3)));
+  Flush();
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(42), GenValue(4)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(52), GenValue(5)));
+  Flush();
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(62), GenValue(6)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(72), GenValue(7)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(82), GenValue(8)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(92), GenValue(9)));
+  Flush();
+
+  // The LSM structure is:
+  // L0: [11, 21, 31] [41, 51] [61, 71, 81, 91]
+  // L6: [12, 22, 32] [42, 52] [62, 72, 82, 92]
+  // with 6 blob files
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
+  ASSERT_EQ(value, "3");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_EQ(value, "3");
+
+  std::string key40 = GenKey(40);
+  std::string key70 = GenKey(70);
+  Slice start = Slice(key40);
+  Slice end = Slice(key70);
+  DeleteFilesInRange(&start, &end);
+
+  // Now the LSM structure is:
+  // L0: [11, 21, 31] [41, 51] [61, 71, 81, 91]
+  // L6: [12, 22, 32]          [62, 72, 82, 92]
+  // with 6 blob files
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
+  ASSERT_EQ(value, "3");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_EQ(value, "2");
+
+  auto blob = GetBlobStorage(db_->DefaultColumnFamily());
+  auto before = blob.lock()->NumBlobFiles();
+  ASSERT_EQ(before, 6);
+
+  ASSERT_OK(db_impl_->TEST_StartGC(db_->DefaultColumnFamily()->GetID()));
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+
+  // The blob file of deleted SST should be GCed.
+  ASSERT_EQ(before - 1, blob.lock()->NumBlobFiles());
 
   Close();
 }
