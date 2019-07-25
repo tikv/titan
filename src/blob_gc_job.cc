@@ -477,15 +477,18 @@ Status BlobGCJob::InstallOutputBlobFiles() {
         tmp.append(" ");
       }
       tmp.append(std::to_string(file->file_number()));
-
-      blob_gc_->AddOutputFile(file.get());
       files.emplace_back(std::make_pair(file, std::move(builder.first)));
     }
     ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
                      blob_gc_->column_family_handle()->GetName().c_str(),
                      tmp.c_str());
-    this->blob_file_manager_->BatchFinishFiles(
+    s = this->blob_file_manager_->BatchFinishFiles(
         blob_gc_->column_family_handle()->GetID(), files);
+    if (s.ok()) {
+      for (auto& file : files) {
+        blob_gc_->AddOutputFile(file.first.get());
+      }
+    }
   } else {
     std::vector<unique_ptr<BlobFileHandle>> handles;
     std::string to_delete_files;
@@ -501,7 +504,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
         "[%s] InstallOutputBlobFiles failed. Delete GC output files: %s",
         blob_gc_->column_family_handle()->GetName().c_str(),
         to_delete_files.c_str());
-    this->blob_file_manager_->BatchDeleteFiles(handles);
+    s = this->blob_file_manager_->BatchDeleteFiles(handles);
   }
   return s;
 }
