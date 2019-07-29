@@ -137,6 +137,9 @@ class BlobFileMeta {
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
   uint64_t discardable_size() const { return discardable_size_; }
 
+  bool gc_mark() const { return gc_mark_; }
+  void set_gc_mark(bool mark) { gc_mark_ = mark; }
+
   void FileStateTransit(const FileEvent& event);
 
   void AddDiscardableSize(uint64_t _discardable_size);
@@ -151,7 +154,9 @@ class BlobFileMeta {
   FileState state_{FileState::kInit};
 
   uint64_t discardable_size_{0};
-  //  bool marked_for_gc_{false};
+  // gc_mark is set to true when this file is recovered from re-opening the DB
+  // that means this file needs to be checked for GC
+  bool gc_mark_{false};
 };
 
 // Blob file header format.

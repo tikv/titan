@@ -14,11 +14,12 @@ void TitanDBImpl::MaybeScheduleGC() {
 
   if (shuting_down_.load(std::memory_order_acquire)) return;
 
-  if (bg_gc_scheduled_ >= db_options_.max_background_gc) return;
-
-  bg_gc_scheduled_++;
-
-  env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::BOTTOM, this);
+  while (unscheduled_gc_ > 0 &&
+         bg_gc_scheduled_ < db_options_.max_background_gc) {
+    unscheduled_gc_--;
+    bg_gc_scheduled_++;
+    env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::BOTTOM, this);
+  }
 }
 
 void TitanDBImpl::BGWorkGC(void* db) {
@@ -42,6 +43,7 @@ void TitanDBImpl::BackgroundCallGC() {
     }
 
     bg_gc_scheduled_--;
+    MaybeScheduleGC();
     if (bg_gc_scheduled_ == 0) {
       // signal if
       // * bg_gc_scheduled_ == 0 -- need to wakeup ~TitanDBImpl
@@ -100,6 +102,15 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
       s = blob_gc_job.Finish();
     }
     blob_gc->ReleaseGcFiles();
+
+    if (blob_gc->trigger_next() &&
+        (bg_gc_scheduled_ - 1 + gc_queue_.size() <
+         2 * static_cast<uint32_t>(db_options_.max_background_gc))) {
+      // There is still data remained to be GCed
+      // and the queue is not overwhelmed
+      // then put this cf to GC queue for next GC
+      AddToGCQueue(blob_gc->column_family_handle()->GetID());
+    }
   }
 
   if (s.ok()) {

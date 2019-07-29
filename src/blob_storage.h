@@ -1,7 +1,8 @@
 #pragma once
-
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
 #include <inttypes.h>
-
 #include "blob_file_cache.h"
 #include "blob_format.h"
 #include "blob_gc.h"
@@ -65,6 +66,7 @@ class BlobStorage {
   void MarkAllFilesForGC() {
     MutexLock l(&mutex_);
     for (auto& file : files_) {
+      file.second->set_gc_mark(true);
       file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
     }
   }

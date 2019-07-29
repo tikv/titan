@@ -39,6 +39,11 @@ class BlobGCPickerTest : public testing::Test {
     blob_storage_->files_[file_number] = f;
   }
 
+  void RemoveBlobFile(uint64_t file_number) {
+    ASSERT_TRUE(blob_storage_->files_[file_number] != nullptr);
+    blob_storage_->files_.erase(file_number);
+  }
+
   void UpdateBlobStorage() { blob_storage_->ComputeGCScore(); }
 };
 
@@ -71,6 +76,88 @@ TEST_F(BlobGCPickerTest, BeingGC) {
   blob_gc = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
   ASSERT_EQ(blob_gc->inputs().size(), 1);
   ASSERT_EQ(blob_gc->inputs()[0]->file_number(), 2U);
+}
+
+TEST_F(BlobGCPickerTest, TriggerNext) {
+  TitanDBOptions titan_db_options;
+  TitanCFOptions titan_cf_options;
+  titan_cf_options.max_gc_batch_size = 1 << 30;
+  titan_cf_options.blob_file_target_size = 256 << 20;
+  NewBlobStorageAndPicker(titan_db_options, titan_cf_options);
+  AddBlobFile(1U, 1U << 30, 1000U << 20);  // valid_size = 24MB
+  AddBlobFile(2U, 1U << 30, 512U << 20);   // valid_size = 512MB
+  AddBlobFile(3U, 1U << 30, 512U << 20);   // valid_size = 512MB
+  AddBlobFile(4U, 1U << 30, 512U << 20);   // valid_size = 512MB
+  UpdateBlobStorage();
+  auto blob_gc = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  ASSERT_TRUE(blob_gc != nullptr);
+  ASSERT_EQ(blob_gc->trigger_next(), true);
+  NewBlobStorageAndPicker(titan_db_options, titan_cf_options);
+  AddBlobFile(1U, 1U << 30, 0U);  // valid_size = 1GB
+  AddBlobFile(2U, 1U << 30, 0U);  // valid_size = 1GB
+  AddBlobFile(3U, 1U << 30, 0U);  // valid_size = 1GB
+  AddBlobFile(4U, 1U << 30, 0U);  // valid_size = 1GB
+  UpdateBlobStorage();
+  blob_gc = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  ASSERT_TRUE(blob_gc != nullptr);
+  ASSERT_EQ(blob_gc->trigger_next(), false);
+}
+
+TEST_F(BlobGCPickerTest, PickFileAndTriggerNext) {
+  TitanDBOptions titan_db_options;
+  TitanCFOptions titan_cf_options;
+  titan_cf_options.max_gc_batch_size = 1 << 30;
+  titan_cf_options.blob_file_target_size = 256 << 20;
+  NewBlobStorageAndPicker(titan_db_options, titan_cf_options);
+  for (size_t i = 1; i < 41; i++) {
+    // add 70 files with 10MB valid data each file
+    AddBlobFile(i, titan_cf_options.blob_file_target_size, 246 << 20);
+  }
+  UpdateBlobStorage();
+  int gc_times = 0;
+  auto blob_gc = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  ASSERT_TRUE(blob_gc != nullptr);
+  while (blob_gc != nullptr && blob_gc->trigger_next()) {
+    gc_times++;
+    ASSERT_EQ(blob_gc->trigger_next(), true);
+    ASSERT_EQ(blob_gc->inputs().size(), 4);
+    for (auto file : blob_gc->inputs()) {
+      RemoveBlobFile(file->file_number());
+    }
+    UpdateBlobStorage();
+    blob_gc = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  }
+  ASSERT_EQ(gc_times, 9);
+  ASSERT_TRUE(blob_gc != nullptr);
+  ASSERT_EQ(blob_gc->inputs().size(), 4);
+}
+
+TEST_F(BlobGCPickerTest, ParallelPickGC) {
+  TitanDBOptions titan_db_options;
+  TitanCFOptions titan_cf_options;
+  titan_cf_options.max_gc_batch_size = 1 << 30;
+  titan_cf_options.blob_file_target_size = 256 << 20;
+  NewBlobStorageAndPicker(titan_db_options, titan_cf_options);
+  for (size_t i = 1; i < 9; i++) {
+    // add 70 files with 10MB valid data each file
+    AddBlobFile(i, titan_cf_options.blob_file_target_size, 246 << 20);
+  }
+  UpdateBlobStorage();
+  auto blob_gc1 = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  ASSERT_TRUE(blob_gc1 != nullptr);
+  ASSERT_EQ(blob_gc1->trigger_next(), true);
+  ASSERT_EQ(blob_gc1->inputs().size(), 4);
+  auto blob_gc2 = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  ASSERT_TRUE(blob_gc2 != nullptr);
+  ASSERT_EQ(blob_gc2->trigger_next(), false);
+  ASSERT_EQ(blob_gc2->inputs().size(), 4);
+  for (auto file : blob_gc1->inputs()) {
+    RemoveBlobFile(file->file_number());
+  }
+  for (auto file : blob_gc2->inputs()) {
+    RemoveBlobFile(file->file_number());
+  }
+  UpdateBlobStorage();
 }
 
 }  // namespace titandb

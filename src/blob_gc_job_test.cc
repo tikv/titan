@@ -185,7 +185,7 @@ class BlobGCJobTest : public testing::Test {
     auto rewrite_status = base_db_->Write(WriteOptions(), &wb);
 
     std::vector<BlobFileMeta*> tmp;
-    BlobGC blob_gc(std::move(tmp), TitanCFOptions());
+    BlobGC blob_gc(std::move(tmp), TitanCFOptions(), false /*trigger_next*/);
     blob_gc.SetColumnFamily(cfh);
     BlobGCJob blob_gc_job(&blob_gc, base_db_, mutex_, TitanDBOptions(),
                           Env::Default(), EnvOptions(), nullptr, version_set_,
@@ -294,19 +294,19 @@ TEST_F(BlobGCJobTest, PurgeBlobs) {
 
   db_->ReleaseSnapshot(snap2);
   RunGC();
-  CheckBlobNumber(2);
+  CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap3);
   RunGC();
-  CheckBlobNumber(2);
+  CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap1);
   RunGC();
-  CheckBlobNumber(2);
+  CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap4);
   RunGC();
-  CheckBlobNumber(1);
+  CheckBlobNumber(2);
 
   db_->ReleaseSnapshot(snap5);
   RunGC();
