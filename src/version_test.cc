@@ -66,7 +66,7 @@ class VersionTest : public testing::Test {
   void AddBlobFiles(uint32_t cf_id, uint64_t start, uint64_t end) {
     auto storage = column_families_[cf_id];
     for (auto i = start; i < end; i++) {
-      auto file = std::make_shared<BlobFileMeta>(i, i);
+      auto file = std::make_shared<BlobFileMeta>(i, i, "", "");
       storage->files_.emplace(i, file);
     }
   }
@@ -114,8 +114,8 @@ TEST_F(VersionTest, VersionEdit) {
   input.SetNextFileNumber(1);
   input.SetColumnFamilyID(2);
   CheckCodec(input);
-  auto file1 = std::make_shared<BlobFileMeta>(3, 4);
-  auto file2 = std::make_shared<BlobFileMeta>(5, 6);
+  auto file1 = std::make_shared<BlobFileMeta>(3, 4, "", "");
+  auto file2 = std::make_shared<BlobFileMeta>(5, 6, "", "");
   input.AddBlobFile(file1);
   input.AddBlobFile(file2);
   input.DeleteBlobFile(7);
@@ -127,7 +127,7 @@ VersionEdit AddBlobFilesEdit(uint32_t cf_id, uint64_t start, uint64_t end) {
   VersionEdit edit;
   edit.SetColumnFamilyID(cf_id);
   for (auto i = start; i < end; i++) {
-    auto file = std::make_shared<BlobFileMeta>(i, i);
+    auto file = std::make_shared<BlobFileMeta>(i, i, "", "");
     edit.AddBlobFile(file);
   }
   return edit;
@@ -266,6 +266,61 @@ TEST_F(VersionTest, ObsoleteFiles) {
 
   ASSERT_OK(vset_->DestroyColumnFamily(2));
   CheckColumnFamiliesSize(8);
+}
+
+TEST_F(VersionTest, DeleteBlobsInRange) {
+  // The blob files' range are:
+  // 1:[00--------------------------------------------------------99]
+  // 2:[00----10]
+  // 3:    [07---------------------55]
+  // 4:                 [25------50]
+  // 5:                 [25-------51]
+  // 6:                         [50------65]
+  // 7:                                                    [90----99]
+  // 8:                         [50-------------79]
+  // 9:                                    [70---80]
+  // 10:                               [60----72]
+  // 11:                                        [75---------91]
+  // 12:            [30--------------------------------85]
+  // 13:                        [50--------------80]
+  auto metas = std::vector<std::pair<std::string, std::string>>{
+      std::make_pair("00", "99"), std::make_pair("00", "10"),
+      std::make_pair("07", "55"), std::make_pair("25", "50"),
+      std::make_pair("25", "51"), std::make_pair("50", "65"),
+      std::make_pair("90", "99"), std::make_pair("50", "79"),
+      std::make_pair("70", "80"), std::make_pair("60", "72"),
+      std::make_pair("75", "91"), std::make_pair("30", "85"),
+      std::make_pair("50", "80"),
+  };
+
+  VersionEdit edit;
+  edit.SetColumnFamilyID(1);
+  for (size_t i = 0; i < metas.size(); i++) {
+    auto file = std::make_shared<BlobFileMeta>(i, i, std::move(metas[i].first),
+                                               std::move(metas[i].second));
+    edit.AddBlobFile(file);
+  }
+  EditCollector collector;
+  ASSERT_OK(collector.AddEdit(edit));
+  ASSERT_OK(collector.Seal(*vset_.get()));
+  ASSERT_OK(collector.Apply(*vset_.get()));
+
+  Slice begin = Slice("50");
+  Slice end = Slice("80");
+  RangePtr range(&begin, &end);
+  auto blob = vset_->GetBlobStorage(1).lock();
+
+  blob->DeleteBlobsInRanges(&range, 1, false /* include_end */, 0);
+  ASSERT_EQ(blob->NumBlobFiles(), 13);
+  ASSERT_EQ(blob->NumObsoleteBlobFiles(), 3);
+
+  blob->DeleteBlobsInRanges(&range, 1, true /* include_end */, 0);
+  ASSERT_EQ(blob->NumBlobFiles(), 13);
+  ASSERT_EQ(blob->NumObsoleteBlobFiles(), 5);
+
+  std::vector<std::string> obsolete_files;
+  vset_->GetObsoleteFiles(&obsolete_files, 1);
+  ASSERT_EQ(blob->NumBlobFiles(), 8);
 }
 
 }  // namespace titandb

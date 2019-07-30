@@ -7,13 +7,14 @@
 #include "blob_format.h"
 #include "blob_gc.h"
 #include "rocksdb/options.h"
+#include "table/internal_iterator.h"
 #include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
 
 // Provides methods to access the blob storage for a specific
-// column family. The version must be valid when this storage is used.
+// column family.
 class BlobStorage {
  public:
   BlobStorage(const BlobStorage& bs) : destroyed_(false) {
@@ -31,6 +32,7 @@ class BlobStorage {
       : db_options_(_db_options),
         cf_options_(_cf_options),
         cf_id_(cf_id),
+        blob_ranges_(_cf_options.comparator),
         file_cache_(_file_cache),
         destroyed_(false),
         stats_(stats) {}
@@ -51,6 +53,10 @@ class BlobStorage {
   Status NewPrefetcher(uint64_t file_number,
                        std::unique_ptr<BlobFilePrefetcher>* result);
 
+  // Logical deletes all the blobs within the ranges.
+  Status DeleteBlobsInRanges(const RangePtr* ranges, size_t n, bool include_end,
+                             SequenceNumber obsolete_sequence);
+
   // Finds the blob file meta for the specified file number. It is a
   // corruption if the file doesn't exist.
   std::weak_ptr<BlobFileMeta> FindFile(uint64_t file_number) const;
@@ -58,6 +64,11 @@ class BlobStorage {
   std::size_t NumBlobFiles() const {
     MutexLock l(&mutex_);
     return files_.size();
+  }
+
+  std::size_t NumObsoleteBlobFiles() const {
+    MutexLock l(&mutex_);
+    return obsolete_files_.size();
   }
 
   void ExportBlobFiles(
@@ -97,8 +108,7 @@ class BlobStorage {
   void GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                         SequenceNumber oldest_sequence);
 
-  void MarkFileObsolete(std::shared_ptr<BlobFileMeta> file,
-                        SequenceNumber obsolete_sequence);
+  bool MarkFileObsolete(uint64_t file_number, SequenceNumber obsolete_sequence);
 
  private:
   friend class VersionSet;
@@ -106,6 +116,10 @@ class BlobStorage {
   friend class BlobGCPickerTest;
   friend class BlobGCJobTest;
   friend class BlobFileSizeCollectorTest;
+
+  void MarkFileObsoleteLocked(std::shared_ptr<BlobFileMeta> file,
+                              SequenceNumber obsolete_sequence);
+  bool RemoveFile(uint64_t file_number);
 
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
@@ -115,6 +129,23 @@ class BlobStorage {
 
   // Only BlobStorage OWNS BlobFileMeta
   std::unordered_map<uint64_t, std::shared_ptr<BlobFileMeta>> files_;
+
+  class InternalComparator {
+   public:
+    InternalComparator() = default;
+    InternalComparator(const Comparator* comparator)
+        : comparator_(comparator){};
+    bool operator()(const Slice& key1, const Slice& key2) {
+      return comparator_->Compare(key1, key2) < 0;
+    }
+
+   private:
+    const Comparator* comparator_;
+  };
+  // smallest_key -> file_meta
+  std::multimap<const Slice, std::shared_ptr<BlobFileMeta>, InternalComparator>
+      blob_ranges_;
+
   std::shared_ptr<BlobFileCache> file_cache_;
 
   std::vector<GCScore> gc_score_;

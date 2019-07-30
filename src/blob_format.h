@@ -123,8 +123,12 @@ class BlobFileMeta {
   };
 
   BlobFileMeta() = default;
-  BlobFileMeta(uint64_t _file_number, uint64_t _file_size)
-      : file_number_(_file_number), file_size_(_file_size) {}
+  BlobFileMeta(uint64_t _file_number, uint64_t _file_size,
+               std::string&& _smallest_key, std::string&& _largest_key)
+      : file_number_(_file_number),
+        file_size_(_file_size),
+        smallest_key_(std::move(_smallest_key)),
+        largest_key_(std::move(_largest_key)) {}
 
   friend bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs);
 
@@ -133,6 +137,9 @@ class BlobFileMeta {
 
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }
+  Slice smallest_key() const { return smallest_key_; }
+  Slice largest_key() const { return largest_key_; }
+
   FileState file_state() const { return state_; }
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
   uint64_t discardable_size() const { return discardable_size_; }
@@ -149,6 +156,8 @@ class BlobFileMeta {
   // Persistent field
   uint64_t file_number_{0};
   uint64_t file_size_{0};
+  std::string smallest_key_;
+  std::string largest_key_;
 
   // Not persistent field
   FileState state_{FileState::kInit};

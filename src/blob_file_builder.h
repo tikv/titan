@@ -54,6 +54,9 @@ class BlobFileBuilder {
   // REQUIRES: Finish(), Abandon() have not been called.
   void Abandon();
 
+  std::string GetSmallestKey() { return std::move(smallest_key_); }
+  std::string GetLargestKey() { return std::move(largest_key_); }
+
  private:
   bool ok() const { return status().ok(); }
 
@@ -62,6 +65,9 @@ class BlobFileBuilder {
 
   Status status_;
   BlobEncoder encoder_;
+
+  std::string smallest_key_;
+  std::string largest_key_;
 };
 
 }  // namespace titandb

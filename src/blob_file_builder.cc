@@ -25,6 +25,10 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
   status_ = file_->Append(encoder_.GetHeader());
   if (ok()) {
     status_ = file_->Append(encoder_.GetRecord());
+    if (smallest_key_.empty()) {
+      smallest_key_.assign(record.key.data(), record.key.size());
+    }
+    largest_key_.assign(record.key.data(), record.key.size());
   }
 }
 

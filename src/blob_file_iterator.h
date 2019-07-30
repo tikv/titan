@@ -75,7 +75,7 @@ class BlobFileIterator {
 class BlobFileMergeIterator {
  public:
   explicit BlobFileMergeIterator(
-      std::vector<std::unique_ptr<BlobFileIterator>>&&);
+      std::vector<std::unique_ptr<BlobFileIterator>>&&, const Comparator*);
 
   ~BlobFileMergeIterator() = default;
 
@@ -93,19 +93,25 @@ class BlobFileMergeIterator {
   BlobIndex GetBlobIndex() { return current_->GetBlobIndex(); }
 
  private:
-  class IternalComparator {
+  class BlobFileIterComparator {
    public:
+    BlobFileIterComparator() = default;
+    BlobFileIterComparator(const Comparator* comparator)
+        : comparator_(comparator){};
     // Smaller value get Higher priority
     bool operator()(const BlobFileIterator* iter1,
                     const BlobFileIterator* iter2) {
-      return BytewiseComparator()->Compare(iter1->key(), iter2->key()) > 0;
+      return comparator_->Compare(iter1->key(), iter2->key()) > 0;
     }
+
+   private:
+    const Comparator* comparator_;
   };
 
   Status status_;
   std::vector<std::unique_ptr<BlobFileIterator>> blob_file_iterators_;
   std::priority_queue<BlobFileIterator*, std::vector<BlobFileIterator*>,
-                      IternalComparator>
+                      BlobFileIterComparator>
       min_heap_;
   BlobFileIterator* current_ = nullptr;
 };

@@ -751,6 +751,10 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
                             " not Found.");
   }
 
+  SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
+  s = bs->DeleteBlobsInRanges(ranges, n, include_end, obsolete_sequence);
+  if (!s.ok()) return s;
+
   uint64_t delta = 0;
   for (const auto& bfs : blob_files_size) {
     auto file = bs->FindFile(bfs.first).lock();

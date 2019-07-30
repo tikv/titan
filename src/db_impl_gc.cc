@@ -136,7 +136,7 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
     MutexLock l(&mutex_);
     assert(bg_gc_scheduled_ > 0);
 
-    // BackgroudGC
+    // BackgroundGC
     StopWatch gc_sw(env_, statistics(stats_.get()), BLOB_DB_GC_MICROS);
 
     std::unique_ptr<BlobGC> blob_gc;

@@ -206,7 +206,7 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
                     &readable_file_);
   iters.emplace_back(std::unique_ptr<BlobFileIterator>(new BlobFileIterator{
       std::move(readable_file_), file_number_, file_size, TitanCFOptions()}));
-  BlobFileMergeIterator iter(std::move(iters));
+  BlobFileMergeIterator iter(std::move(iters), titan_options_.comparator);
 
   iter.SeekToFirst();
   int i = 1;
