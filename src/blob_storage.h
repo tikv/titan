@@ -42,6 +42,15 @@ class BlobStorage {
     }
   }
 
+  const TitanDBOptions& db_options() { return db_options_; }
+
+  const TitanCFOptions& cf_options() { return cf_options_; }
+
+  const std::vector<GCScore> gc_score() {
+    MutexLock l(&mutex_);
+    return gc_score_;
+  }
+
   // Gets the blob record pointed by the blob index. The provided
   // buffer is used to store the record data, so the buffer must be
   // valid when the record is used.
@@ -61,19 +70,7 @@ class BlobStorage {
   // corruption if the file doesn't exist.
   std::weak_ptr<BlobFileMeta> FindFile(uint64_t file_number) const;
 
-  std::size_t NumBlobFiles() const {
-    MutexLock l(&mutex_);
-    return files_.size();
-  }
-
-  std::size_t NumObsoleteBlobFiles() const {
-    MutexLock l(&mutex_);
-    return obsolete_files_.size();
-  }
-
-  void ExportBlobFiles(
-      std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
-
+  // Marks all the blob files so that they can be picked by GC job.
   void MarkAllFilesForGC() {
     MutexLock l(&mutex_);
     for (auto& file : files_) {
@@ -82,33 +79,52 @@ class BlobStorage {
     }
   }
 
+  // The corresponding column family is dropped, so mark destroyed and we can
+  // remove this blob storage later.
   void MarkDestroyed() {
     MutexLock l(&mutex_);
     destroyed_ = true;
   }
 
+  // Returns whether this blob storage can be deleted now.
   bool MaybeRemove() const {
     MutexLock l(&mutex_);
     return destroyed_ && obsolete_files_.empty();
   }
 
-  const std::vector<GCScore> gc_score() {
-    MutexLock l(&mutex_);
-    return gc_score_;
-  }
-
+  // Computes GC score.
   void ComputeGCScore();
 
-  const TitanDBOptions& db_options() { return db_options_; }
-
-  const TitanCFOptions& cf_options() { return cf_options_; }
-
+  // Add a new blob file to this blob storage.
   void AddBlobFile(std::shared_ptr<BlobFileMeta>& file);
 
+  // Gets all obsolete blob files whose obsolete_sequence is smaller than the
+  // oldest_sequence. Note that the files returned would be erased from internal
+  // structure, so for the next call, the files returned before wouldn't be
+  // returned again.
   void GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                         SequenceNumber oldest_sequence);
 
+  // Mark the file as obsolete, and retrun value indicates whether the file is
+  // founded.
   bool MarkFileObsolete(uint64_t file_number, SequenceNumber obsolete_sequence);
+
+  // Returns the number of blob files, including obsolete files.
+  std::size_t NumBlobFiles() const {
+    MutexLock l(&mutex_);
+    return files_.size();
+  }
+
+  // Returns the number of obsolete blob files.
+  // TODO: returns obsolete files DB property too
+  std::size_t NumObsoleteBlobFiles() const {
+    MutexLock l(&mutex_);
+    return obsolete_files_.size();
+  }
+
+  // Exports all blob files' meta. Only for tests.
+  void ExportBlobFiles(
+      std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
  private:
   friend class VersionSet;
