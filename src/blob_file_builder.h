@@ -54,8 +54,8 @@ class BlobFileBuilder {
   // REQUIRES: Finish(), Abandon() have not been called.
   void Abandon();
 
-  std::string GetSmallestKey() { return std::move(smallest_key_); }
-  std::string GetLargestKey() { return std::move(largest_key_); }
+  const std::string& GetSmallestKey() { return smallest_key_; }
+  const std::string& GetLargestKey() { return largest_key_; }
 
  private:
   bool ok() const { return status().ok(); }

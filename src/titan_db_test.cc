@@ -530,7 +530,7 @@ TEST_F(TitanDBTest, DeleteFilesInRange) {
 
   auto blob = GetBlobStorage(db_->DefaultColumnFamily()).lock();
   ASSERT_EQ(blob->NumBlobFiles(), 6);
-  // These two files are marked obsolete directly by `DeleteBlobsInRanges`
+  // These two files are marked obsolete directly by `DeleteBlobFilesInRanges`
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 2);
 
   ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());

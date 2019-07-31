@@ -752,7 +752,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   }
 
   SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
-  s = bs->DeleteBlobsInRanges(ranges, n, include_end, obsolete_sequence);
+  s = bs->DeleteBlobFilesInRanges(ranges, n, include_end, obsolete_sequence);
   if (!s.ok()) return s;
 
   uint64_t delta = 0;

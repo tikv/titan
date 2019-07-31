@@ -24,17 +24,23 @@ Status BlobStorage::NewPrefetcher(uint64_t file_number,
                                     result);
 }
 
-Status BlobStorage::DeleteBlobsInRanges(const RangePtr* ranges, size_t n,
-                                        bool include_end,
-                                        SequenceNumber obsolete_sequence) {
+Status BlobStorage::DeleteBlobFilesInRanges(const RangePtr* ranges, size_t n,
+                                            bool include_end,
+                                            SequenceNumber obsolete_sequence) {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < n; i++) {
-    auto begin = ranges[i].start, end = ranges[i].limit;
+    const Slice* begin = ranges[i].start;
+    const Slice* end = ranges[i].limit;
     auto cmp = cf_options_.comparator;
 
     for (auto it = blob_ranges_.lower_bound(*begin);
          it != blob_ranges_.upper_bound(*end); it++) {
+      // Obsolete files are to be deleted, so just skip.
       if (it->second->is_obsolete()) continue;
+      // The smallest and largest key of blob file meta of the old version are
+      // empty, so skip.
+      if (it->second->largest_key().empty()) continue;
+
       if ((include_end && cmp->Compare(it->second->largest_key(), *end) <= 0) ||
           (!include_end && cmp->Compare(it->second->largest_key(), *end) < 0)) {
         MarkFileObsoleteLocked(it->second, obsolete_sequence);
@@ -136,8 +142,8 @@ void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
     // visible to all existing snapshots.
     if (oldest_sequence > obsolete_sequence) {
       // remove obsolete files
-      auto b = RemoveFile(file_number);
-      assert(b);
+      bool __attribute__((__unused__)) removed = RemoveFile(file_number);
+      assert(removed);
       ROCKS_LOG_INFO(db_options_.info_log,
                      "Obsolete blob file %" PRIu64 " (obsolete at %" PRIu64
                      ") not visible to oldest snapshot %" PRIu64 ", delete it.",

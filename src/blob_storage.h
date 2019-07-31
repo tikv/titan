@@ -7,7 +7,6 @@
 #include "blob_format.h"
 #include "blob_gc.h"
 #include "rocksdb/options.h"
-#include "table/internal_iterator.h"
 #include "titan_stats.h"
 
 namespace rocksdb {
@@ -32,7 +31,7 @@ class BlobStorage {
       : db_options_(_db_options),
         cf_options_(_cf_options),
         cf_id_(cf_id),
-        blob_ranges_(_cf_options.comparator),
+        blob_ranges_(InternalComparator(_cf_options.comparator)),
         file_cache_(_file_cache),
         destroyed_(false),
         stats_(stats) {}
@@ -54,8 +53,9 @@ class BlobStorage {
                        std::unique_ptr<BlobFilePrefetcher>* result);
 
   // Logical deletes all the blobs within the ranges.
-  Status DeleteBlobsInRanges(const RangePtr* ranges, size_t n, bool include_end,
-                             SequenceNumber obsolete_sequence);
+  Status DeleteBlobFilesInRanges(const RangePtr* ranges, size_t n,
+                                 bool include_end,
+                                 SequenceNumber obsolete_sequence);
 
   // Finds the blob file meta for the specified file number. It is a
   // corruption if the file doesn't exist.
@@ -133,7 +133,7 @@ class BlobStorage {
   class InternalComparator {
    public:
     InternalComparator() = default;
-    InternalComparator(const Comparator* comparator)
+    explicit InternalComparator(const Comparator* comparator)
         : comparator_(comparator){};
     bool operator()(const Slice& key1, const Slice& key2) {
       return comparator_->Compare(key1, key2) < 0;

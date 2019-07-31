@@ -475,8 +475,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     for (auto& builder : this->blob_file_builders_) {
       auto file = std::make_shared<BlobFileMeta>(
           builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(),
-          std::move(builder.second->GetSmallestKey()),
-          std::move(builder.second->GetLargestKey()));
+          builder.second->GetSmallestKey(), builder.second->GetLargestKey());
 
       if (!tmp.empty()) {
         tmp.append(" ");

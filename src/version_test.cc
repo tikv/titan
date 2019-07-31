@@ -310,11 +310,11 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
   RangePtr range(&begin, &end);
   auto blob = vset_->GetBlobStorage(1).lock();
 
-  blob->DeleteBlobsInRanges(&range, 1, false /* include_end */, 0);
+  blob->DeleteBlobFilesInRanges(&range, 1, false /* include_end */, 0);
   ASSERT_EQ(blob->NumBlobFiles(), 13);
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 3);
 
-  blob->DeleteBlobsInRanges(&range, 1, true /* include_end */, 0);
+  blob->DeleteBlobFilesInRanges(&range, 1, true /* include_end */, 0);
   ASSERT_EQ(blob->NumBlobFiles(), 13);
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 5);
 

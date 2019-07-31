@@ -96,7 +96,7 @@ class BlobFileMergeIterator {
   class BlobFileIterComparator {
    public:
     BlobFileIterComparator() = default;
-    BlobFileIterComparator(const Comparator* comparator)
+    explicit BlobFileIterComparator(const Comparator* comparator)
         : comparator_(comparator){};
     // Smaller value get Higher priority
     bool operator()(const BlobFileIterator* iter1,

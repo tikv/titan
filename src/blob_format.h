@@ -124,11 +124,12 @@ class BlobFileMeta {
 
   BlobFileMeta() = default;
   BlobFileMeta(uint64_t _file_number, uint64_t _file_size,
-               std::string&& _smallest_key, std::string&& _largest_key)
+               const std::string& _smallest_key,
+               const std::string& _largest_key)
       : file_number_(_file_number),
         file_size_(_file_size),
-        smallest_key_(std::move(_smallest_key)),
-        largest_key_(std::move(_largest_key)) {}
+        smallest_key_(_smallest_key),
+        largest_key_(_largest_key) {}
 
   friend bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs);
 
