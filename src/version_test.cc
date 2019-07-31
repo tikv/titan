@@ -279,10 +279,11 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
   // 7:                                                    [90----99]
   // 8:                         [50-------------79]
   // 9:                                    [70---80]
-  // 10:                               [60----72]
-  // 11:                                        [75---------91]
+  // 10:                              [60----72]
+  // 11:                                      [75-----------91]
   // 12:            [30--------------------------------85]
   // 13:                        [50--------------80]
+  // 14:[]
   auto metas = std::vector<std::pair<std::string, std::string>>{
       std::make_pair("00", "99"), std::make_pair("00", "10"),
       std::make_pair("07", "55"), std::make_pair("25", "50"),
@@ -290,14 +291,14 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
       std::make_pair("90", "99"), std::make_pair("50", "79"),
       std::make_pair("70", "80"), std::make_pair("60", "72"),
       std::make_pair("75", "91"), std::make_pair("30", "85"),
-      std::make_pair("50", "80"),
+      std::make_pair("50", "80"), std::make_pair("", ""),
   };
 
   VersionEdit edit;
   edit.SetColumnFamilyID(1);
   for (size_t i = 0; i < metas.size(); i++) {
-    auto file = std::make_shared<BlobFileMeta>(i, i, std::move(metas[i].first),
-                                               std::move(metas[i].second));
+    auto file = std::make_shared<BlobFileMeta>(
+        i + 1, i + 1, std::move(metas[i].first), std::move(metas[i].second));
     edit.AddBlobFile(file);
   }
   EditCollector collector;
@@ -311,16 +312,34 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
   auto blob = vset_->GetBlobStorage(1).lock();
 
   blob->DeleteBlobFilesInRanges(&range, 1, false /* include_end */, 0);
-  ASSERT_EQ(blob->NumBlobFiles(), 13);
+  ASSERT_EQ(blob->NumBlobFiles(), metas.size());
+  // obsolete files: 6, 8, 10
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 3);
 
   blob->DeleteBlobFilesInRanges(&range, 1, true /* include_end */, 0);
-  ASSERT_EQ(blob->NumBlobFiles(), 13);
+  ASSERT_EQ(blob->NumBlobFiles(), metas.size());
+  // obsolete file: 6, 8, 9, 10, 13
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 5);
 
   std::vector<std::string> obsolete_files;
   vset_->GetObsoleteFiles(&obsolete_files, 1);
-  ASSERT_EQ(blob->NumBlobFiles(), 8);
+  ASSERT_EQ(blob->NumBlobFiles(), 9);
+
+  Slice begin1 = Slice("");
+  Slice end1 = Slice("99");
+  RangePtr range1(&begin1, &end1);
+
+  blob->DeleteBlobFilesInRanges(&range1, 1, false /* include_end */, 0);
+  // obsolete file: 2, 3, 4, 5, 11, 12
+  ASSERT_EQ(blob->NumObsoleteBlobFiles(), 6);
+
+  RangePtr range2(nullptr, nullptr);
+  blob->DeleteBlobFilesInRanges(&range2, 1, true /* include_end */, 0);
+  // obsolete file: 1, 2, 3, 4, 5, 7, 11, 12, 14
+  ASSERT_EQ(blob->NumObsoleteBlobFiles(), 9);
+
+  vset_->GetObsoleteFiles(&obsolete_files, 1);
+  ASSERT_EQ(blob->NumBlobFiles(), 0);
 }
 
 }  // namespace titandb

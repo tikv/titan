@@ -33,15 +33,19 @@ Status BlobStorage::DeleteBlobFilesInRanges(const RangePtr* ranges, size_t n,
     const Slice* end = ranges[i].limit;
     auto cmp = cf_options_.comparator;
 
-    for (auto it = blob_ranges_.lower_bound(*begin);
-         it != blob_ranges_.upper_bound(*end); it++) {
+    // nullptr means the minimum or maximum.
+    for (auto it = ((begin) ? blob_ranges_.lower_bound(*begin)
+                            : blob_ranges_.begin());
+         it != ((end) ? blob_ranges_.upper_bound(*end) : blob_ranges_.end());
+         it++) {
       // Obsolete files are to be deleted, so just skip.
       if (it->second->is_obsolete()) continue;
       // The smallest and largest key of blob file meta of the old version are
       // empty, so skip.
-      if (it->second->largest_key().empty()) continue;
+      if (it->second->largest_key().empty() && end) continue;
 
-      if ((include_end && cmp->Compare(it->second->largest_key(), *end) <= 0) ||
+      if ((end == nullptr) ||
+          (include_end && cmp->Compare(it->second->largest_key(), *end) <= 0) ||
           (!include_end && cmp->Compare(it->second->largest_key(), *end) < 0)) {
         MarkFileObsoleteLocked(it->second, obsolete_sequence);
       }
