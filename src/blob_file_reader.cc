@@ -28,7 +28,9 @@ Status NewBlobFileReader(uint64_t file_number, uint64_t readahead_size,
   if (readahead_size > 0) {
     file = NewReadaheadRandomAccessFile(std::move(file), readahead_size);
   }
-  result->reset(new RandomAccessFileReader(std::move(file), file_name));
+  result->reset(new RandomAccessFileReader(std::move(file), file_name, nullptr,
+                                           nullptr, 0, nullptr,
+                                           env_options.rate_limiter, true));
   return s;
 }
 
