@@ -11,6 +11,14 @@
 namespace rocksdb {
 namespace titandb {
 
+struct TitanColumnFamilyInfo {
+  const std::string name;
+  const ImmutableTitanCFOptions immutable_cf_options;
+  MutableTitanCFOptions mutable_cf_options;
+  std::shared_ptr<TableFactory> base_table_factory;
+  std::shared_ptr<TitanTableFactory> titan_table_factory;
+};
+
 class TitanDBImpl : public TitanDB {
  public:
   TitanDBImpl(const TitanDBOptions& options, const std::string& dbname);
@@ -220,19 +228,8 @@ class TitanDBImpl : public TitanDB {
   // is not null.
   std::unique_ptr<TitanStats> stats_;
 
-  // Guarded by mutex_.
-  std::unordered_map<uint32_t, ImmutableTitanCFOptions> immutable_cf_options_;
-
-  // Guarded by mutex_.
-  std::unordered_map<uint32_t, MutableTitanCFOptions> mutable_cf_options_;
-
-  // Guarded by mutex_.
-  std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
-      base_table_factory_;
-
-  // Guarded by mutex_.
-  std::unordered_map<uint32_t, std::shared_ptr<TitanTableFactory>>
-      titan_table_factory_;
+  // Access while holding mutex_ lock or during DB open.
+  std::unordered_map<uint32_t, TitanColumnFamilyInfo> cf_info_;
 
   // handle for purging obsolete blob files at fixed intervals
   std::unique_ptr<RepeatableThread> thread_purge_obsolete_;
