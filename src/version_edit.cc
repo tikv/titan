@@ -5,13 +5,6 @@
 namespace rocksdb {
 namespace titandb {
 
-enum Tag {
-  kNextFileNumber = 1,
-  kColumnFamilyID = 10,
-  kAddedBlobFile = 11,
-  kDeletedBlobFile = 12,
-};
-
 void VersionEdit::EncodeTo(std::string* dst) const {
   if (has_next_file_number_) {
     PutVarint32Varint64(dst, kNextFileNumber, next_file_number_);
@@ -20,7 +13,7 @@ void VersionEdit::EncodeTo(std::string* dst) const {
   PutVarint32Varint32(dst, kColumnFamilyID, column_family_id_);
 
   for (auto& file : added_files_) {
-    PutVarint32(dst, kAddedBlobFile);
+    PutVarint32(dst, kAddedBlobFileV2);
     file->EncodeTo(dst);
   }
   for (auto& file : deleted_files_) {
@@ -54,7 +47,16 @@ Status VersionEdit::DecodeFrom(Slice* src) {
           error = "column family id";
         }
         break;
+      // for compatibility issue
       case kAddedBlobFile:
+        blob_file = std::make_shared<BlobFileMeta>();
+        if (blob_file->DecodeFromLegacy(src).ok()) {
+          AddBlobFile(blob_file);
+        } else {
+          error = "added blob file";
+        }
+        break;
+      case kAddedBlobFileV2:
         blob_file = std::make_shared<BlobFileMeta>();
         if (blob_file->DecodeFrom(src).ok()) {
           AddBlobFile(blob_file);

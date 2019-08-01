@@ -1,3 +1,4 @@
+#include "blob_format.h"
 #include "edit_collector.h"
 #include "testutil.h"
 #include "util.h"
@@ -105,6 +106,20 @@ class VersionTest : public testing::Test {
 
   void CheckColumnFamiliesSize(uint64_t size) {
     ASSERT_EQ(vset_->column_families_.size(), size);
+  }
+
+  void LegacyEncode(const VersionEdit& edit, std::string* dst) {
+    PutVarint32Varint32(dst, Tag::kColumnFamilyID, edit.column_family_id_);
+
+    for (auto& file : edit.added_files_) {
+      PutVarint32(dst, Tag::kAddedBlobFile);
+      PutVarint64(dst, file->file_number());
+      PutVarint64(dst, file->file_size());
+    }
+    for (auto& file : edit.deleted_files_) {
+      // obsolete sequence is a inpersistent field, so no need to encode it.
+      PutVarint32Varint64(dst, Tag::kDeletedBlobFile, file.first);
+    }
   }
 };
 
@@ -340,6 +355,20 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
 
   vset_->GetObsoleteFiles(&obsolete_files, 1);
   ASSERT_EQ(blob->NumBlobFiles(), 0);
+}
+
+TEST_F(VersionTest, BlobFileMetaV1ToV2) {
+  VersionEdit edit;
+  edit.SetColumnFamilyID(1);
+  edit.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, "", ""));
+  edit.DeleteBlobFile(1);
+  edit.AddBlobFile(std::make_shared<BlobFileMeta>(2, 2, "", ""));
+  std::string str;
+  LegacyEncode(edit, &str);
+
+  VersionEdit edit1;
+  ASSERT_OK(DecodeInto(Slice(str), &edit1));
+  CheckCodec(edit1);
 }
 
 }  // namespace titandb

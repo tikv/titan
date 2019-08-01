@@ -135,6 +135,7 @@ class BlobFileMeta {
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
+  Status DecodeFromLegacy(Slice* src);
 
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }

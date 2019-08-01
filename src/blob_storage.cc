@@ -49,6 +49,8 @@ Status BlobStorage::DeleteBlobFilesInRanges(const RangePtr* ranges, size_t n,
           (!include_end && cmp->Compare(it->second->largest_key(), *end) < 0)) {
         MarkFileObsoleteLocked(it->second, obsolete_sequence);
       }
+      assert(it->second->smallest_key().empty() ||
+             (!begin || cmp->Compare(it->second->smallest_key(), *begin) >= 0));
     }
   }
   return Status::OK();
