@@ -88,10 +88,6 @@ class BlobFileTest : public testing::Test {
     const int n = 100;
     std::vector<BlobHandle> handles(n);
 
-    auto rate_limiter =
-        std::shared_ptr<RateLimiter>(NewGenericRateLimiter(1 << 30));
-    env_options_.rate_limiter = rate_limiter.get();
-
     std::unique_ptr<WritableFileWriter> file;
     {
       std::unique_ptr<WritableFile> f;
