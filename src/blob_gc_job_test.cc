@@ -102,19 +102,6 @@ class BlobGCJobTest : public testing::Test {
     db_ = nullptr;
   }
 
-  void TriggerGC() {
-    assert(db_);
-    for (int i = 0; i < MAX_KEY_NUM; i++) {
-      db_->Put(WriteOptions(), GenKey(i), GenValue(i));
-    }
-    Flush();
-    for (int i = 0; i < MAX_KEY_NUM; i++) {
-      db_->Put(WriteOptions(), GenKey(i), GenValue(i));
-    }
-    Flush();
-    RunGC();
-  }
-
   void RunGC(bool expected = false) {
     MutexLock l(mutex_);
     Status s;
@@ -210,76 +197,6 @@ class BlobGCJobTest : public testing::Test {
     DestroyDB();
   }
 
-  void TestGCLimiter() {
-    class TestLimiter : public RateLimiter {
-     public:
-      TestLimiter(RateLimiter::Mode mode)
-          : RateLimiter(mode), read(false), write(false) {}
-
-      virtual size_t RequestToken(size_t bytes, size_t alignment,
-                                  Env::IOPriority io_priority,
-                                  Statistics* stats,
-                                  RateLimiter::OpType op_type) {
-        if (IsRateLimited(op_type)) {
-          if (op_type == RateLimiter::OpType::kRead) {
-            read = true;
-          } else {
-            write = true;
-          }
-        }
-        return bytes;
-      }
-
-      virtual void SetBytesPerSecond(int64_t bytes_per_second) {}
-
-      virtual int64_t GetSingleBurstBytes() const { return 0; }
-
-      virtual int64_t GetTotalBytesThrough(
-          const Env::IOPriority pri = Env::IO_TOTAL) const {
-        return 0;
-      }
-
-      virtual int64_t GetTotalRequests(
-          const Env::IOPriority pri = Env::IO_TOTAL) const {
-        return 0;
-      }
-
-      virtual int64_t GetBytesPerSecond() const { return 0; }
-
-      bool ReadRequested() { return read; }
-
-      bool WriteRequested() { return write; }
-
-     private:
-      bool read;
-      bool write;
-    };
-
-    TestLimiter* test_limiter = new TestLimiter(RateLimiter::Mode::kWritesOnly);
-    options_.rate_limiter = std::shared_ptr<RateLimiter>(test_limiter);
-    NewDB();
-    TriggerGC();
-    ASSERT_TRUE(test_limiter->WriteRequested());
-    ASSERT_FALSE(test_limiter->ReadRequested());
-    DestroyDB();
-
-    test_limiter = new TestLimiter(RateLimiter::Mode::kReadsOnly);
-    options_.rate_limiter.reset(test_limiter);
-    NewDB();
-    TriggerGC();
-    ASSERT_FALSE(test_limiter->WriteRequested());
-    ASSERT_TRUE(test_limiter->ReadRequested());
-    DestroyDB();
-
-    test_limiter = new TestLimiter(RateLimiter::Mode::kAllIo);
-    options_.rate_limiter.reset(test_limiter);
-    NewDB();
-    TriggerGC();
-    ASSERT_TRUE(test_limiter->WriteRequested());
-    ASSERT_TRUE(test_limiter->ReadRequested());
-    DestroyDB();
-  }
-
   void TestRunGC() {
     NewDB();
     for (int i = 0; i < MAX_KEY_NUM; i++) {
@@ -344,7 +261,97 @@ TEST_F(BlobGCJobTest, DiscardEntry) { TestDiscardEntry(); }
 
 TEST_F(BlobGCJobTest, RunGC) { TestRunGC(); }
 
-TEST_F(BlobGCJobTest, GCLimiter) { TestGCLimiter(); }
+TEST_F(BlobGCJobTest, GCLimiter) {
+  class TestLimiter : public RateLimiter {
+   public:
+    TestLimiter(RateLimiter::Mode mode)
+        : RateLimiter(mode), read(false), write(false) {}
+
+    size_t RequestToken(size_t bytes, size_t alignment,
+                        Env::IOPriority io_priority, Statistics* stats,
+                        RateLimiter::OpType op_type) override {
+      if (IsRateLimited(op_type)) {
+        if (op_type == RateLimiter::OpType::kRead) {
+          read = true;
+        } else {
+          write = true;
+        }
+      }
+      return bytes;
+    }
+
+    void SetBytesPerSecond(int64_t bytes_per_second) override {}
+
+    int64_t GetSingleBurstBytes() const override { return 0; }
+
+    int64_t GetTotalBytesThrough(
+        const Env::IOPriority pri = Env::IO_TOTAL) const override {
+      return 0;
+    }
+
+    int64_t GetTotalRequests(
+        const Env::IOPriority pri = Env::IO_TOTAL) const override {
+      return 0;
+    }
+
+    int64_t GetBytesPerSecond() const override { return 0; }
+
+    void Reset() {
+      read = false;
+      write = false;
+    }
+
+    bool ReadRequested() { return read; }
+
+    bool WriteRequested() { return write; }
+
+   private:
+    bool read;
+    bool write;
+  };
+
+  auto TriggerGC = [this] {
+    assert(db_);
+    for (int i = 0; i < MAX_KEY_NUM; i++) {
+      db_->Put(WriteOptions(), GenKey(i), GenValue(i));
+    }
+    Flush();
+    for (int i = 0; i < MAX_KEY_NUM; i++) {
+      db_->Put(WriteOptions(), GenKey(i), GenValue(i));
+    }
+    Flush();
+  };
+
+  TestLimiter* test_limiter = new TestLimiter(RateLimiter::Mode::kWritesOnly);
+  options_.rate_limiter = std::shared_ptr<RateLimiter>(test_limiter);
+  NewDB();
+  TriggerGC();
+  test_limiter->Reset();
+  RunGC();
+  ASSERT_TRUE(test_limiter->WriteRequested());
+  ASSERT_FALSE(test_limiter->ReadRequested());
+  DestroyDB();
+
+  test_limiter = new TestLimiter(RateLimiter::Mode::kReadsOnly);
+  options_.rate_limiter.reset(test_limiter);
+  NewDB();
+  TriggerGC();
+  test_limiter->Reset();
+  RunGC();
+  ASSERT_FALSE(test_limiter->WriteRequested());
+  ASSERT_TRUE(test_limiter->ReadRequested());
+  DestroyDB();
+
+  test_limiter = new TestLimiter(RateLimiter::Mode::kAllIo);
+  options_.rate_limiter.reset(test_limiter);
+  NewDB();
+  TriggerGC();
+  test_limiter->Reset();
+  RunGC();
+  ASSERT_TRUE(test_limiter->WriteRequested());
+  ASSERT_TRUE(test_limiter->ReadRequested());
+  DestroyDB();
+}
 
 // Tests blob file will be kept after GC, if it is still visible by active
 // snapshots.
