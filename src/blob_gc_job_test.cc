@@ -310,7 +310,7 @@ TEST_F(BlobGCJobTest, GCLimiter) {
     bool write;
   };
 
-  auto TriggerGC = [this] {
+  auto PutAndUpdate = [this] {
     assert(db_);
     for (int i = 0; i < MAX_KEY_NUM; i++) {
       db_->Put(WriteOptions(), GenKey(i), GenValue(i));
@@ -325,7 +325,7 @@ TEST_F(BlobGCJobTest, GCLimiter) {
   TestLimiter* test_limiter = new TestLimiter(RateLimiter::Mode::kWritesOnly);
   options_.rate_limiter = std::shared_ptr<RateLimiter>(test_limiter);
   NewDB();
-  TriggerGC();
+  PutAndUpdate();
   test_limiter->Reset();
   RunGC();
   ASSERT_TRUE(test_limiter->WriteRequested());
@@ -335,7 +335,7 @@ TEST_F(BlobGCJobTest, GCLimiter) {
   test_limiter = new TestLimiter(RateLimiter::Mode::kReadsOnly);
   options_.rate_limiter.reset(test_limiter);
   NewDB();
-  TriggerGC();
+  PutAndUpdate();
   test_limiter->Reset();
   RunGC();
   ASSERT_FALSE(test_limiter->WriteRequested());
@@ -345,7 +345,7 @@ TEST_F(BlobGCJobTest, GCLimiter) {
   test_limiter = new TestLimiter(RateLimiter::Mode::kAllIo);
   options_.rate_limiter.reset(test_limiter);
   NewDB();
-  TriggerGC();
+  PutAndUpdate();
   test_limiter->Reset();
   RunGC();
   ASSERT_TRUE(test_limiter->WriteRequested());
