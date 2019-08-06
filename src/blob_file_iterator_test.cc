@@ -5,9 +5,9 @@
 #include "blob_file_builder.h"
 #include "blob_file_cache.h"
 #include "blob_file_reader.h"
+#include "env/io_posix.h"
 #include "util/filename.h"
 #include "util/testharness.h"
-#include "env/io_posix.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -115,228 +115,188 @@ class BlobFileIteratorTest : public testing::Test {
   }
 };
 
-TEST_F(BlobFileIteratorTest, Basic
-) {
-TitanOptions options;
+TEST_F(BlobFileIteratorTest, Basic) {
+  TitanOptions options;
 
-TestBlobFileIterator();
+  TestBlobFileIterator();
 }
 
-TEST_F(BlobFileIteratorTest, IterateForPrev
-) {
-NewBuilder();
+TEST_F(BlobFileIteratorTest, IterateForPrev) {
+  NewBuilder();
 
-const int n = 1000;
-std::vector<BlobHandle> handles(n);
-for (
-int i = 0;
-i<n;
-i++) {
-auto id = std::to_string(i);
-AddKeyValue(id, id, &handles[i]
-);
+  const int n = 1000;
+  std::vector<BlobHandle> handles(n);
+  for (int i = 0; i < n; i++) {
+    auto id = std::to_string(i);
+    AddKeyValue(id, id, &handles[i]);
+  }
+
+  FinishBuilder();
+
+  NewBlobFileIterator();
+
+  int i = n / 2;
+  blob_file_iterator_->IterateForPrev(handles[i].offset);
+  ASSERT_OK(blob_file_iterator_->status());
+  for (blob_file_iterator_->
+
+       Next();
+
+       i < n; i++, blob_file_iterator_->
+
+                   Next()
+
+  ) {
+    ASSERT_OK(blob_file_iterator_->status());
+    ASSERT_EQ(blob_file_iterator_->
+
+              Valid(),
+
+              true);
+    BlobIndex blob_index;
+    blob_index = blob_file_iterator_->GetBlobIndex();
+    ASSERT_EQ(handles[i], blob_index.blob_handle);
+    auto id = std::to_string(i);
+    ASSERT_EQ(id, blob_file_iterator_->
+
+                  key()
+
+    );
+    ASSERT_EQ(id, blob_file_iterator_->
+
+                  value()
+
+    );
+  }
+
+  auto idx = Random::GetTLSInstance()->Uniform(n);
+  blob_file_iterator_->IterateForPrev(handles[idx].offset);
+  ASSERT_OK(blob_file_iterator_->status());
+  blob_file_iterator_->
+
+      Next();
+
+  ASSERT_OK(blob_file_iterator_->status());
+  ASSERT_TRUE(blob_file_iterator_->
+
+              Valid()
+
+  );
+  BlobIndex blob_index;
+  blob_index = blob_file_iterator_->GetBlobIndex();
+  ASSERT_EQ(handles[idx], blob_index.blob_handle);
+
+  while ((idx = Random::GetTLSInstance()->Uniform(n)) == 0)
+    ;
+  blob_file_iterator_->IterateForPrev(handles[idx].offset - kBlobHeaderSize -
+                                      1);
+  ASSERT_OK(blob_file_iterator_->status());
+  blob_file_iterator_->
+
+      Next();
+
+  ASSERT_OK(blob_file_iterator_->status());
+  ASSERT_TRUE(blob_file_iterator_->
+
+              Valid()
+
+  );
+  blob_index = blob_file_iterator_->GetBlobIndex();
+  ASSERT_EQ(handles[idx - 1], blob_index.blob_handle);
+
+  idx = Random::GetTLSInstance()->Uniform(n);
+  blob_file_iterator_->IterateForPrev(handles[idx].offset + 1);
+  ASSERT_OK(blob_file_iterator_->status());
+  blob_file_iterator_->
+
+      Next();
+
+  ASSERT_OK(blob_file_iterator_->status());
+  ASSERT_TRUE(blob_file_iterator_->
+
+              Valid()
+
+  );
+  blob_index = blob_file_iterator_->GetBlobIndex();
+  ASSERT_EQ(handles[idx], blob_index.blob_handle);
 }
 
-FinishBuilder();
+TEST_F(BlobFileIteratorTest, MergeIterator) {
+  const int kMaxKeyNum = 1000;
+  std::vector<BlobHandle> handles(kMaxKeyNum);
+  std::vector<std::unique_ptr<BlobFileIterator>> iters;
 
-NewBlobFileIterator();
+  NewBuilder();
 
-int i = n / 2;
-blob_file_iterator_->
-IterateForPrev(handles[i]
-.offset);
-ASSERT_OK(blob_file_iterator_->status());
-for (blob_file_iterator_->
+  for (int i = 1; i < kMaxKeyNum; i++) {
+    AddKeyValue(GenKey(i), GenValue(i), &handles[i]);
+    if (i % 100 == 0) {
+      FinishBuilder();
 
-Next();
+      uint64_t file_size = 0;
+      ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
+      OpenBlobFile(file_number_, 0, titan_options_, env_options_, env_,
+                   &readable_file_);
+      iters.emplace_back(std::unique_ptr<BlobFileIterator>(
+          new BlobFileIterator{std::move(readable_file_), file_number_,
+                               file_size, TitanCFOptions()}));
+      file_number_ = Random::GetTLSInstance()->Next();
+      file_name_ = BlobFileName(dirname_, file_number_);
 
-i<n;
-i++, blob_file_iterator_->
+      NewBuilder();
+    }
+  }
 
-Next()
+  FinishBuilder();
 
-) {
-ASSERT_OK(blob_file_iterator_->status());
-ASSERT_EQ(blob_file_iterator_
-->
+  uint64_t file_size = 0;
+  ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
+  OpenBlobFile(file_number_, 0, titan_options_, env_options_, env_,
+               &readable_file_);
+  iters.emplace_back(std::unique_ptr<BlobFileIterator>(new BlobFileIterator{
+      std::move(readable_file_), file_number_, file_size, TitanCFOptions()}));
+  BlobFileMergeIterator iter(std::move(iters));
 
-Valid(),
+  iter.
 
-true);
-BlobIndex blob_index;
-blob_index = blob_file_iterator_->GetBlobIndex();
-ASSERT_EQ(handles[i], blob_index
-.blob_handle);
-auto id = std::to_string(i);
-ASSERT_EQ(id, blob_file_iterator_
-->
+      SeekToFirst();
 
-key()
+  int i = 1;
+  for (; iter.
 
-);
-ASSERT_EQ(id, blob_file_iterator_
-->
+         Valid();
 
-value()
+       i++, iter.
 
-);
-}
+            Next()
 
-auto idx = Random::GetTLSInstance()->Uniform(n);
-blob_file_iterator_->
-IterateForPrev(handles[idx]
-.offset);
-ASSERT_OK(blob_file_iterator_->status());
-blob_file_iterator_->
+  ) {
+    ASSERT_OK(iter.status());
+    ASSERT_TRUE(iter.
 
-Next();
+                Valid()
 
-ASSERT_OK(blob_file_iterator_->status());
-ASSERT_TRUE(blob_file_iterator_
-->
+    );
+    ASSERT_EQ(iter.
 
-Valid()
+              key(),
+              GenKey(i)
 
-);
-BlobIndex blob_index;
-blob_index = blob_file_iterator_->GetBlobIndex();
-ASSERT_EQ(handles[idx], blob_index
-.blob_handle);
+    );
+    ASSERT_EQ(iter.
 
-while ((
-idx = Random::GetTLSInstance()->Uniform(n)
-) == 0);
-blob_file_iterator_->
-IterateForPrev(handles[idx]
-.offset - kBlobHeaderSize -
-1);
-ASSERT_OK(blob_file_iterator_->status());
-blob_file_iterator_->
+              value(),
+              GenValue(i)
 
-Next();
+    );
+    ASSERT_EQ(iter.
 
-ASSERT_OK(blob_file_iterator_->status());
-ASSERT_TRUE(blob_file_iterator_
-->
+              GetBlobIndex()
 
-Valid()
-
-);
-blob_index = blob_file_iterator_->GetBlobIndex();
-ASSERT_EQ(handles[idx - 1], blob_index
-.blob_handle);
-
-idx = Random::GetTLSInstance()->Uniform(n);
-blob_file_iterator_->
-IterateForPrev(handles[idx]
-.offset + 1);
-ASSERT_OK(blob_file_iterator_->status());
-blob_file_iterator_->
-
-Next();
-
-ASSERT_OK(blob_file_iterator_->status());
-ASSERT_TRUE(blob_file_iterator_
-->
-
-Valid()
-
-);
-blob_index = blob_file_iterator_->GetBlobIndex();
-ASSERT_EQ(handles[idx], blob_index
-.blob_handle);
-}
-
-TEST_F(BlobFileIteratorTest, MergeIterator
-) {
-const int kMaxKeyNum = 1000;
-std::vector<BlobHandle> handles(kMaxKeyNum);
-std::vector<std::unique_ptr<BlobFileIterator>> iters;
-
-NewBuilder();
-
-for (
-int i = 1;
-i<kMaxKeyNum;
-i++) {
-AddKeyValue(GenKey(i), GenValue(i), &handles[i]
-);
-if (i % 100 == 0) {
-FinishBuilder();
-
-uint64_t file_size = 0;
-ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
-OpenBlobFile(file_number_,
-0, titan_options_, env_options_, env_,
-&readable_file_);
-iters.
-emplace_back(std::unique_ptr<BlobFileIterator>(
-    new BlobFileIterator{std::move(readable_file_), file_number_,
-                         file_size, TitanCFOptions()})
-);
-file_number_ = Random::GetTLSInstance()->Next();
-file_name_ = BlobFileName(dirname_, file_number_);
-
-NewBuilder();
-
-}
-}
-
-FinishBuilder();
-
-uint64_t file_size = 0;
-ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
-OpenBlobFile(file_number_,
-0, titan_options_, env_options_, env_,
-&readable_file_);
-iters.
-emplace_back(std::unique_ptr<BlobFileIterator>(new BlobFileIterator{
-    std::move(readable_file_), file_number_, file_size, TitanCFOptions()})
-);
-BlobFileMergeIterator iter(std::move(iters));
-
-iter.
-
-SeekToFirst();
-
-int i = 1;
-for (; iter.
-
-Valid();
-
-i++, iter.
-
-Next()
-
-) {
-ASSERT_OK(iter.status());
-ASSERT_TRUE(iter
-.
-
-Valid()
-
-);
-ASSERT_EQ(iter
-.
-
-key(), GenKey(i)
-
-);
-ASSERT_EQ(iter
-.
-
-value(), GenValue(i)
-
-);
-ASSERT_EQ(iter
-.
-
-GetBlobIndex()
-
-.blob_handle, handles[i]);
-}
-ASSERT_EQ(i, kMaxKeyNum
-);
+                  .blob_handle,
+              handles[i]);
+  }
+  ASSERT_EQ(i, kMaxKeyNum);
 }
 
 }  // namespace titandb
