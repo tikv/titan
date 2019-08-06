@@ -4,6 +4,7 @@
 *_test
 titandb_bench
 titandb_stress
+CMakeLists.txt
 
 build/
 .idea/

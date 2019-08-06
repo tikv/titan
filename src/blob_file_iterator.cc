@@ -7,12 +7,13 @@ namespace rocksdb {
 namespace titandb {
 
 BlobFileIterator::BlobFileIterator(
-    std::unique_ptr<RandomAccessFileReader>&& file, uint64_t file_name,
+    std::unique_ptr<PosixRandomRWFile>&& file, uint64_t file_name,
     uint64_t file_size, const TitanCFOptions& titan_cf_options)
     : file_(std::move(file)),
       file_number_(file_name),
       file_size_(file_size),
-      titan_cf_options_(titan_cf_options) {}
+      titan_cf_options_(titan_cf_options) {
+}
 
 BlobFileIterator::~BlobFileIterator() {}
 
@@ -45,14 +46,14 @@ void BlobFileIterator::SeekToFirst() {
   if (!init_ && !Init()) return;
   status_ = Status::OK();
   iterate_offset_ = BlobFileHeader::kEncodedLength;
-  PrefetchAndGet();
+  Next();
 }
 
 bool BlobFileIterator::Valid() const { return valid_ && status().ok(); }
 
 void BlobFileIterator::Next() {
   assert(init_);
-  PrefetchAndGet();
+  GetBlobRecord();
 }
 
 Slice BlobFileIterator::key() const { return cur_blob_record_.key; }
@@ -87,6 +88,11 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
 }
 
 void BlobFileIterator::GetBlobRecord() {
+  if (iterate_offset_ >= end_of_blob_record_) {
+    valid_ = false;
+    return;
+  }
+
   FixedSlice<kBlobHeaderSize> header_buffer;
   status_ = file_->Read(iterate_offset_, kBlobHeaderSize, &header_buffer,
                         header_buffer.get());
@@ -108,40 +114,42 @@ void BlobFileIterator::GetBlobRecord() {
   cur_record_offset_ = iterate_offset_;
   cur_record_size_ = kBlobHeaderSize + record_size;
   iterate_offset_ += cur_record_size_;
+  status_ = file_->SeekNextData(iterate_offset_);
+  if (!status_.ok()) return;
   valid_ = true;
 }
 
-void BlobFileIterator::PrefetchAndGet() {
-  if (iterate_offset_ >= end_of_blob_record_) {
-    valid_ = false;
-    return;
-  }
-
-  if (readahead_begin_offset_ > iterate_offset_ ||
-      readahead_end_offset_ < iterate_offset_) {
-    // alignment
-    readahead_begin_offset_ =
-        iterate_offset_ - (iterate_offset_ & (kDefaultPageSize - 1));
-    readahead_end_offset_ = readahead_begin_offset_;
-    readahead_size_ = kMinReadaheadSize;
-  }
-  auto min_blob_size =
-      iterate_offset_ + kBlobHeaderSize + titan_cf_options_.min_blob_size;
-  if (readahead_end_offset_ <= min_blob_size) {
-    while (readahead_end_offset_ + readahead_size_ <= min_blob_size &&
-           readahead_size_ < kMaxReadaheadSize)
-      readahead_size_ <<= 1;
-    file_->Prefetch(readahead_end_offset_, readahead_size_);
-    readahead_end_offset_ += readahead_size_;
-    readahead_size_ = std::min(kMaxReadaheadSize, readahead_size_ << 1);
-  }
-
-  GetBlobRecord();
-
-  if (readahead_end_offset_ < iterate_offset_) {
-    readahead_end_offset_ = iterate_offset_;
-  }
-}
+//void BlobFileIterator::PrefetchAndGet() {
+//  if (iterate_offset_ >= end_of_blob_record_) {
+//    valid_ = false;
+//    return;
+//  }
+//
+//  if (readahead_begin_offset_ > iterate_offset_ ||
+//      readahead_end_offset_ < iterate_offset_) {
+//    // alignment
+//    readahead_begin_offset_ =
+//        iterate_offset_ - (iterate_offset_ & (kDefaultPageSize - 1));
+//    readahead_end_offset_ = readahead_begin_offset_;
+//    readahead_size_ = kMinReadaheadSize;
+//  }
+//  auto min_blob_size =
+//      iterate_offset_ + kBlobHeaderSize + titan_cf_options_.min_blob_size;
+//  if (readahead_end_offset_ <= min_blob_size) {
+//    while (readahead_end_offset_ + readahead_size_ <= min_blob_size &&
+//           readahead_size_ < kMaxReadaheadSize)
+//      readahead_size_ <<= 1;
+//    file_->Prefetch(readahead_end_offset_, readahead_size_);
+//    readahead_end_offset_ += readahead_size_;
+//    readahead_size_ = std::min(kMaxReadaheadSize, readahead_size_ << 1);
+//  }
+//
+//  GetBlobRecord();
+//
+//  if (readahead_end_offset_ < iterate_offset_) {
+//    readahead_end_offset_ = iterate_offset_;
+//  }
+//}
 
 BlobFileMergeIterator::BlobFileMergeIterator(
     std::vector<std::unique_ptr<BlobFileIterator>>&& blob_file_iterators)

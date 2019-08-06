@@ -10,6 +10,7 @@
 #include "titan/options.h"
 #include "util.h"
 #include "util/file_reader_writer.h"
+#include "env/io_posix.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -19,7 +20,7 @@ class BlobFileIterator {
   const uint64_t kMinReadaheadSize = 4 << 10;
   const uint64_t kMaxReadaheadSize = 256 << 10;
 
-  BlobFileIterator(std::unique_ptr<RandomAccessFileReader>&& file,
+  BlobFileIterator(std::unique_ptr<PosixRandomRWFile>&& file,
                    uint64_t file_name, uint64_t file_size,
                    const TitanCFOptions& titan_cf_options);
   ~BlobFileIterator();
@@ -33,6 +34,9 @@ class BlobFileIterator {
   Status status() const { return status_; }
 
   void IterateForPrev(uint64_t);
+  Status PunchHole(uint64_t offset, size_t n) {
+    return file_->PunchHole(offset, n);
+  }
 
   BlobIndex GetBlobIndex() {
     BlobIndex blob_index;
@@ -44,7 +48,7 @@ class BlobFileIterator {
 
  private:
   // Blob file info
-  const std::unique_ptr<RandomAccessFileReader> file_;
+  const std::unique_ptr<PosixRandomRWFile> file_;
   const uint64_t file_number_;
   const uint64_t file_size_;
   TitanCFOptions titan_cf_options_;
@@ -68,7 +72,7 @@ class BlobFileIterator {
   uint64_t readahead_end_offset_{0};
   uint64_t readahead_size_{kMinReadaheadSize};
 
-  void PrefetchAndGet();
+//  void PrefetchAndGet();
   void GetBlobRecord();
 };
 

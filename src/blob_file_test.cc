@@ -114,12 +114,12 @@ class BlobFileTest : public testing::Test {
     ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
 
     ReadOptions ro;
-    std::unique_ptr<RandomAccessFileReader> random_access_file_reader;
+    std::unique_ptr<RandomAccessFileReader> random_rw_file_reader;
     ASSERT_OK(NewBlobFileReader(file_number_, 0, db_options, env_options_, env_,
-                                &random_access_file_reader));
+                           &random_rw_file_reader));
     std::unique_ptr<BlobFileReader> blob_file_reader;
     ASSERT_OK(BlobFileReader::Open(cf_options,
-                                   std::move(random_access_file_reader),
+                                   std::move(random_rw_file_reader),
                                    file_size, &blob_file_reader, nullptr));
     for (int i = 0; i < n; i++) {
       auto key = std::to_string(i);
