@@ -62,14 +62,14 @@ class BlobGCJob {
   TitanStats* stats_;
 
   struct {
-    uint64_t blob_db_bytes_read;
-    uint64_t blob_db_bytes_written;
-    uint64_t blob_db_gc_num_keys_overwritten;
-    uint64_t blob_db_gc_bytes_overwritten;
-    uint64_t blob_db_gc_num_keys_relocated;
-    uint64_t blob_db_gc_bytes_relocated;
-    uint64_t blob_db_gc_num_new_files;
-    uint64_t blob_db_gc_num_files;
+    uint64_t blob_db_bytes_read = 0;
+    uint64_t blob_db_bytes_written = 0;
+    uint64_t blob_db_gc_num_keys_overwritten = 0;
+    uint64_t blob_db_gc_bytes_overwritten = 0;
+    uint64_t blob_db_gc_num_keys_relocated = 0;
+    uint64_t blob_db_gc_bytes_relocated = 0;
+    uint64_t blob_db_gc_num_new_files = 0;
+    uint64_t blob_db_gc_num_files = 0;
   } metrics_;
 
   Status SampleCandidateFiles();
