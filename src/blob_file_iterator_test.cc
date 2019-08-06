@@ -66,7 +66,7 @@ class BlobFileIteratorTest : public testing::Test {
   }
 
   void AddKeyValue(const std::string& key, const std::string& value,
-                   BlobHandle *blob_handle) {
+                   BlobHandle* blob_handle) {
     BlobRecord record;
     record.key = key;
     record.value = value;
@@ -163,7 +163,6 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
                                       1);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();
-
   ASSERT_OK(blob_file_iterator_->status());
   ASSERT_TRUE(blob_file_iterator_->Valid());
   blob_index = blob_file_iterator_->GetBlobIndex();
