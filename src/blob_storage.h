@@ -116,7 +116,7 @@ class BlobStorage {
   }
 
   // Returns the number of obsolete blob files.
-  // TODO: returns obsolete files DB property too
+  // TODO: use this method to calculate `kNumObsoleteBlobFile` DB property.
   std::size_t NumObsoleteBlobFiles() const {
     MutexLock l(&mutex_);
     return obsolete_files_.size();
@@ -148,10 +148,13 @@ class BlobStorage {
 
   class InternalComparator {
    public:
-    InternalComparator() = default;
+    // The default constructor is not supposed to be used.
+    // It is only to make std::multimap can compile.
+    InternalComparator() : comparator_(nullptr){};
     explicit InternalComparator(const Comparator* comparator)
         : comparator_(comparator){};
     bool operator()(const Slice& key1, const Slice& key2) {
+      assert(comparator_ != nullptr);
       return comparator_->Compare(key1, key2) < 0;
     }
 

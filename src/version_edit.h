@@ -14,7 +14,7 @@ enum Tag {
   kNextFileNumber = 1,
   kColumnFamilyID = 10,
   kAddedBlobFile = 11,
-  kDeletedBlobFile = 12,
+  kDeletedBlobFile = 12,  // Deprecated, leave here for backward compatibility
   kAddedBlobFileV2 = 13,  // Comparing to kAddedBlobFile, it newly includes
                           // smallest_key and largest_key of blob file
 };

@@ -34,9 +34,10 @@ Status BlobStorage::DeleteBlobFilesInRanges(const RangePtr* ranges, size_t n,
     auto cmp = cf_options_.comparator;
 
     // nullptr means the minimum or maximum.
-    for (auto it = ((begin) ? blob_ranges_.lower_bound(*begin)
-                            : blob_ranges_.begin());
-         it != ((end) ? blob_ranges_.upper_bound(*end) : blob_ranges_.end());
+    for (auto it = ((begin != nullptr) ? blob_ranges_.lower_bound(*begin)
+                                       : blob_ranges_.begin());
+         it != ((end != nullptr) ? blob_ranges_.upper_bound(*end)
+                                 : blob_ranges_.end());
          it++) {
       // Obsolete files are to be deleted, so just skip.
       if (it->second->is_obsolete()) continue;

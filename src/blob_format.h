@@ -158,6 +158,8 @@ class BlobFileMeta {
   // Persistent field
   uint64_t file_number_{0};
   uint64_t file_size_{0};
+  // Empty `smallest_key_` and `largest_key_` means smallest key is unknown,
+  // and can only happen when the file is from legacy version.
   std::string smallest_key_;
   std::string largest_key_;
 
