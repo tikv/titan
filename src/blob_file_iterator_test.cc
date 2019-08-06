@@ -14,7 +14,7 @@ namespace titandb {
 
 class BlobFileIteratorTest : public testing::Test {
  public:
-  Env *env_{Env::Default()};
+  Env* env_{Env::Default()};
   TitanOptions titan_options_;
   EnvOptions env_options_;
   std::string dirname_;
@@ -65,7 +65,7 @@ class BlobFileIteratorTest : public testing::Test {
         new BlobFileBuilder(db_options, cf_options, writable_file_.get()));
   }
 
-  void AddKeyValue(const std::string &key, const std::string &value,
+  void AddKeyValue(const std::string& key, const std::string& value,
                    BlobHandle *blob_handle) {
     BlobRecord record;
     record.key = key;
@@ -225,7 +225,7 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
 }  // namespace titandb
 }  // namespace rocksdb
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
