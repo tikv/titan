@@ -117,13 +117,11 @@ class BlobFileIteratorTest : public testing::Test {
 
 TEST_F(BlobFileIteratorTest, Basic) {
   TitanOptions options;
-
   TestBlobFileIterator();
 }
 
 TEST_F(BlobFileIteratorTest, IterateForPrev) {
   NewBuilder();
-
   const int n = 1000;
   std::vector<BlobHandle> handles(n);
   for (int i = 0; i < n; i++) {
@@ -153,7 +151,6 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   blob_file_iterator_->IterateForPrev(handles[idx].offset);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();
-
   ASSERT_OK(blob_file_iterator_->status());
   ASSERT_TRUE(blob_file_iterator_->Valid());
   BlobIndex blob_index;
@@ -176,7 +173,6 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   blob_file_iterator_->IterateForPrev(handles[idx].offset + 1);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();
-
   ASSERT_OK(blob_file_iterator_->status());
   ASSERT_TRUE(blob_file_iterator_->Valid());
   blob_index = blob_file_iterator_->GetBlobIndex();
@@ -187,14 +183,11 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
   const int kMaxKeyNum = 1000;
   std::vector<BlobHandle> handles(kMaxKeyNum);
   std::vector<std::unique_ptr<BlobFileIterator>> iters;
-
   NewBuilder();
-
   for (int i = 1; i < kMaxKeyNum; i++) {
     AddKeyValue(GenKey(i), GenValue(i), &handles[i]);
     if (i % 100 == 0) {
       FinishBuilder();
-
       uint64_t file_size = 0;
       ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
       OpenBlobFile(file_number_, 0, titan_options_, env_options_, env_,
@@ -204,13 +197,11 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
                                file_size, TitanCFOptions()}));
       file_number_ = Random::GetTLSInstance()->Next();
       file_name_ = BlobFileName(dirname_, file_number_);
-
       NewBuilder();
     }
   }
 
   FinishBuilder();
-
   uint64_t file_size = 0;
   ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
   OpenBlobFile(file_number_, 0, titan_options_, env_options_, env_,
@@ -220,15 +211,12 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
   BlobFileMergeIterator iter(std::move(iters));
 
   iter.SeekToFirst();
-
   int i = 1;
   for (; iter.Valid(); i++, iter.Next()) {
     ASSERT_OK(iter.status());
     ASSERT_TRUE(iter.Valid());
     ASSERT_EQ(iter.key(), GenKey(i));
-    ASSERT_EQ(iter.value(), GenValue(i)
-
-    );
+    ASSERT_EQ(iter.value(), GenValue(i));
     ASSERT_EQ(iter.GetBlobIndex().blob_handle, handles[i]);
   }
   ASSERT_EQ(i, kMaxKeyNum);
