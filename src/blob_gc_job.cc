@@ -187,8 +187,8 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   }
   std::unique_ptr<PosixRandomRWFile> file_reader;
   const int readahead = 256 << 10;
-  s = OpenBlobFile(file->file_number(), readahead, db_options_,
-                   env_options_, env_, &file_reader);
+  s = OpenBlobFile(file->file_number(), readahead, db_options_, env_options_,
+                   env_, &file_reader);
   if (!s.ok()) {
     return s;
   }
@@ -378,8 +378,8 @@ Status BlobGCJob::BuildIterator(
   for (std::size_t i = 0; i < inputs.size(); ++i) {
     std::unique_ptr<PosixRandomRWFile> file;
     // TODO(@DorianZheng) set read ahead size
-    s = OpenBlobFile(inputs[i]->file_number(), 0, db_options_,
-                     env_options_, env_, &file);
+    s = OpenBlobFile(inputs[i]->file_number(), 0, db_options_, env_options_,
+                     env_, &file);
     if (!s.ok()) {
       break;
     }

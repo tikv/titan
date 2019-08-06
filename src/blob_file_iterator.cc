@@ -6,14 +6,13 @@
 namespace rocksdb {
 namespace titandb {
 
-BlobFileIterator::BlobFileIterator(
-    std::unique_ptr<PosixRandomRWFile>&& file, uint64_t file_name,
-    uint64_t file_size, const TitanCFOptions& titan_cf_options)
+BlobFileIterator::BlobFileIterator(std::unique_ptr<PosixRandomRWFile>&& file,
+                                   uint64_t file_name, uint64_t file_size,
+                                   const TitanCFOptions& titan_cf_options)
     : file_(std::move(file)),
       file_number_(file_name),
       file_size_(file_size),
-      titan_cf_options_(titan_cf_options) {
-}
+      titan_cf_options_(titan_cf_options) {}
 
 BlobFileIterator::~BlobFileIterator() {}
 
@@ -119,7 +118,7 @@ void BlobFileIterator::GetBlobRecord() {
   valid_ = true;
 }
 
-//void BlobFileIterator::PrefetchAndGet() {
+// void BlobFileIterator::PrefetchAndGet() {
 //  if (iterate_offset_ >= end_of_blob_record_) {
 //    valid_ = false;
 //    return;

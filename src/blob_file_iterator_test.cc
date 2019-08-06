@@ -138,50 +138,24 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   int i = n / 2;
   blob_file_iterator_->IterateForPrev(handles[i].offset);
   ASSERT_OK(blob_file_iterator_->status());
-  for (blob_file_iterator_->
-
-       Next();
-
-       i < n; i++, blob_file_iterator_->
-
-                   Next()
-
-  ) {
+  for (blob_file_iterator_->Next(); i < n; i++, blob_file_iterator_->Next()) {
     ASSERT_OK(blob_file_iterator_->status());
-    ASSERT_EQ(blob_file_iterator_->
-
-              Valid(),
-
-              true);
+    ASSERT_EQ(blob_file_iterator_->Valid(), true);
     BlobIndex blob_index;
     blob_index = blob_file_iterator_->GetBlobIndex();
     ASSERT_EQ(handles[i], blob_index.blob_handle);
     auto id = std::to_string(i);
-    ASSERT_EQ(id, blob_file_iterator_->
-
-                  key()
-
-    );
-    ASSERT_EQ(id, blob_file_iterator_->
-
-                  value()
-
-    );
+    ASSERT_EQ(id, blob_file_iterator_->key());
+    ASSERT_EQ(id, blob_file_iterator_->value());
   }
 
   auto idx = Random::GetTLSInstance()->Uniform(n);
   blob_file_iterator_->IterateForPrev(handles[idx].offset);
   ASSERT_OK(blob_file_iterator_->status());
-  blob_file_iterator_->
-
-      Next();
+  blob_file_iterator_->Next();
 
   ASSERT_OK(blob_file_iterator_->status());
-  ASSERT_TRUE(blob_file_iterator_->
-
-              Valid()
-
-  );
+  ASSERT_TRUE(blob_file_iterator_->Valid());
   BlobIndex blob_index;
   blob_index = blob_file_iterator_->GetBlobIndex();
   ASSERT_EQ(handles[idx], blob_index.blob_handle);
@@ -191,32 +165,20 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   blob_file_iterator_->IterateForPrev(handles[idx].offset - kBlobHeaderSize -
                                       1);
   ASSERT_OK(blob_file_iterator_->status());
-  blob_file_iterator_->
-
-      Next();
+  blob_file_iterator_->Next();
 
   ASSERT_OK(blob_file_iterator_->status());
-  ASSERT_TRUE(blob_file_iterator_->
-
-              Valid()
-
-  );
+  ASSERT_TRUE(blob_file_iterator_->Valid());
   blob_index = blob_file_iterator_->GetBlobIndex();
   ASSERT_EQ(handles[idx - 1], blob_index.blob_handle);
 
   idx = Random::GetTLSInstance()->Uniform(n);
   blob_file_iterator_->IterateForPrev(handles[idx].offset + 1);
   ASSERT_OK(blob_file_iterator_->status());
-  blob_file_iterator_->
-
-      Next();
+  blob_file_iterator_->Next();
 
   ASSERT_OK(blob_file_iterator_->status());
-  ASSERT_TRUE(blob_file_iterator_->
-
-              Valid()
-
-  );
+  ASSERT_TRUE(blob_file_iterator_->Valid());
   blob_index = blob_file_iterator_->GetBlobIndex();
   ASSERT_EQ(handles[idx], blob_index.blob_handle);
 }
@@ -257,44 +219,17 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
       std::move(readable_file_), file_number_, file_size, TitanCFOptions()}));
   BlobFileMergeIterator iter(std::move(iters));
 
-  iter.
-
-      SeekToFirst();
+  iter.SeekToFirst();
 
   int i = 1;
-  for (; iter.
-
-         Valid();
-
-       i++, iter.
-
-            Next()
-
-  ) {
+  for (; iter.Valid(); i++, iter.Next()) {
     ASSERT_OK(iter.status());
-    ASSERT_TRUE(iter.
-
-                Valid()
-
-    );
-    ASSERT_EQ(iter.
-
-              key(),
-              GenKey(i)
+    ASSERT_TRUE(iter.Valid());
+    ASSERT_EQ(iter.key(), GenKey(i));
+    ASSERT_EQ(iter.value(), GenValue(i)
 
     );
-    ASSERT_EQ(iter.
-
-              value(),
-              GenValue(i)
-
-    );
-    ASSERT_EQ(iter.
-
-              GetBlobIndex()
-
-                  .blob_handle,
-              handles[i]);
+    ASSERT_EQ(iter.GetBlobIndex().blob_handle, handles[i]);
   }
   ASSERT_EQ(i, kMaxKeyNum);
 }

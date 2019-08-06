@@ -1,18 +1,18 @@
 #pragma once
 
 #include "blob_format.h"
+#include "env/io_posix.h"
 #include "titan/options.h"
 #include "titan_stats.h"
 #include "util/file_reader_writer.h"
-#include "env/io_posix.h"
 
 namespace rocksdb {
 namespace titandb {
 
 Status OpenBlobFile(uint64_t file_number, uint64_t readahead_size,
-                    const TitanDBOptions &db_options,
-                    const EnvOptions &env_options, Env *env,
-                    std::unique_ptr<PosixRandomRWFile> *result);
+                    const TitanDBOptions& db_options,
+                    const EnvOptions& env_options, Env* env,
+                    std::unique_ptr<PosixRandomRWFile>* result);
 
 Status NewBlobFileReader(uint64_t file_number, uint64_t readahead_size,
                          const TitanDBOptions& db_options,
