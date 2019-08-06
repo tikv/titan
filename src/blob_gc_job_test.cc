@@ -159,9 +159,9 @@ class BlobGCJobTest : public testing::Test {
 
   Status NewIterator(uint64_t file_number, uint64_t file_size,
                      std::unique_ptr<BlobFileIterator>* iter) {
-    std::unique_ptr<RandomAccessFileReader> file;
-    Status s = NewBlobFileReader(file_number, 0, tdb_->db_options_,
-                                 tdb_->env_options_, tdb_->env_, &file);
+    std::unique_ptr<PosixRandomRWFile> file;
+    Status s = OpenBlobFile(file_number, 0, tdb_->db_options_,
+                            tdb_->env_options_, tdb_->env_, &file);
     if (!s.ok()) {
       return s;
     }

@@ -5,6 +5,7 @@
 #include "blob_file_builder.h"
 #include "blob_file_cache.h"
 #include "blob_file_reader.h"
+#include "env/io_posix.h"
 #include "util/filename.h"
 #include "util/testharness.h"
 
@@ -22,7 +23,7 @@ class BlobFileIteratorTest : public testing::Test {
   std::unique_ptr<BlobFileBuilder> builder_;
   std::unique_ptr<WritableFileWriter> writable_file_;
   std::unique_ptr<BlobFileIterator> blob_file_iterator_;
-  std::unique_ptr<RandomAccessFileReader> readable_file_;
+  std::unique_ptr<PosixRandomRWFile> random_rw_file_;
 
   BlobFileIteratorTest() : dirname_(test::TmpDir(env_)) {
     titan_options_.dirname = dirname_;
@@ -81,10 +82,10 @@ class BlobFileIteratorTest : public testing::Test {
   void NewBlobFileIterator() {
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
-    NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
-                      &readable_file_);
+    OpenBlobFile(file_number_, 0, titan_options_, env_options_, env_,
+                 &random_rw_file_);
     blob_file_iterator_.reset(new BlobFileIterator{
-        std::move(readable_file_), file_number_, file_size, TitanCFOptions()});
+        std::move(random_rw_file_), file_number_, file_size, TitanCFOptions()});
   }
 
   void TestBlobFileIterator() {
@@ -188,10 +189,10 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
       FinishBuilder();
       uint64_t file_size = 0;
       ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
-      NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
-                        &readable_file_);
+      OpenBlobFile(file_number_, 0, titan_options_, env_options_, env_,
+                   &random_rw_file_);
       iters.emplace_back(std::unique_ptr<BlobFileIterator>(
-          new BlobFileIterator{std::move(readable_file_), file_number_,
+          new BlobFileIterator{std::move(random_rw_file_), file_number_,
                                file_size, TitanCFOptions()}));
       file_number_ = Random::GetTLSInstance()->Next();
       file_name_ = BlobFileName(dirname_, file_number_);
@@ -202,10 +203,10 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
   FinishBuilder();
   uint64_t file_size = 0;
   ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
-  NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
-                    &readable_file_);
+  OpenBlobFile(file_number_, 0, titan_options_, env_options_, env_,
+               &random_rw_file_);
   iters.emplace_back(std::unique_ptr<BlobFileIterator>(new BlobFileIterator{
-      std::move(readable_file_), file_number_, file_size, TitanCFOptions()}));
+      std::move(random_rw_file_), file_number_, file_size, TitanCFOptions()}));
   BlobFileMergeIterator iter(std::move(iters));
 
   iter.SeekToFirst();

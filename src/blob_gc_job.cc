@@ -4,6 +4,7 @@
 #include <inttypes.h>
 
 #include "blob_gc_job.h"
+#include "env/io_posix.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -184,10 +185,10 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
     Random64 random64(records_size);
     sample_begin_offset += random64.Uniform(records_size - sample_size_window);
   }
-  std::unique_ptr<RandomAccessFileReader> file_reader;
+  std::unique_ptr<PosixRandomRWFile> file_reader;
   const int readahead = 256 << 10;
-  s = NewBlobFileReader(file->file_number(), readahead, db_options_,
-                        env_options_, env_, &file_reader);
+  s = OpenBlobFile(file->file_number(), readahead, db_options_, env_options_,
+                   env_, &file_reader);
   if (!s.ok()) {
     return s;
   }
@@ -375,10 +376,10 @@ Status BlobGCJob::BuildIterator(
   assert(!inputs.empty());
   std::vector<std::unique_ptr<BlobFileIterator>> list;
   for (std::size_t i = 0; i < inputs.size(); ++i) {
-    std::unique_ptr<RandomAccessFileReader> file;
+    std::unique_ptr<PosixRandomRWFile> file;
     // TODO(@DorianZheng) set read ahead size
-    s = NewBlobFileReader(inputs[i]->file_number(), 0, db_options_,
-                          env_options_, env_, &file);
+    s = OpenBlobFile(inputs[i]->file_number(), 0, db_options_, env_options_,
+                     env_, &file);
     if (!s.ok()) {
       break;
     }
