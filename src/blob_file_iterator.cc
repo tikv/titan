@@ -86,6 +86,10 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
   valid_ = false;
 }
 
+Status BlobFileIterator::PunchHole(uint64_t offset, size_t n) {
+  return file_->PunchHole(offset, n);
+}
+
 void BlobFileIterator::GetBlobRecord() {
   if (iterate_offset_ >= end_of_blob_record_) {
     valid_ = false;

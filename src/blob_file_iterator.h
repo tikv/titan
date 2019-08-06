@@ -34,9 +34,7 @@ class BlobFileIterator {
   Status status() const { return status_; }
 
   void IterateForPrev(uint64_t);
-  Status PunchHole(uint64_t offset, size_t n) {
-    return file_->PunchHole(offset, n);
-  }
+  Status PunchHole(uint64_t offset, size_t n);
 
   BlobIndex GetBlobIndex() {
     BlobIndex blob_index;
