@@ -113,7 +113,7 @@ void BlobFileIterator::GetBlobRecord() {
   cur_record_offset_ = iterate_offset_;
   cur_record_size_ = kBlobHeaderSize + record_size;
   iterate_offset_ += cur_record_size_;
-  status_ = file_->SeekNextData(iterate_offset_);
+  status_ = file_->SeekNextData(&iterate_offset_);
   if (!status_.ok()) return;
   valid_ = true;
 }
