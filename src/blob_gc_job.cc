@@ -583,7 +583,7 @@ bool BlobGCJob::IsShutingDown() {
 
 Status BlobGCJob::DigHole() {
   Status s;
-  const auto& inputs = blob_gc_->sampled_inputs();
+  const auto& inputs = blob_gc_->sampled_inputs();//TODO modify to fs_sampled_inputs
   assert(!inputs.empty());
   for (std::size_t i = 0; i < inputs.size(); ++i) {
     std::unique_ptr<PosixRandomRWFile> file;
