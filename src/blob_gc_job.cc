@@ -598,7 +598,6 @@ Status BlobGCJob::DigHole() {
         std::move(file), inputs[i]->file_number(), inputs[i]->file_size(),
         blob_gc_->titan_cf_options());
 
-    std::string last_key;
     uint64_t last_valid_tail = 0;
     uint64_t cur_valid_head = 0;
     uint64_t last_discadable_tail = 0;
