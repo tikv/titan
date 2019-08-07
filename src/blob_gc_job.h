@@ -81,6 +81,7 @@ class BlobGCJob {
   Status InstallOutputBlobFiles();
   Status RewriteValidKeyToLSM();
   Status DeleteInputBlobFiles();
+  Status DigHole();
 
   bool IsShutingDown();
 };

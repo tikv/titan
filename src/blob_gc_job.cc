@@ -581,5 +581,73 @@ bool BlobGCJob::IsShutingDown() {
   return (shuting_down_ && shuting_down_->load(std::memory_order_acquire));
 }
 
+Status BlobGCJob::DigHole() {
+  Status s;
+  const auto& inputs = blob_gc_->sampled_inputs();
+  assert(!inputs.empty());
+  for (std::size_t i = 0; i < inputs.size(); ++i) {
+    std::unique_ptr<PosixRandomRWFile> file;
+    // TODO(@DorianZheng) set read ahead size
+    s = OpenBlobFile(inputs[i]->file_number(), 0, db_options_, env_options_,
+                     env_, &file);
+    if (!s.ok()) {
+      break;
+    }
+
+    auto gc_iter = new BlobFileIterator(
+        std::move(file), inputs[i]->file_number(), inputs[i]->file_size(),
+        blob_gc_->titan_cf_options());
+
+    std::string last_key;
+    bool last_key_valid = false;
+    uint64_t last_valid_tail = 0;
+    uint64_t cur_valid_head = 0;
+    gc_iter->SeekToFirst();
+    assert(gc_iter->Valid());
+
+    // uint64_t before_size = gc_iter->GetSize();
+    for (; gc_iter->Valid(); gc_iter->Next()) {
+      if (IsShutingDown()) {
+        s = Status::ShutdownInProgress();
+        break;
+      }
+      BlobIndex blob_index = gc_iter->GetBlobIndex();
+
+      if (!last_key.empty() && !gc_iter->key().compare(last_key)) {
+        if (last_key_valid) {  // cur key is discardable, so skip
+          continue;
+        } else {  // same and cur key may be valid
+          ;
+        }
+      } else {  // read new key
+        last_key = gc_iter->key().ToString();
+        last_key_valid = false;
+      }
+
+      bool discardable = false;
+      s = DiscardEntry(gc_iter->key(), blob_index, &discardable);
+      if (!s.ok()) {
+        break;
+      }
+
+      if (discardable) {  // cur key is discardable so skip
+        continue;
+      } else {
+        last_key_valid = true;
+        const auto& blob_handle = gc_iter->GetBlobIndex().blob_handle;
+        cur_valid_head = blob_handle.offset;
+        if (cur_valid_head != last_valid_tail) {
+          gc_iter->PunchHole(last_valid_tail, cur_valid_head - last_valid_tail);
+        }
+        last_valid_tail = blob_handle.offset + blob_handle.size;
+      }
+    }
+    // post
+    // uint64_t after_size = gc_iter->GetSize();
+    // finish(after_size, before_size-after_size);
+  }
+  return s;
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
