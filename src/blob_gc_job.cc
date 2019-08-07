@@ -598,11 +598,12 @@ Status BlobGCJob::DigHole() {
         std::move(file), inputs[i]->file_number(), inputs[i]->file_size(),
         blob_gc_->titan_cf_options());
 
-    uint64_t last_valid_tail = 0;
-    uint64_t cur_valid_head = 0;
-    uint64_t last_discadable_tail = 0;
     record_iter->SeekToFirst();
     assert(record_iter->Valid());
+    const auto& first_blob_handle = record_iter->GetBlobIndex().blob_handle;
+    uint64_t last_valid_tail = first_blob_handle.offset;
+    uint64_t cur_valid_head = 0;
+    uint64_t last_discadable_tail = 0;
 
     // TODO uint64_t before_size = record_iter->GetSize();
     for (; record_iter->Valid(); record_iter->Next()) {
