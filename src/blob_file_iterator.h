@@ -35,6 +35,7 @@ class BlobFileIterator {
 
   void IterateForPrev(uint64_t);
   Status PunchHole(uint64_t offset, size_t n);
+  Status GetFileRealSize(uint64_t* size);
 
   BlobIndex GetBlobIndex() {
     BlobIndex blob_index;
