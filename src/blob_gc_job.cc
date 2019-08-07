@@ -601,35 +601,43 @@ Status BlobGCJob::DigHole() {
     std::string last_key;
     uint64_t last_valid_tail = 0;
     uint64_t cur_valid_head = 0;
+    uint64_t last_discadable_tail = 0;
     record_iter->SeekToFirst();
     assert(record_iter->Valid());
 
-    //TODO uint64_t before_size = record_iter->GetSize();
+    // TODO uint64_t before_size = record_iter->GetSize();
     for (; record_iter->Valid(); record_iter->Next()) {
       if (IsShutingDown()) {
         s = Status::ShutdownInProgress();
         break;
       }
-      BlobIndex blob_index = record_iter->GetBlobIndex();
 
+      BlobIndex blob_index = record_iter->GetBlobIndex();
       bool discardable = false;
       s = DiscardEntry(record_iter->key(), blob_index, &discardable);
       if (!s.ok()) {
         break;
       }
 
+      const auto& blob_handle = record_iter->GetBlobIndex().blob_handle;
+      int64_t blob_tail = blob_handle.offset + blob_handle.size;
       if (discardable) {  // cur key is discardable so skip
-        continue;
+        last_discadable_tail = blob_tail;
       } else {
-        const auto& blob_handle = record_iter->GetBlobIndex().blob_handle;
         cur_valid_head = blob_handle.offset;
         if (cur_valid_head != last_valid_tail) {
-          record_iter->PunchHole(last_valid_tail, cur_valid_head - last_valid_tail);
+          record_iter->PunchHole(last_valid_tail,
+                                 cur_valid_head - last_valid_tail);
         }
-        last_valid_tail = blob_handle.offset + blob_handle.size;
+        last_valid_tail = blob_tail;
       }
     }
-    //TODO post
+    if (last_valid_tail != last_discadable_tail) {
+      record_iter->PunchHole(last_valid_tail,
+                             last_discadable_tail - last_valid_tail);
+    }
+
+    // TODO post
     // uint64_t after_size = record_iter->GetSize();
     // finish(after_size, before_size-after_size);
   }
