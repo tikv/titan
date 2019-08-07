@@ -632,6 +632,10 @@ Status BlobGCJob::DigHole() {
         last_valid_tail = blob_tail;
       }
     }
+
+    if (!record_iter->status().ok()) {
+      return record_iter->status();
+    }
     if (last_valid_tail != last_discadable_tail) {
       record_iter->PunchHole(last_valid_tail,
                              last_discadable_tail - last_valid_tail);
