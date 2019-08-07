@@ -583,7 +583,7 @@ bool BlobGCJob::IsShutingDown() {
 
 Status BlobGCJob::DigHole() {
   Status s;
-  const auto& inputs = blob_gc_->sampled_inputs();//TODO modify to fs_sampled_inputs
+  const auto& inputs = blob_gc_->sampled_inputs();//TODO(@lhy1024) modify to fs_sampled_inputs
   assert(!inputs.empty());
   for (std::size_t i = 0; i < inputs.size(); ++i) {
     std::unique_ptr<PosixRandomRWFile> file;
@@ -605,7 +605,8 @@ Status BlobGCJob::DigHole() {
     uint64_t cur_valid_head = 0;
     uint64_t last_discadable_tail = 0;
 
-    // TODO uint64_t before_size = record_iter->GetSize();
+    uint64_t before_size=0,after_size=0;
+    record_iter->GetFileRealSize(&before_size);
     for (; record_iter->Valid(); record_iter->Next()) {
       if (IsShutingDown()) {
         s = Status::ShutdownInProgress();
@@ -641,9 +642,9 @@ Status BlobGCJob::DigHole() {
                              last_discadable_tail - last_valid_tail);
     }
 
-    // TODO post
-    // uint64_t after_size = record_iter->GetSize();
-    // finish(after_size, before_size-after_size);
+    // TODO(@lhy1024) post
+    record_iter->GetFileRealSize(&after_size);
+    // inputs[i]->finish(after_size, before_size-after_size);
   }
   return s;
 }
