@@ -609,7 +609,7 @@ Status BlobGCJob::DigHole() {
     for (; record_iter->Valid(); record_iter->Next()) {
       if (IsShutingDown()) {
         s = Status::ShutdownInProgress();
-        break;
+        return s;
       }
 
       BlobIndex blob_index = record_iter->GetBlobIndex();
