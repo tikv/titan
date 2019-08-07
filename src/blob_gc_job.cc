@@ -599,30 +599,18 @@ Status BlobGCJob::DigHole() {
         blob_gc_->titan_cf_options());
 
     std::string last_key;
-    bool last_key_valid = false;
     uint64_t last_valid_tail = 0;
     uint64_t cur_valid_head = 0;
     record_iter->SeekToFirst();
     assert(record_iter->Valid());
 
-    //TODO uint64_t before_size = gc_iter->GetSize();
+    //TODO uint64_t before_size = record_iter->GetSize();
     for (; record_iter->Valid(); record_iter->Next()) {
       if (IsShutingDown()) {
         s = Status::ShutdownInProgress();
         break;
       }
       BlobIndex blob_index = record_iter->GetBlobIndex();
-
-      if (!last_key.empty() && !record_iter->key().compare(last_key)) {
-        if (last_key_valid) {  // cur key is discardable, so skip
-          continue;
-        } else {  // same and cur key may be valid
-          ;
-        }
-      } else {  // read new key
-        last_key = record_iter->key().ToString();
-        last_key_valid = false;
-      }
 
       bool discardable = false;
       s = DiscardEntry(record_iter->key(), blob_index, &discardable);
@@ -633,7 +621,6 @@ Status BlobGCJob::DigHole() {
       if (discardable) {  // cur key is discardable so skip
         continue;
       } else {
-        last_key_valid = true;
         const auto& blob_handle = record_iter->GetBlobIndex().blob_handle;
         cur_valid_head = blob_handle.offset;
         if (cur_valid_head != last_valid_tail) {
@@ -643,7 +630,7 @@ Status BlobGCJob::DigHole() {
       }
     }
     //TODO post
-    // uint64_t after_size = gc_iter->GetSize();
+    // uint64_t after_size = record_iter->GetSize();
     // finish(after_size, before_size-after_size);
   }
   return s;
