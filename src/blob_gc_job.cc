@@ -581,5 +581,72 @@ bool BlobGCJob::IsShutingDown() {
   return (shuting_down_ && shuting_down_->load(std::memory_order_acquire));
 }
 
+Status BlobGCJob::DigHole() {
+  Status s;
+  const auto& inputs = blob_gc_->sampled_inputs();//TODO modify to fs_sampled_inputs
+  assert(!inputs.empty());
+  for (std::size_t i = 0; i < inputs.size(); ++i) {
+    std::unique_ptr<PosixRandomRWFile> file;
+    // TODO(@DorianZheng) set read ahead size
+    s = OpenBlobFile(inputs[i]->file_number(), 0, db_options_, env_options_,
+                     env_, &file);
+    if (!s.ok()) {
+      break;
+    }
+
+    auto record_iter = new BlobFileIterator(
+        std::move(file), inputs[i]->file_number(), inputs[i]->file_size(),
+        blob_gc_->titan_cf_options());
+
+    record_iter->SeekToFirst();
+    assert(record_iter->Valid());
+    const auto& first_blob_handle = record_iter->GetBlobIndex().blob_handle;
+    uint64_t last_valid_tail = first_blob_handle.offset;
+    uint64_t cur_valid_head = 0;
+    uint64_t last_discadable_tail = 0;
+
+    // TODO uint64_t before_size = record_iter->GetSize();
+    for (; record_iter->Valid(); record_iter->Next()) {
+      if (IsShutingDown()) {
+        s = Status::ShutdownInProgress();
+        return s;
+      }
+
+      BlobIndex blob_index = record_iter->GetBlobIndex();
+      bool discardable = false;
+      s = DiscardEntry(record_iter->key(), blob_index, &discardable);
+      if (!s.ok()) {
+        break;
+      }
+
+      const auto& blob_handle = record_iter->GetBlobIndex().blob_handle;
+      int64_t blob_tail = blob_handle.offset + blob_handle.size;
+      if (discardable) {  // cur key is discardable so skip
+        last_discadable_tail = blob_tail;
+      } else {
+        cur_valid_head = blob_handle.offset;
+        if (cur_valid_head != last_valid_tail) {
+          record_iter->PunchHole(last_valid_tail,
+                                 cur_valid_head - last_valid_tail);
+        }
+        last_valid_tail = blob_tail;
+      }
+    }
+
+    if (!record_iter->status().ok()) {
+      return record_iter->status();
+    }
+    if (last_valid_tail < last_discadable_tail) {
+      record_iter->PunchHole(last_valid_tail,
+                             last_discadable_tail - last_valid_tail);
+    }
+
+    // TODO post
+    // uint64_t after_size = record_iter->GetSize();
+    // finish(after_size, before_size-after_size);
+  }
+  return s;
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
