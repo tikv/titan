@@ -30,6 +30,7 @@ class BlobFileIterator {
   void Next();
   Slice key() const;
   Slice value() const;
+  unsigned char count() const;
   Status status() const { return status_; }
 
   void IterateForPrev(uint64_t);
@@ -84,6 +85,7 @@ class BlobFileMergeIterator {
   void Next();
   Slice key() const;
   Slice value() const;
+  unsigned char count() const;
   Status status() const {
     if (current_ != nullptr && !current_->status().ok())
       return current_->status();

@@ -97,16 +97,15 @@ if (WITH_TITAN_TOOLS)
         titan
         rocksdb)
 
-  if (NOT TRAVIS)
-    find_package(gflags REQUIRED)
-  else()
+
+
     # Hack: On Travis (with Ubuntu xenial or before), libgflags-dev package doesn't come with
     # gflags-config.cmake, so find_package will fail. Hard-code gflag path for now.
     if (NOT APPLE)
       set(gflags_INCLUDE_DIR "/usr/include/gflags")
       list(APPEND TOOLS_LIBS "/usr/lib/x86_64-linux-gnu/libgflags.a")
     endif()
-  endif()
+
   add_definitions(-DGFLAGS)
 
   add_executable(titandb_stress tools/titandb_stress.cc)

@@ -131,8 +131,9 @@ class BlobGCJobTest : public testing::Test {
       blob_gc->SetColumnFamily(cfh);
 
       BlobGCJob blob_gc_job(blob_gc.get(), base_db_, mutex_, tdb_->db_options_,
-                            tdb_->env_, EnvOptions(), tdb_->blob_manager_.get(),
-                            version_set_, &log_buffer, nullptr, nullptr);
+                            tdb_->env_, EnvOptions(options_),
+                            tdb_->blob_manager_.get(), version_set_,
+                            &log_buffer, nullptr, nullptr);
 
       s = blob_gc_job.Prepare();
       ASSERT_OK(s);
@@ -150,8 +151,64 @@ class BlobGCJobTest : public testing::Test {
         s = blob_gc_job.Finish();
         ASSERT_OK(s);
       }
+    }    
+    mutex_->Unlock();
+    tdb_->PurgeObsoleteFiles();
+    mutex_->Lock();
+    
+  }
+  void RunGC_cold(bool expected = false){
+    MutexLock l(mutex_);
+    Status s;
+    auto* cfh = base_db_->DefaultColumnFamily();
+
+    // Build BlobGC
+    TitanDBOptions db_options;
+    TitanCFOptions cf_options;
+    LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options.info_log.get());
+    cf_options.min_gc_batch_size = 0;
+    cf_options.blob_file_discardable_ratio = 0.4;
+    cf_options.sample_file_size_ratio = 1;
+
+    std::unique_ptr<BlobGC> blob_gc;
+    {
+      std::shared_ptr<BlobGCPicker> blob_gc_picker =
+          std::make_shared<BasicBlobGCPicker>(db_options, cf_options);
+      blob_gc = blob_gc_picker->PickBlobGC(
+          version_set_->GetBlobStorage(cfh->GetID()).lock().get());
     }
 
+    if (expected) {
+      ASSERT_TRUE(blob_gc != nullptr);
+    }
+
+    if (blob_gc) {
+      blob_gc->SetColumnFamily(cfh);
+
+      BlobGCJob blob_gc_job(blob_gc.get(), base_db_, mutex_, tdb_->db_options_,
+                            tdb_->env_, EnvOptions(options_),
+                            tdb_->blob_manager_.get(), version_set_,
+                            &log_buffer, nullptr, nullptr);
+
+      s = blob_gc_job.Prepare();
+      ASSERT_OK(s);
+
+      {
+        mutex_->Unlock();
+        s = blob_gc_job.Run();
+        if (expected) {
+          ASSERT_OK(s);
+        }
+        mutex_->Lock();
+      }
+
+      if (s.ok()) {
+        s = blob_gc_job.Finish();
+        ASSERT_OK(s);
+      }
+      blob_gc->ReleaseGcFiles();
+    }
+    
     mutex_->Unlock();
     tdb_->PurgeObsoleteFiles();
     mutex_->Lock();
@@ -260,6 +317,98 @@ TEST_F(BlobGCJobTest, DiscardEntry) { TestDiscardEntry(); }
 
 TEST_F(BlobGCJobTest, RunGC) { TestRunGC(); }
 
+TEST_F(BlobGCJobTest, GCLimiter) {
+  class TestLimiter : public RateLimiter {
+   public:
+    TestLimiter(RateLimiter::Mode mode)
+        : RateLimiter(mode), read(false), write(false) {}
+
+    size_t RequestToken(size_t bytes, size_t alignment,
+                        Env::IOPriority io_priority, Statistics* stats,
+                        RateLimiter::OpType op_type) override {
+      if (IsRateLimited(op_type)) {
+        if (op_type == RateLimiter::OpType::kRead) {
+          read = true;
+        } else {
+          write = true;
+        }
+      }
+      return bytes;
+    }
+
+    void SetBytesPerSecond(int64_t bytes_per_second) override {}
+
+    int64_t GetSingleBurstBytes() const override { return 0; }
+
+    int64_t GetTotalBytesThrough(
+        const Env::IOPriority pri = Env::IO_TOTAL) const override {
+      return 0;
+    }
+
+    int64_t GetTotalRequests(
+        const Env::IOPriority pri = Env::IO_TOTAL) const override {
+      return 0;
+    }
+
+    int64_t GetBytesPerSecond() const override { return 0; }
+
+    void Reset() {
+      read = false;
+      write = false;
+    }
+
+    bool ReadRequested() { return read; }
+
+    bool WriteRequested() { return write; }
+
+   private:
+    bool read;
+    bool write;
+  };
+
+  auto PutAndUpdate = [this] {
+    assert(db_);
+    for (int i = 0; i < MAX_KEY_NUM; i++) {
+      db_->Put(WriteOptions(), GenKey(i), GenValue(i));
+    }
+    Flush();
+    for (int i = 0; i < MAX_KEY_NUM; i++) {
+      db_->Put(WriteOptions(), GenKey(i), GenValue(i));
+    }
+    Flush();
+  };
+
+  TestLimiter* test_limiter = new TestLimiter(RateLimiter::Mode::kWritesOnly);
+  options_.rate_limiter = std::shared_ptr<RateLimiter>(test_limiter);
+  NewDB();
+  PutAndUpdate();
+  test_limiter->Reset();
+  RunGC();
+  ASSERT_TRUE(test_limiter->WriteRequested());
+  ASSERT_FALSE(test_limiter->ReadRequested());
+  DestroyDB();
+
+  test_limiter = new TestLimiter(RateLimiter::Mode::kReadsOnly);
+  options_.rate_limiter.reset(test_limiter);
+  NewDB();
+  PutAndUpdate();
+  test_limiter->Reset();
+  RunGC();
+  ASSERT_FALSE(test_limiter->WriteRequested());
+  ASSERT_TRUE(test_limiter->ReadRequested());
+  DestroyDB();
+
+  test_limiter = new TestLimiter(RateLimiter::Mode::kAllIo);
+  options_.rate_limiter.reset(test_limiter);
+  NewDB();
+  PutAndUpdate();
+  test_limiter->Reset();
+  RunGC();
+  ASSERT_TRUE(test_limiter->WriteRequested());
+  ASSERT_TRUE(test_limiter->ReadRequested());
+  DestroyDB();
+}
+
 // Tests blob file will be kept after GC, if it is still visible by active
 // snapshots.
 TEST_F(BlobGCJobTest, PurgeBlobs) {
@@ -322,6 +471,7 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   ASSERT_OK(db_->Put(WriteOptions(), GenKey(4), GenValue(4)));
   Flush();
   CompactAll();
+
   std::string value;
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
   ASSERT_EQ(value, "0");
@@ -343,7 +493,7 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   ASSERT_EQ(value, "1");
 
   RunGC(true);
-
+ 
   std::string key0 = GenKey(0);
   std::string key3 = GenKey(3);
   Slice start = Slice(key0);
@@ -370,7 +520,67 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
 
   DestroyDB();
 }
+TEST_F(BlobGCJobTest, Cold_Blob_Gc){
+  NewDB();
 
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(2), GenValue(21)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(4), GenValue(4)));
+  Flush();
+  CompactAll();
+
+  std::string value;
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
+  ASSERT_EQ(value, "0");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_EQ(value, "1");
+
+  SstFileWriter sst_file_writer(EnvOptions(), options_);
+  std::string sst_file = options_.dirname + "/for_ingest.sst";
+  ASSERT_OK(sst_file_writer.Open(sst_file));
+  ASSERT_OK(sst_file_writer.Put(GenKey(1), GenValue(1)));
+  ASSERT_OK(sst_file_writer.Put(GenKey(2), GenValue(22)));
+  ASSERT_OK(sst_file_writer.Finish());
+  ASSERT_OK(db_->IngestExternalFile({sst_file}, IngestExternalFileOptions()));
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
+  ASSERT_EQ(value, "0");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level5", &value));
+  ASSERT_EQ(value, "1");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_EQ(value, "1");
+
+  RunGC_cold(true);
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(5), GenValue(21)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(6), GenValue(4)));
+  Flush();
+  CompactAll();
+  RunGC_cold(true);
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(7), GenValue(21)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(8), GenValue(4)));
+  Flush();
+  CompactAll();
+  RunGC_cold(true);
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(9), GenValue(21)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(10), GenValue(4)));
+  Flush();
+  CompactAll();
+  RunGC_cold(true);
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(11), GenValue(21)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(12), GenValue(4)));
+  Flush();
+  CompactAll();
+  RunGC_cold(true);
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(13), GenValue(21)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(14), GenValue(4)));
+  Flush();
+  CompactAll();
+  RunGC_cold(true);
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(15), GenValue(21)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(16), GenValue(4)));
+  Flush();
+  CompactAll();
+  RunGC_cold(true);
+  DestroyDB();
+}
 }  // namespace titandb
 }  // namespace rocksdb
 

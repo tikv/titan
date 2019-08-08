@@ -23,6 +23,8 @@ class BlobGC {
 
   const std::vector<BlobFileMeta*>& inputs() { return inputs_; }
 
+  const std::vector<BlobFileMeta*>& outputs() { return outputs_; }
+
   void set_sampled_inputs(std::vector<BlobFileMeta*>&& files) {
     sampled_inputs_ = std::move(files);
   }

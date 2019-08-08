@@ -113,7 +113,7 @@ void BlobStorage::ComputeGCScore() {
   // TODO: no need to recompute all everytime
   MutexLock l(&mutex_);
   gc_score_.clear();
-
+  
   for (auto& file : files_) {
     if (file.second->is_obsolete()) {
       continue;
@@ -131,7 +131,6 @@ void BlobStorage::ComputeGCScore() {
       gcs.score = file.second->GetDiscardableRatio();
     }
   }
-
   std::sort(gc_score_.begin(), gc_score_.end(),
             [](const GCScore& first, const GCScore& second) {
               return first.score > second.score;

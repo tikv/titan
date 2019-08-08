@@ -108,6 +108,7 @@ class BlobFileIteratorTest : public testing::Test {
       auto id = std::to_string(i);
       ASSERT_EQ(id, blob_file_iterator_->key());
       ASSERT_EQ(id, blob_file_iterator_->value());
+      ASSERT_EQ('0', blob_file_iterator_->count());
       BlobIndex blob_index = blob_file_iterator_->GetBlobIndex();
       ASSERT_EQ(handles[i], blob_index.blob_handle);
     }

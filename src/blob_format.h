@@ -23,10 +23,11 @@ const uint64_t kBlobHeaderSize = 9;
 struct BlobRecord {
   Slice key;
   Slice value;
+  unsigned char count = '0';
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
-
+  bool AddCount();
   friend bool operator==(const BlobRecord& lhs, const BlobRecord& rhs);
 };
 
@@ -99,6 +100,7 @@ struct BlobIndex {
 //
 // file_number_      : varint64
 // file_size_        : varint64
+// is_cold_file      : varint64  
 class BlobFileMeta {
  public:
   enum class FileEvent {
@@ -123,8 +125,8 @@ class BlobFileMeta {
   };
 
   BlobFileMeta() = default;
-  BlobFileMeta(uint64_t _file_number, uint64_t _file_size)
-      : file_number_(_file_number), file_size_(_file_size) {}
+  BlobFileMeta(uint64_t _file_number, uint64_t _file_size, uint64_t _is_cold_file = 0 )
+      : file_number_(_file_number), file_size_(_file_size), is_cold_file_(_is_cold_file) {}
 
   friend bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs);
 
@@ -132,6 +134,7 @@ class BlobFileMeta {
   Status DecodeFrom(Slice* src);
 
   uint64_t file_number() const { return file_number_; }
+  uint64_t is_cold_file() const { return is_cold_file_; }
   uint64_t file_size() const { return file_size_; }
   FileState file_state() const { return state_; }
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
@@ -139,6 +142,7 @@ class BlobFileMeta {
 
   bool gc_mark() const { return gc_mark_; }
   void set_gc_mark(bool mark) { gc_mark_ = mark; }
+  void set_cold_file(uint64_t is_cold) { is_cold_file_ = is_cold; }
 
   void FileStateTransit(const FileEvent& event);
 
@@ -149,6 +153,7 @@ class BlobFileMeta {
   // Persistent field
   uint64_t file_number_{0};
   uint64_t file_size_{0};
+  uint64_t is_cold_file_ {0};
 
   // Not persistent field
   FileState state_{FileState::kInit};

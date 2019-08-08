@@ -13,6 +13,7 @@ TEST(BlobFormatTest, BlobRecord) {
   CheckCodec(input);
   input.key = "hello";
   input.value = "world";
+  input.AddCount();
   CheckCodec(input);
 }
 
@@ -36,6 +37,8 @@ TEST(BlobFormatTest, BlobIndex) {
 TEST(BlobFormatTest, BlobFileMeta) {
   BlobFileMeta input(2, 3);
   CheckCodec(input);
+  BlobFileMeta output(2, 3, 1);
+  CheckCodec(output);
 }
 
 TEST(BlobFormatTest, BlobFileFooter) {

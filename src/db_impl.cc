@@ -24,7 +24,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
  public:
   FileManager(TitanDBImpl* db) : db_(db) {}
 
-  Status NewFile(std::unique_ptr<BlobFileHandle>* handle) override {
+  Status NewFile(std::unique_ptr<BlobFileHandle>* handle, uint64_t is_cold = 0) override {
     auto number = db_->vset_->NewFileNumber();
     auto name = BlobFileName(db_->dirname_, number);
 
@@ -37,7 +37,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       file.reset(new WritableFileWriter(std::move(f), name, db_->env_options_));
     }
 
-    handle->reset(new FileHandle(number, name, std::move(file)));
+    handle->reset(new FileHandle(number, name, std::move(file), is_cold));
     {
       MutexLock l(&db_->mutex_);
       db_->pending_outputs_.insert(number);
@@ -102,12 +102,14 @@ class TitanDBImpl::FileManager : public BlobFileManager {
   class FileHandle : public BlobFileHandle {
    public:
     FileHandle(uint64_t number, const std::string& name,
-               std::unique_ptr<WritableFileWriter> file)
-        : number_(number), name_(name), file_(std::move(file)) {}
+               std::unique_ptr<WritableFileWriter> file, uint64_t is_cold = 0)
+        : number_(number), name_(name), file_(std::move(file)), is_cold_file_(is_cold) {}
 
     uint64_t GetNumber() const override { return number_; }
 
     const std::string& GetName() const override { return name_; }
+
+    uint64_t GetIsColdFile() const override { return is_cold_file_; }
 
     WritableFileWriter* GetFile() const override { return file_.get(); }
 
@@ -115,6 +117,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     uint64_t number_;
     std::string name_;
     std::unique_ptr<WritableFileWriter> file_;
+    uint64_t is_cold_file_;
   };
 
   TitanDBImpl* db_;

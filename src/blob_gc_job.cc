@@ -254,6 +254,8 @@ Status BlobGCJob::DoRunGC() {
   // is_blob_index flag to GetImpl.
   std::unique_ptr<BlobFileHandle> blob_file_handle;
   std::unique_ptr<BlobFileBuilder> blob_file_builder;
+  std::unique_ptr<BlobFileHandle> cold_blob_file_handle;
+  std::unique_ptr<BlobFileBuilder> cold_blob_file_builder;
 
   auto* cfh = blob_gc_->column_family_handle();
 
@@ -263,6 +265,7 @@ Status BlobGCJob::DoRunGC() {
   //  uint64_t total_entry_size = 0;
 
   uint64_t file_size = 0;
+  uint64_t cold_file_size = 0;
 
   std::string last_key;
   bool last_key_valid = false;
@@ -324,19 +327,58 @@ Status BlobGCJob::DoRunGC() {
     assert(blob_file_handle);
     assert(blob_file_builder);
 
+    
+
     BlobRecord blob_record;
     blob_record.key = gc_iter->key();
     blob_record.value = gc_iter->value();
+
+    blob_record.count = gc_iter->count();
+    blob_record.AddCount();
+    
+    //printf("%s,%s,%c\n",blob_record.key.data(),blob_record.value.data(),blob_record.count);
     // count written bytes for new blob record,
     // blob index's size is counted in `RewriteValidKeyToLSM`
     metrics_.blob_db_bytes_written +=
-        blob_record.key.size() + blob_record.value.size();
+        blob_record.key.size() + blob_record.value.size() + 1;
 
     BlobIndex new_blob_index;
-    new_blob_index.file_number = blob_file_handle->GetNumber();
-    blob_file_builder->Add(blob_record, &new_blob_index.blob_handle);
     std::string index_entry;
-    new_blob_index.EncodeTo(&index_entry);
+    if (blob_record.count < blob_gc_->titan_cf_options().cold_thresholds)
+    {
+      new_blob_index.file_number = blob_file_handle->GetNumber();
+      file_size += blob_record.key.size() + blob_record.value.size() + 1;
+      blob_file_builder->Add(blob_record, &new_blob_index.blob_handle);
+      new_blob_index.EncodeTo(&index_entry);
+    }  else {
+      if ((!cold_blob_file_handle && !cold_blob_file_builder) ||
+          cold_file_size >= blob_gc_->titan_cf_options().blob_file_target_size) {
+        if (cold_file_size >= blob_gc_->titan_cf_options().blob_file_target_size) {
+          assert(cold_blob_file_builder);
+          assert(cold_blob_file_handle);
+          assert(cold_blob_file_builder->status().ok());
+          blob_file_builders_.emplace_back(std::make_pair(
+              std::move(cold_blob_file_handle), std::move(cold_blob_file_builder)));
+        }
+        s = blob_file_manager_->NewFile(&cold_blob_file_handle,1);
+        if (!s.ok()) {
+          break;
+        }
+        ROCKS_LOG_INFO(db_options_.info_log,
+                       "Titan new GC output cold file %" PRIu64 ".",
+                       cold_blob_file_handle->GetNumber());
+        cold_blob_file_builder = std::unique_ptr<BlobFileBuilder>(
+            new BlobFileBuilder(db_options_, blob_gc_->titan_cf_options(),
+                                cold_blob_file_handle->GetFile()));
+        cold_file_size = 0;
+      }
+      assert(cold_blob_file_handle);
+      assert(cold_blob_file_builder);
+      new_blob_index.file_number = cold_blob_file_handle->GetNumber();
+      cold_file_size += blob_record.key.size() + blob_record.value.size() + 1;
+      cold_blob_file_builder->Add(blob_record, &new_blob_index.blob_handle);
+      new_blob_index.EncodeTo(&index_entry);
+    }
 
     // Store WriteBatch for rewriting new Key-Index pairs to LSM
     GarbageCollectionWriteCallback callback(cfh, blob_record.key.ToString(),
@@ -360,6 +402,14 @@ Status BlobGCJob::DoRunGC() {
     } else {
       assert(!blob_file_builder);
       assert(!blob_file_handle);
+    }
+    if (cold_blob_file_builder && cold_blob_file_handle) {
+      assert(cold_blob_file_builder->status().ok());
+      blob_file_builders_.emplace_back(std::make_pair(
+          std::move(cold_blob_file_handle), std::move(cold_blob_file_builder)));
+    } else {
+      assert(!cold_blob_file_builder);
+      assert(!cold_blob_file_handle);
     }
   } else if (!gc_iter->status().ok()) {
     return gc_iter->status();
@@ -472,7 +522,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     std::string tmp;
     for (auto& builder : this->blob_file_builders_) {
       auto file = std::make_shared<BlobFileMeta>(
-          builder.first->GetNumber(), builder.first->GetFile()->GetFileSize());
+          builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(), builder.first->GetIsColdFile());
 
       if (!tmp.empty()) {
         tmp.append(" ");

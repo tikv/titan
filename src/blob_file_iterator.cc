@@ -59,6 +59,8 @@ Slice BlobFileIterator::key() const { return cur_blob_record_.key; }
 
 Slice BlobFileIterator::value() const { return cur_blob_record_.value; }
 
+unsigned char BlobFileIterator::count() const { return cur_blob_record_.count; }
+
 void BlobFileIterator::IterateForPrev(uint64_t offset) {
   if (!init_ && !Init()) return;
 
@@ -186,6 +188,11 @@ Slice BlobFileMergeIterator::key() const {
 Slice BlobFileMergeIterator::value() const {
   assert(current_ != nullptr);
   return current_->value();
+}
+
+unsigned char BlobFileMergeIterator::count() const {
+  assert(current_ != nullptr);
+  return current_->count();
 }
 
 }  // namespace titandb
