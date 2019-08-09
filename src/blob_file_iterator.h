@@ -33,7 +33,6 @@ class BlobFileIterator {
   Slice value() const;
   Status status() const { return status_; }
 
-  void IterateForPrev(uint64_t);
   Status PunchHole(uint64_t offset, size_t n);
   Status GetFileRealSize(uint64_t* size);
 

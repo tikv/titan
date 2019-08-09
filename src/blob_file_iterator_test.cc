@@ -120,63 +120,6 @@ TEST_F(BlobFileIteratorTest, Basic) {
   TestBlobFileIterator();
 }
 
-TEST_F(BlobFileIteratorTest, IterateForPrev) {
-  NewBuilder();
-  const int n = 1000;
-  std::vector<BlobHandle> handles(n);
-  for (int i = 0; i < n; i++) {
-    auto id = std::to_string(i);
-    AddKeyValue(id, id, &handles[i]);
-  }
-
-  FinishBuilder();
-
-  NewBlobFileIterator();
-
-  int i = n / 2;
-  blob_file_iterator_->IterateForPrev(handles[i].offset);
-  ASSERT_OK(blob_file_iterator_->status());
-  for (blob_file_iterator_->Next(); i < n; i++, blob_file_iterator_->Next()) {
-    ASSERT_OK(blob_file_iterator_->status());
-    ASSERT_EQ(blob_file_iterator_->Valid(), true);
-    BlobIndex blob_index;
-    blob_index = blob_file_iterator_->GetBlobIndex();
-    ASSERT_EQ(handles[i], blob_index.blob_handle);
-    auto id = std::to_string(i);
-    ASSERT_EQ(id, blob_file_iterator_->key());
-    ASSERT_EQ(id, blob_file_iterator_->value());
-  }
-
-  auto idx = Random::GetTLSInstance()->Uniform(n);
-  blob_file_iterator_->IterateForPrev(handles[idx].offset);
-  ASSERT_OK(blob_file_iterator_->status());
-  blob_file_iterator_->Next();
-  ASSERT_OK(blob_file_iterator_->status());
-  ASSERT_TRUE(blob_file_iterator_->Valid());
-  BlobIndex blob_index;
-  blob_index = blob_file_iterator_->GetBlobIndex();
-  ASSERT_EQ(handles[idx], blob_index.blob_handle);
-
-  while ((idx = Random::GetTLSInstance()->Uniform(n)) == 0)
-    ;
-  blob_file_iterator_->IterateForPrev(handles[idx].offset - kBlobHeaderSize -
-                                      1);
-  ASSERT_OK(blob_file_iterator_->status());
-  blob_file_iterator_->Next();
-  ASSERT_OK(blob_file_iterator_->status());
-  ASSERT_TRUE(blob_file_iterator_->Valid());
-  blob_index = blob_file_iterator_->GetBlobIndex();
-  ASSERT_EQ(handles[idx - 1], blob_index.blob_handle);
-
-  idx = Random::GetTLSInstance()->Uniform(n);
-  blob_file_iterator_->IterateForPrev(handles[idx].offset + 1);
-  ASSERT_OK(blob_file_iterator_->status());
-  blob_file_iterator_->Next();
-  ASSERT_OK(blob_file_iterator_->status());
-  ASSERT_TRUE(blob_file_iterator_->Valid());
-  blob_index = blob_file_iterator_->GetBlobIndex();
-  ASSERT_EQ(handles[idx], blob_index.blob_handle);
-}
 
 TEST_F(BlobFileIteratorTest, MergeIterator) {
   const int kMaxKeyNum = 1000;
