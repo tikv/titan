@@ -50,6 +50,7 @@ class BlobGCJob {
   BlobFileManager* blob_file_manager_;
   VersionSet* version_set_;
   LogBuffer* log_buffer_{nullptr};
+  const uint64_t block_size_ = 4096;
 
   std::vector<std::pair<std::unique_ptr<BlobFileHandle>,
                         std::unique_ptr<BlobFileBuilder>>>
@@ -82,8 +83,9 @@ class BlobGCJob {
   Status RewriteValidKeyToLSM();
   Status DeleteInputBlobFiles();
   Status DigHole();
-
   bool IsShutingDown();
+ protected:
+  Status DigHoleFile(BlobFileMeta* input);
 };
 
 }  // namespace titandb
