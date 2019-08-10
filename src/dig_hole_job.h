@@ -16,6 +16,7 @@ class DigHoleJob {
              TitanCFOptions titan_cf_options,
              std::function<bool()> IsShutingDown,
              std::function<Status(const Slice &, const BlobIndex &, bool *)> DiscardEntry);
+  friend class DigHoleTest;
   Status Exec(const std::vector<BlobFileMeta *> &inputs);
  private:
   std::function<bool()> IsShutingDown_;
