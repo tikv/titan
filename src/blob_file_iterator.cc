@@ -64,7 +64,7 @@ Status BlobFileIterator::PunchHole(uint64_t offset, size_t n) {
   return file_->PunchHole(offset, n);
 }
 
-Status BlobFileIterator::GetFileRealSize(uint64_t* size) {
+Status BlobFileIterator::GetFileRealSize(uint64_t* size) const {
   return file_->GetSizeOnDisk(size);
 }
 
@@ -75,9 +75,32 @@ void BlobFileIterator::GetBlobRecord() {
   }
 
   FixedSlice<kBlobHeaderSize> header_buffer;
+  bool need_check_header = true;
+  if (iterate_offset_ % 4096 == 0) {
+    file_->SeekNextData(&iterate_offset_);
+    if (iterate_offset_ >= end_of_blob_record_) {
+      valid_ = false;
+      return;
+    }
+    need_check_header = false;
+  }
   status_ = file_->Read(iterate_offset_, kBlobHeaderSize, &header_buffer,
                         header_buffer.get());
   if (!status_.ok()) return;
+  if (need_check_header && memcmp(header_buffer.get(), empty_record_header_, kBlobHeaderSize) == 0) {
+    // Skip to next block
+    iterate_offset_ = (iterate_offset_ / 4096 + 1) * 4096;
+    file_->SeekNextData(&iterate_offset_);
+    if (iterate_offset_ >= end_of_blob_record_) {
+      valid_ = false;
+      return;
+    }
+
+    // Read the header again
+    status_ = file_->Read(iterate_offset_, kBlobHeaderSize, &header_buffer,
+                          header_buffer.get());
+    if (!status_.ok()) return;
+  }
   status_ = decoder_.DecodeHeader(&header_buffer);
   if (!status_.ok()) return;
 
@@ -95,8 +118,6 @@ void BlobFileIterator::GetBlobRecord() {
   cur_record_offset_ = iterate_offset_;
   cur_record_size_ = kBlobHeaderSize + record_size;
   iterate_offset_ += cur_record_size_;
-  status_ = file_->SeekNextData(&iterate_offset_);
-  if (!status_.ok()) return;
   valid_ = true;
 }
 
