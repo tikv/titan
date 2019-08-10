@@ -76,6 +76,9 @@ void BlobFileIterator::GetBlobRecord() {
 
   FixedSlice<kBlobHeaderSize> header_buffer;
   bool need_check_header = true;
+  if (4096 - iterate_offset_ % 4096 <= kBlobHeaderSize) {
+    iterate_offset_ = (iterate_offset_ / 4096 + 1) * 4096;
+  }
   if (iterate_offset_ % 4096 == 0) {
     file_->SeekNextData(&iterate_offset_);
     if (iterate_offset_ >= end_of_blob_record_) {
