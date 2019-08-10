@@ -627,7 +627,7 @@ Status BlobGCJob::DigHoleFile(BlobFileMeta *input) {
         bool discardable = false;
         s = DiscardEntry(record_iter->key(), blob_index, &discardable);
         if (!s.ok()) {
-          break;
+          return;
         }
         if (!discardable) {//There is valid record.
           enableHole = false;
