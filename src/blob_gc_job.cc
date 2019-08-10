@@ -618,7 +618,7 @@ Status BlobGCJob::DigHoleFile(BlobFileMeta *input) {
     BlobHandle blob_handle = blob_index.blob_handle;
     uint64_t record_end = blob_handle.offset + blob_handle.size;
     const uint64_t hole_start = blob_handle.offset;
-    const uint64_t hole_end = (record_end + block_size_) / block_size_ * block_size_;
+    const uint64_t hole_end = (record_end + block_size_ - 1) / block_size_ * block_size_;
     bool enableHole = true;
 
     while (record_end <= hole_end) {
