@@ -13,23 +13,35 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
   std::string buffer;
   header.EncodeTo(&buffer);
   status_ = file_->Append(buffer);
+  remain_size_ = block_size_ - (file_->GetFileSize() % block_size_);
+  file_->Append(Slice(zero_buffer_, remain_size_));
+  remain_size_ = block_size_;
 }
 
 void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
   if (!ok()) return;
 
   encoder_.EncodeRecord(record);
-  handle->offset = file_->GetFileSize();
   handle->size = encoder_.GetEncodedSize();
+  if (remain_size_ != block_size_ && handle->size > remain_size_) {
+    file_->Append(Slice(zero_buffer_, remain_size_));
+  }
+  handle->offset = file_->GetFileSize();
 
   status_ = file_->Append(encoder_.GetHeader());
   if (ok()) {
     status_ = file_->Append(encoder_.GetRecord());
   }
+
+  remain_size_ = block_size_ - (file_->GetFileSize() % block_size_);
 }
 
 Status BlobFileBuilder::Finish() {
   if (!ok()) return status();
+
+  if (remain_size_ > 0) {
+    file_->Append(Slice(zero_buffer_, remain_size_));
+  }
 
   std::string buffer;
   BlobFileFooter footer;

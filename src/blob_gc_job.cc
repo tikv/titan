@@ -172,55 +172,40 @@ Status BlobGCJob::SampleCandidateFiles() {
 
 Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   assert(selected != nullptr);
+
   if (file->file_size() <=
-          blob_gc_->titan_cf_options().merge_small_file_threshold ||
+      blob_gc_->titan_cf_options().merge_small_file_threshold ||
       file->GetDiscardableRatio() >=
           blob_gc_->titan_cf_options().blob_file_discardable_ratio) {
     *selected = true;
     return Status::OK();
   }
 
-  // TODO: add do sample count metrics
-  auto records_size = file->file_size() - BlobFileHeader::kEncodedLength -
-                      BlobFileFooter::kEncodedLength;
   Status s;
-  uint64_t sample_size_window = static_cast<uint64_t>(
-      records_size * blob_gc_->titan_cf_options().sample_file_size_ratio);
-  uint64_t sample_begin_offset = BlobFileHeader::kEncodedLength;
-  if (records_size != sample_size_window) {
-    Random64 random64(records_size);
-    sample_begin_offset += random64.Uniform(records_size - sample_size_window);
-  }
+
   std::unique_ptr<PosixRandomRWFile> file_reader;
-  const int readahead = 256 << 10;
-  s = OpenBlobFile(file->file_number(), readahead, db_options_, env_options_,
+  s = OpenBlobFile(file->file_number(), 0, db_options_, env_options_,
                    env_, &file_reader);
   if (!s.ok()) {
     return s;
   }
   BlobFileIterator iter(std::move(file_reader), file->file_number(),
                         file->file_size(), blob_gc_->titan_cf_options());
-  iter.IterateForPrev(sample_begin_offset);
-  // TODO(@DorianZheng) sample_begin_offset maybe out of data block size, need
-  // more elegant solution
-  if (iter.status().IsInvalidArgument()) {
-    iter.IterateForPrev(BlobFileHeader::kEncodedLength);
-  }
+  iter.SeekToFirst();
   if (!iter.status().ok()) {
     s = iter.status();
     ROCKS_LOG_ERROR(db_options_.info_log,
-                    "IterateForPrev failed, file number[%" PRIu64
+                    "SeekToFirst failed, file number[%" PRIu64
                     "] size[%" PRIu64 "] status[%s]",
                     file->file_number(), file->file_size(),
                     s.ToString().c_str());
     return s;
   }
+  assert(iter.Valid());
 
   uint64_t iterated_size{0};
   uint64_t discardable_size{0};
-  for (iter.Next();
-       iterated_size < sample_size_window && iter.status().ok() && iter.Valid();
-       iter.Next()) {
+  for ( ; iter.Valid(); iter.Next()) {
     BlobIndex blob_index = iter.GetBlobIndex();
     uint64_t total_length = blob_index.blob_handle.size;
     iterated_size += total_length;
@@ -238,7 +223,7 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
 
   *selected =
       discardable_size >=
-      std::ceil(sample_size_window *
+      std::ceil(iterated_size *
                 blob_gc_->titan_cf_options().blob_file_discardable_ratio);
   return s;
 }
