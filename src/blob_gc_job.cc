@@ -644,7 +644,7 @@ Status BlobGCJob::DigHoleFile(BlobFileMeta *input) {
       }
     }
 
-    if (enableHole && record_iter->status().ok() && s.ok()) {
+    if (enableHole && record_iter->status().ok()) {
       record_iter->PunchHole(hole_start, hole_end - hole_start);
     }
   }
