@@ -4,8 +4,8 @@
 #include <inttypes.h>
 
 #include "blob_gc_job.h"
-#include "env/io_posix.h"
 #include "dig_hole_job.h"
+#include "env/io_posix.h"
 namespace rocksdb {
 namespace titandb {
 
@@ -89,13 +89,11 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
       log_buffer_(log_buffer),
       shuting_down_(shuting_down),
       stats_(stats) {
-  dig_hole_job_ = std::make_shared<DigHoleJob>(titan_db_options, env_options, env, blob_gc->titan_cf_options(),
-                                               std::bind(&BlobGCJob::IsShutingDown, this),
-                                               std::bind(&BlobGCJob::DiscardEntry,
-                                                         this,
-                                                         std::placeholders::_1,
-                                                         std::placeholders::_2,
-                                                         std::placeholders::_3));
+  dig_hole_job_ = std::make_shared<DigHoleJob>(
+      titan_db_options, env_options, env, blob_gc->titan_cf_options(),
+      std::bind(&BlobGCJob::IsShutingDown, this),
+      std::bind(&BlobGCJob::DiscardEntry, this, std::placeholders::_1,
+                std::placeholders::_2, std::placeholders::_3));
 }
 
 BlobGCJob::~BlobGCJob() {
@@ -590,7 +588,8 @@ bool BlobGCJob::IsShutingDown() {
 }
 
 Status BlobGCJob::DigHole() {
-  const auto &inputs = blob_gc_->sampled_inputs();//TODO(@lhy1024) modify to fs_sampled_inputs
+  const auto& inputs =
+      blob_gc_->sampled_inputs();  // TODO(@lhy1024) modify to fs_sampled_inputs
   assert(!inputs.empty());
   return dig_hole_job_->Exec(inputs);
 }
