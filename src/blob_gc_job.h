@@ -14,7 +14,7 @@
 
 namespace rocksdb {
 namespace titandb {
-
+class DigHoleJob;
 class BlobGCJob {
  public:
   BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
@@ -50,7 +50,6 @@ class BlobGCJob {
   BlobFileManager* blob_file_manager_;
   VersionSet* version_set_;
   LogBuffer* log_buffer_{nullptr};
-  const uint64_t block_size_ = 4096;
 
   std::vector<std::pair<std::unique_ptr<BlobFileHandle>,
                         std::unique_ptr<BlobFileBuilder>>>
@@ -62,6 +61,7 @@ class BlobGCJob {
 
   TitanStats* stats_;
 
+  std::shared_ptr<DigHoleJob> dig_hole_job_;
   struct {
     uint64_t blob_db_bytes_read = 0;
     uint64_t blob_db_bytes_written = 0;
@@ -84,8 +84,6 @@ class BlobGCJob {
   Status DeleteInputBlobFiles();
   Status DigHole();
   bool IsShutingDown();
- protected:
-  Status DigHoleFile(BlobFileMeta* input);
 };
 
 }  // namespace titandb
