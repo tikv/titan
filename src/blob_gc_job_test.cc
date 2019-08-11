@@ -218,7 +218,7 @@ class BlobGCJobTest : public testing::Test {
     }
     Flush();
     std::string result;
-    for (int i = 0; i < MAX_KEY_NUM/2; i++) {
+    for (int i = MAX_KEY_NUM / 2; i < MAX_KEY_NUM; i++) {
       db_->Delete(WriteOptions(), GenKey(i));
     }
     Flush();
@@ -257,31 +257,28 @@ class BlobGCJobTest : public testing::Test {
       ASSERT_TRUE(old_file_size > new_file_size);
     }
 
-    if (run_gc) {
-      ASSERT_OK(NewIterator(b->files_.begin()->second->file_number(),
-                            b->files_.begin()->second->file_size(), &iter));
-      iter->SeekToFirst();
-      auto *db_iter = db_->NewIterator(ReadOptions(), db_->DefaultColumnFamily());
-      db_iter->SeekToFirst();
-      for (uint32_t i = MAX_KEY_NUM / 2; i < MAX_KEY_NUM; i++) {
-        ASSERT_OK(iter->status());
-        ASSERT_TRUE(iter->Valid());
-        ASSERT_TRUE(iter->key().compare(Slice(GenKey(i))) == 0);
-        ASSERT_TRUE(iter->value().compare(Slice(GenValue(i))) == 0);
-        ASSERT_OK(db_->Get(ReadOptions(), iter->key(), &result));
-        ASSERT_TRUE(iter->value().size() == result.size());
-        ASSERT_TRUE(iter->value().compare(result) == 0);
+    ASSERT_OK(NewIterator(b->files_.begin()->second->file_number(),
+                          b->files_.begin()->second->file_size(), &iter));
+    iter->SeekToFirst();
+    auto* db_iter = db_->NewIterator(ReadOptions(), db_->DefaultColumnFamily());
+    db_iter->SeekToFirst();
+    for (int i = 0; i < MAX_KEY_NUM / 2; i++) {
+      ASSERT_OK(iter->status());
+      ASSERT_TRUE(iter->Valid());
+      ASSERT_TRUE(iter->key().compare(Slice(GenKey(i))) == 0);
+      ASSERT_TRUE(iter->value().compare(Slice(GenValue(i))) == 0);
+      ASSERT_OK(db_->Get(ReadOptions(), iter->key(), &result));
+      ASSERT_TRUE(iter->value().size() == result.size());
+      ASSERT_TRUE(iter->value().compare(result) == 0);
 
-        ASSERT_OK(db_iter->status());
-        ASSERT_TRUE(db_iter->Valid());
-        ASSERT_TRUE(db_iter->key().compare(Slice(GenKey(i))) == 0);
-        ASSERT_TRUE(db_iter->value().compare(Slice(GenValue(i))) == 0);
-        iter->Next();
-        db_iter->Next();
-      }
-      delete db_iter;
-      ASSERT_FALSE(iter->Valid() || !iter->status().ok());
+      ASSERT_OK(db_iter->status());
+      ASSERT_TRUE(db_iter->Valid());
+      ASSERT_TRUE(db_iter->key().compare(Slice(GenKey(i))) == 0);
+      ASSERT_TRUE(db_iter->value().compare(Slice(GenValue(i))) == 0);
+      iter->Next();
+      db_iter->Next();
     }
+    delete db_iter;
     DestroyDB();
   }
 };

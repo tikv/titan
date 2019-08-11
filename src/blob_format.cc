@@ -219,7 +219,8 @@ double BlobFileMeta::GetDiscardableRatio() const {
 
 uint64_t BlobFileMeta::GetValidSize() const {
   assert(discardable_size_ <= static_cast<int64_t>(real_file_size_));
-  return discardable_size_ < 0 ? real_file_size_ : real_file_size_ - discardable_size_;
+  return discardable_size_ < 0 ? real_file_size_
+                               : real_file_size_ - discardable_size_;
 }
 
 void BlobFileHeader::EncodeTo(std::string* dst) const {

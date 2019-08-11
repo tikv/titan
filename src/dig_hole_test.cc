@@ -79,7 +79,8 @@ class DigHoleTest : public testing::Test {
 
   void GetExpectBeforeSize(const BlobHandle &the_last_handle) {
     expect_before_size =
-        ((the_last_handle.offset + the_last_handle.size - 1) / kBlockSize + 1) * kBlockSize +
+        ((the_last_handle.offset + the_last_handle.size - 1) / kBlockSize + 1) *
+            kBlockSize +
         kBlockSize /*foot*/;
     assert(expect_before_size % kBlockSize == 0);
   }
@@ -176,8 +177,9 @@ class DigHoleTest : public testing::Test {
       }
     }
   }
-  //Write random number and random length records to blob file, delete random number records and dig.
-  //Test size before dig and size after dig, and then check remain key in the file.
+  // Write random number and random length records to blob file, delete random
+  // number records and dig. Test size before dig and size after dig, and then
+  // check remain key in the file.
   void Test(uint64_t threshold_discard) {
     NewBuilder();
     // add records
@@ -205,9 +207,11 @@ class DigHoleTest : public testing::Test {
     uint64_t before_size = 0;
     GetRealSize(&before_size);
     ASSERT_EQ(before_size, expect_before_size);
-    ASSERT_EQ(before_size, blob_file_meta->real_file_size());
     // dig
     BlobFileMeta blob_file_meta(file_number_, file_size);
+    blob_file_meta.set_real_file_size(file_size);
+    blob_file_meta.FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
+    blob_file_meta.FileStateTransit(BlobFileMeta::FileEvent::kGCBegin);
     Status s = dig_hole_job_->Exec(&blob_file_meta);
     assert(s.ok());
     // check after size
@@ -216,15 +220,15 @@ class DigHoleTest : public testing::Test {
     assert(before_size >= after_size);
     GetExpectAfterSize();
     ASSERT_EQ(after_size, expect_after_size);
-    ASSERT_EQ(after_size, blob_file_meta->real_file_size());
+    ASSERT_EQ(after_size, blob_file_meta.real_file_size());
     // check
     CheckKeyExists();
   }
 };
 
 TEST_F(DigHoleTest, Test) {
-  assert(kRandomMax%kTestStep==0);
-  for (uint32_t i = 0; i <= kRandomMax; i+=kTestStep) {
+  assert(kRandomMax % kTestStep == 0);
+  for (uint32_t i = 0; i <= kRandomMax; i += kTestStep) {
     Test(i);
   }
 }

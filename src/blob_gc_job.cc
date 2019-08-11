@@ -210,8 +210,8 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   Status s;
 
   std::unique_ptr<PosixRandomRWFile> file_reader;
-  s = OpenBlobFile(file->file_number(), 0, db_options_, env_options_,
-                   env_, &file_reader);
+  s = OpenBlobFile(file->file_number(), 0, db_options_, env_options_, env_,
+                   &file_reader);
   if (!s.ok()) {
     return s;
   }
@@ -221,8 +221,8 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   if (!iter.status().ok()) {
     s = iter.status();
     ROCKS_LOG_ERROR(db_options_.info_log,
-                    "SeekToFirst failed, file number[%" PRIu64
-                    "] size[%" PRIu64 "] status[%s]",
+                    "SeekToFirst failed, file number[%" PRIu64 "] size[%" PRIu64
+                    "] status[%s]",
                     file->file_number(), file->file_size(),
                     s.ToString().c_str());
     return s;
@@ -231,7 +231,7 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
 
   uint64_t iterated_size{0};
   uint64_t discardable_size{0};
-  for ( ; iter.Valid(); iter.Next()) {
+  for (; iter.Valid(); iter.Next()) {
     BlobIndex blob_index = iter.GetBlobIndex();
     uint64_t total_length = blob_index.blob_handle.size;
     iterated_size += total_length;
@@ -599,8 +599,7 @@ bool BlobGCJob::IsShutingDown() {
 }
 
 Status BlobGCJob::DigHole() {
-  const auto& inputs =
-      blob_gc_->fs_sample_inputs(); 
+  const auto& inputs = blob_gc_->fs_sample_inputs();
   assert(!inputs.empty());
   return dig_hole_job_->Exec(inputs);
 }

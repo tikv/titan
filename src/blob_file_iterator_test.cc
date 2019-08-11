@@ -120,7 +120,6 @@ TEST_F(BlobFileIteratorTest, Basic) {
   TestBlobFileIterator();
 }
 
-
 TEST_F(BlobFileIteratorTest, MergeIterator) {
   const int kMaxKeyNum = 1000;
   std::vector<BlobHandle> handles(kMaxKeyNum);
