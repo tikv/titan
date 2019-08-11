@@ -56,8 +56,10 @@ void BlobStorage::MarkFileObsolete(std::shared_ptr<BlobFileMeta> file,
   obsolete_files_.push_back(
       std::make_pair(file->file_number(), obsolete_sequence));
   file->FileStateTransit(BlobFileMeta::FileEvent::kDelete);
-  SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
-           file->file_size() - file->discardable_size());
+  uint64_t live_blob_size = file->discardable_size() < 0
+                                ? file->file_size()
+                                : file->file_size() - file->discardable_size();
+  SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE, live_blob_size);
   SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
            file->file_size());
   SubStats(stats_, cf_id_, TitanInternalStats::NUM_LIVE_BLOB_FILE, 1);
@@ -118,24 +120,14 @@ void BlobStorage::ComputeGCScore() {
     if (file.second->is_obsolete()) {
       continue;
     }
-    gc_score_.push_back({});
-    auto& gcs = gc_score_.back();
-    gcs.file_number = file.first;
-    if (file.second->file_size() < cf_options_.merge_small_file_threshold ||
-        file.second->gc_mark()) {
-      // for the small file or file with gc mark (usually the file that just
-      // recovered) we want gc these file but more hope to gc other file with
-      // more invalid data
-      gcs.score = cf_options_.blob_file_discardable_ratio;
-    } else {
-      gcs.score = file.second->GetDiscardableRatio();
-    }
-  }
 
-  std::sort(gc_score_.begin(), gc_score_.end(),
-            [](const GCScore& first, const GCScore& second) {
-              return first.score > second.score;
-            });
+    gc_score_.push_back({
+        file.first,
+        file.second->gc_mark() ? cf_options_.merge_small_file_threshold
+                               : file.second->GetValidSize(),  // gc score
+        file.second->discardable_size()  // free space score
+    });
+  }
 }
 
 }  // namespace titandb

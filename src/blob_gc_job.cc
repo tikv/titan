@@ -125,62 +125,88 @@ Status BlobGCJob::Run() {
     return s;
   }
 
-  std::string tmp;
-  for (const auto& f : blob_gc_->inputs()) {
-    if (!tmp.empty()) {
-      tmp.append(" ");
-    }
-    tmp.append(std::to_string(f->file_number()));
-  }
-
-  std::string tmp2;
-  for (const auto& f : blob_gc_->sampled_inputs()) {
-    if (!tmp2.empty()) {
-      tmp2.append(" ");
-    }
-    tmp2.append(std::to_string(f->file_number()));
-  }
-
-  ROCKS_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s] selected[%s]",
-                   blob_gc_->column_family_handle()->GetName().c_str(),
-                   tmp.c_str(), tmp2.c_str());
-
-  if (blob_gc_->sampled_inputs().empty()) {
-    return Status::OK();
-  }
-
-  return DoRunGC();
-}
-
-Status BlobGCJob::SampleCandidateFiles() {
-  std::vector<BlobFileMeta*> result;
-  for (const auto& file : blob_gc_->inputs()) {
-    bool selected = false;
-    Status s = DoSample(file, &selected);
+  if (!blob_gc_->gc_sample_inputs().empty()) {
+    s = DoRunGC();
     if (!s.ok()) {
       return s;
     }
-    if (selected) {
-      result.push_back(file);
+  }
+
+  if (!blob_gc_->fs_sample_inputs().empty()) {
+    s = DigHole();
+    if (!s.ok()) {
+      return s;
     }
   }
-  if (!result.empty()) {
-    blob_gc_->set_sampled_inputs(std::move(result));
+
+  return Status::OK();
+}
+
+Status BlobGCJob::SampleCandidateFiles() {
+  std::vector<BlobFileMeta*> gc_sample_inputs;
+  std::vector<BlobFileMeta*> fs_sample_inputs;
+  std::unordered_set<uint64_t> gc_selected_marks;
+
+  // select files for GC
+  for (const auto& file : blob_gc_->gc_inputs()) {
+    bool selected = false;
+    if (file->GetValidSize() <=
+        blob_gc_->titan_cf_options().merge_small_file_threshold) {
+      selected = true;
+    } else {
+      // smaple files with gc marked see if we can GC it
+      // we can not do free space on these files because we can not get
+      // the correct discardable_size on these files
+      Status s = DoSample(file, &selected);
+      if (!s.ok()) {
+        return s;
+      }
+    }
+    if (selected) {
+      gc_selected_marks.insert(file->file_number());
+      gc_sample_inputs.push_back(file);
+    }
+  }
+
+  // select files for free space
+  for (const auto& file : blob_gc_->fs_inputs()) {
+    // don't select files that already be selected to GC or has gc marked
+    if (gc_selected_marks.find(file->file_number()) !=
+            gc_selected_marks.end() ||
+        file->gc_mark()) {
+      continue;
+    }
+    bool selected = false;
+    if (file->discardable_size() >=
+        static_cast<int64_t>(
+            blob_gc_->titan_cf_options().free_space_threshold)) {
+      selected = true;
+    } else {
+      // because discardable_size are lazily captured by compaction on LSM tree
+      // and can not reflect the real-time discardable_size, by sample files we
+      // can query LSM tree with the most up to date discardable information and
+      // hence more quickly reclaim disk space
+      Status s = DoSample(file, &selected);
+      if (!s.ok()) {
+        return s;
+      }
+    }
+    if (selected) {
+      fs_sample_inputs.push_back(file);
+    }
+  }
+
+  if (!gc_sample_inputs.empty()) {
+    blob_gc_->set_gc_sample_inputs(std::move(gc_sample_inputs));
+  }
+  if (!fs_sample_inputs.empty()) {
+    blob_gc_->set_fs_sample_inputs(std::move(fs_sample_inputs));
   }
   return Status::OK();
 }
 
 Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   assert(selected != nullptr);
-
-  if (file->file_size() <=
-      blob_gc_->titan_cf_options().merge_small_file_threshold ||
-      file->GetDiscardableRatio() >=
-          blob_gc_->titan_cf_options().blob_file_discardable_ratio) {
-    *selected = true;
-    return Status::OK();
-  }
-
   Status s;
 
   std::unique_ptr<PosixRandomRWFile> file_reader;
@@ -363,7 +389,7 @@ Status BlobGCJob::DoRunGC() {
 Status BlobGCJob::BuildIterator(
     std::unique_ptr<BlobFileMergeIterator>* result) {
   Status s;
-  const auto& inputs = blob_gc_->sampled_inputs();
+  const auto& inputs = blob_gc_->gc_sample_inputs();
   assert(!inputs.empty());
   std::vector<std::unique_ptr<BlobFileIterator>> list;
   for (std::size_t i = 0; i < inputs.size(); ++i) {
@@ -556,7 +582,7 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   Status s;
   VersionEdit edit;
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
-  for (const auto& file : blob_gc_->sampled_inputs()) {
+  for (const auto& file : blob_gc_->gc_sample_inputs()) {
     ROCKS_LOG_INFO(db_options_.info_log, "Titan add obsolete file [%llu]",
                    file->file_number());
     metrics_.blob_db_gc_num_files++;

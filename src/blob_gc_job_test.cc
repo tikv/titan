@@ -102,7 +102,7 @@ class BlobGCJobTest : public testing::Test {
     db_ = nullptr;
   }
 
-  void RunGC(bool expected = false) {
+  void DoJob(bool run_gc, bool expected = false) {
     MutexLock l(mutex_);
     Status s;
     auto* cfh = base_db_->DefaultColumnFamily();
@@ -112,8 +112,17 @@ class BlobGCJobTest : public testing::Test {
     TitanCFOptions cf_options;
     LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options.info_log.get());
     cf_options.min_gc_batch_size = 0;
-    cf_options.blob_file_discardable_ratio = 0.4;
-    cf_options.sample_file_size_ratio = 1;
+    cf_options.min_fs_batch_size = 0;
+
+    if (run_gc) {
+      // make GC only do compaction
+      cf_options.merge_small_file_threshold = 1U << 30;
+      cf_options.free_space_threshold = 1U << 30;
+    } else {
+      // make GC only do dig hole
+      cf_options.merge_small_file_threshold = 0U;
+      cf_options.free_space_threshold = 0U;
+    }
 
     std::unique_ptr<BlobGC> blob_gc;
     {
@@ -157,6 +166,10 @@ class BlobGCJobTest : public testing::Test {
     mutex_->Lock();
   }
 
+  void RunGC(bool expected = false) { return DoJob(true, expected); }
+
+  void RunFS(bool expected = false) { return DoJob(false, expected); }
+
   Status NewIterator(uint64_t file_number, uint64_t file_size,
                      std::unique_ptr<BlobFileIterator>* iter) {
     std::unique_ptr<PosixRandomRWFile> file;
@@ -184,8 +197,10 @@ class BlobGCJobTest : public testing::Test {
     ASSERT_OK(WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), key, res));
     auto rewrite_status = base_db_->Write(WriteOptions(), &wb);
 
-    std::vector<BlobFileMeta*> tmp;
-    BlobGC blob_gc(std::move(tmp), TitanCFOptions(), false /*trigger_next*/);
+    std::vector<BlobFileMeta*> tmp1;
+    std::vector<BlobFileMeta*> tmp2;
+    BlobGC blob_gc(std::move(tmp1), std::move(tmp2), TitanCFOptions(),
+                   false /*trigger_next*/);
     blob_gc.SetColumnFamily(cfh);
     BlobGCJob blob_gc_job(&blob_gc, base_db_, mutex_, TitanDBOptions(),
                           Env::Default(), EnvOptions(), nullptr, version_set_,
@@ -196,7 +211,7 @@ class BlobGCJobTest : public testing::Test {
     DestroyDB();
   }
 
-  void TestRunGC() {
+  void TestDoGC(bool run_gc) {
     NewDB();
     for (int i = 0; i < MAX_KEY_NUM; i++) {
       db_->Put(WriteOptions(), GenKey(i), GenValue(i));
@@ -211,6 +226,7 @@ class BlobGCJobTest : public testing::Test {
     auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
     ASSERT_EQ(b->files_.size(), 1);
     auto old = b->files_.begin()->first;
+    uint64_t old_file_size = b->files_.begin()->second->file_size();
     //    for (auto& f : b->files_) {
     //      f.second->marked_for_sample = false;
     //    }
@@ -223,11 +239,25 @@ class BlobGCJobTest : public testing::Test {
       ASSERT_TRUE(iter->Valid());
       ASSERT_TRUE(iter->key().compare(Slice(GenKey(i))) == 0);
     }
-    RunGC();
+
+    if (run_gc) {
+      RunGC();
+    } else {
+      RunFS();
+    }
+
     b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
     ASSERT_EQ(b->files_.size(), 1);
     auto new1 = b->files_.begin()->first;
-    ASSERT_TRUE(old != new1);
+    uint64_t new_file_size = b->files_.begin()->second->file_size();
+
+    if (run_gc) {
+      ASSERT_TRUE(old != new1);
+    } else {
+      ASSERT_TRUE(old == new1);
+      ASSERT_TRUE(old_file_size > new_file_size);
+    }
+
     ASSERT_OK(NewIterator(b->files_.begin()->second->file_number(),
                           b->files_.begin()->second->file_size(), &iter));
     iter->SeekToFirst();
@@ -258,7 +288,9 @@ class BlobGCJobTest : public testing::Test {
 
 TEST_F(BlobGCJobTest, DiscardEntry) { TestDiscardEntry(); }
 
-TEST_F(BlobGCJobTest, RunGC) { TestRunGC(); }
+TEST_F(BlobGCJobTest, RunGC) { TestDoGC(true); }
+
+TEST_F(BlobGCJobTest, RunFS) { TestDoGC(false); }
 
 // Tests blob file will be kept after GC, if it is still visible by active
 // snapshots.

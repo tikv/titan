@@ -12,7 +12,8 @@ namespace titandb {
 // A BlobGC encapsulates information about a blob gc.
 class BlobGC {
  public:
-  BlobGC(std::vector<BlobFileMeta*>&& blob_files,
+  BlobGC(std::vector<BlobFileMeta*>&& gc_blob_files,
+         std::vector<BlobFileMeta*>&& fs_blob_files,
          TitanCFOptions&& _titan_cf_options, bool need_trigger_next);
 
   // No copying allowed
@@ -21,13 +22,22 @@ class BlobGC {
 
   ~BlobGC();
 
-  const std::vector<BlobFileMeta*>& inputs() { return inputs_; }
+  const std::vector<BlobFileMeta*>& gc_inputs() { return gc_inputs_; }
+  const std::vector<BlobFileMeta*>& fs_inputs() { return fs_inputs_; }
 
-  void set_sampled_inputs(std::vector<BlobFileMeta*>&& files) {
-    sampled_inputs_ = std::move(files);
+  void set_gc_sample_inputs(std::vector<BlobFileMeta*>&& files) {
+    gc_sample_inputs_ = std::move(files);
+  }
+  void set_fs_sample_inputs(std::vector<BlobFileMeta*>&& files) {
+    fs_sample_inputs_ = std::move(files);
   }
 
-  const std::vector<BlobFileMeta*>& sampled_inputs() { return sampled_inputs_; }
+  const std::vector<BlobFileMeta*>& gc_sample_inputs() {
+    return gc_sample_inputs_;
+  }
+  const std::vector<BlobFileMeta*>& fs_sample_inputs() {
+    return fs_sample_inputs_;
+  }
 
   const TitanCFOptions& titan_cf_options() { return titan_cf_options_; }
 
@@ -46,8 +56,10 @@ class BlobGC {
   bool trigger_next() { return trigger_next_; }
 
  private:
-  std::vector<BlobFileMeta*> inputs_;
-  std::vector<BlobFileMeta*> sampled_inputs_;
+  std::vector<BlobFileMeta*> gc_inputs_;
+  std::vector<BlobFileMeta*> fs_inputs_;
+  std::vector<BlobFileMeta*> gc_sample_inputs_;
+  std::vector<BlobFileMeta*> fs_sample_inputs_;
   std::vector<BlobFileMeta*> outputs_;
   TitanCFOptions titan_cf_options_;
   ColumnFamilyHandle* cfh_{nullptr};
@@ -57,7 +69,8 @@ class BlobGC {
 
 struct GCScore {
   uint64_t file_number;
-  double score;
+  uint64_t gc_score;
+  int64_t fs_score;
 };
 
 }  // namespace titandb

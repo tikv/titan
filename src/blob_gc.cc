@@ -1,11 +1,14 @@
 #include "blob_gc.h"
+#include "unordered_set"
 
 namespace rocksdb {
 namespace titandb {
 
-BlobGC::BlobGC(std::vector<BlobFileMeta*>&& blob_files,
+BlobGC::BlobGC(std::vector<BlobFileMeta*>&& gc_blob_files,
+               std::vector<BlobFileMeta*>&& fs_blob_files,
                TitanCFOptions&& _titan_cf_options, bool need_trigger_next)
-    : inputs_(std::move(blob_files)),
+    : gc_inputs_(std::move(gc_blob_files)),
+      fs_inputs_(std::move(fs_blob_files)),
       titan_cf_options_(std::move(_titan_cf_options)),
       trigger_next_(need_trigger_next) {
   MarkFilesBeingGC();
@@ -26,13 +29,29 @@ void BlobGC::AddOutputFile(BlobFileMeta* blob_file) {
 }
 
 void BlobGC::MarkFilesBeingGC() {
-  for (auto& f : inputs_) {
+  std::unordered_set<uint64_t> gc_input_marks;
+  for (auto& f : gc_inputs_) {
+    f->FileStateTransit(BlobFileMeta::FileEvent::kGCBegin);
+    gc_input_marks.insert(f->file_number());
+  }
+  for (auto& f : fs_inputs_) {
+    if (gc_input_marks.find(f->file_number()) != gc_input_marks.end()) {
+      continue;
+    }
     f->FileStateTransit(BlobFileMeta::FileEvent::kGCBegin);
   }
 }
 
 void BlobGC::ReleaseGcFiles() {
-  for (auto& f : inputs_) {
+  std::unordered_set<uint64_t> gc_input_marks;
+  for (auto& f : gc_inputs_) {
+    f->FileStateTransit(BlobFileMeta::FileEvent::kGCCompleted);
+    gc_input_marks.insert(f->file_number());
+  }
+  for (auto& f : fs_inputs_) {
+    if (gc_input_marks.find(f->file_number()) != gc_input_marks.end()) {
+      continue;
+    }
     f->FileStateTransit(BlobFileMeta::FileEvent::kGCCompleted);
   }
 

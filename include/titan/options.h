@@ -90,28 +90,43 @@ struct TitanCFOptions : public ColumnFamilyOptions {
 
   // Max batch size for GC.
   //
-  // Default: 1GB
-  uint64_t max_gc_batch_size{1 << 30};
+  // Default: 750MB
+  uint64_t max_gc_batch_size{750 << 20};
 
   // Min batch size for GC.
   //
+  // Default: 350MB
+  uint64_t min_gc_batch_size{350 << 20};
+  
+  // Max batch size for free space.
+  //
+  // Default: 2GB
+  uint64_t max_fs_batch_size{static_cast<uint64_t>(2) << 30};
+
+  // Min batch size for free space.
+  //
   // Default: 512MB
-  uint64_t min_gc_batch_size{512 << 20};
+  uint64_t min_fs_batch_size{512 << 20};
 
   // The ratio of how much discardable size of a blob file can be GC.
   //
-  // Default: 0.5
-  double blob_file_discardable_ratio{0.5};
+  // Default: 0.3
+  double blob_file_discardable_ratio{0.3};
 
   // The ratio of how much size of a blob file need to be sample before GC.
   //
   // Default: 0.1
   double sample_file_size_ratio{0.1};
 
-  // The blob file size less than this option will be mark GC.
+  // The blob file size less than this option need to GC.
   //
-  // Default: 8MB
-  uint64_t merge_small_file_threshold{8 << 20};
+  // Default: 10MB
+  uint64_t merge_small_file_threshold{10 << 20};
+
+  // The discardable size of a blob file larger than this will be candidate for free space;
+  //
+  // Default: 50MB
+  uint64_t free_space_threshold{50 << 20};
 
   // The mode used to process blob file.
   //
