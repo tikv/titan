@@ -39,7 +39,7 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
 Status BlobFileBuilder::Finish() {
   if (!ok()) return status();
 
-  if (remain_size_ > 0) {
+  if (remain_size_ > 0 && remain_size_ < block_size_) {
     file_->Append(Slice(zero_buffer_, remain_size_));
   }
 
