@@ -78,8 +78,10 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         thread_safety_test
         titan_db_test
         util_test
+        dig_hole_test
         version_test)
   set(TEST_LIBS
+        glog
         titan
         rocksdb
         testutillib
