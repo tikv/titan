@@ -206,8 +206,8 @@ void BlobFileMeta::AddDiscardableSize(uint64_t _discardable_size) {
 void BlobFileMeta::FinishFreeSpace(uint64_t new_file_size,
                                    uint64_t reclaim_size) {
   assert(state_ == FileState::kBeingGC);
-  assert(discardable_size_ <= static_cast<int64_t>(file_size_));
-  file_size_ = new_file_size;
+  assert(discardable_size_ <= static_cast<int64_t>(real_file_size_));
+  real_file_size_ = new_file_size;
   discardable_size_ = discardable_size_ - static_cast<int64_t>(reclaim_size);
 }
 
@@ -218,8 +218,8 @@ double BlobFileMeta::GetDiscardableRatio() const {
 }
 
 uint64_t BlobFileMeta::GetValidSize() const {
-  assert(discardable_size_ <= static_cast<int64_t>(file_size_));
-  return discardable_size_ < 0 ? file_size_ : file_size_ - discardable_size_;
+  assert(discardable_size_ <= static_cast<int64_t>(real_file_size_));
+  return discardable_size_ < 0 ? real_file_size_ : real_file_size_ - discardable_size_;
 }
 
 void BlobFileHeader::EncodeTo(std::string* dst) const {

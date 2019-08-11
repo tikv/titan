@@ -55,10 +55,10 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
 
     if (!stop_picking) {
       gc_blob_files.push_back(blob_file.get());
-      gc_batch_size += blob_file->file_size();
+      gc_batch_size += blob_file->real_file_size();
       estimate_output_size += blob_file->GetValidSize();
     } else {
-      next_gc_size += blob_file->file_size();
+      next_gc_size += blob_file->real_file_size();
       if (next_gc_size >= cf_options_.min_gc_batch_size) {
         maybe_continue_next_time = true;
         ROCKS_LOG_INFO(db_options_.info_log,
@@ -98,14 +98,14 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
 
     if (!stop_picking) {
       fs_blob_files.push_back(blob_file.get());
-      fs_batch_size += blob_file->file_size();
+      fs_batch_size += blob_file->real_file_size();
     } else {
       if (maybe_continue_next_time) {
         break;
       }
       if (blob_file->discardable_size() >=
           static_cast<int64_t>(cf_options_.free_space_threshold)) {
-        next_fs_size += blob_file->file_size();
+        next_fs_size += blob_file->real_file_size();
         if (next_fs_size >= cf_options_.min_fs_batch_size) {
           maybe_continue_next_time = true;
           ROCKS_LOG_INFO(db_options_.info_log,

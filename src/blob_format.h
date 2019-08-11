@@ -142,6 +142,9 @@ class BlobFileMeta {
   bool gc_mark() const { return gc_mark_; }
   void set_gc_mark(bool mark) { gc_mark_ = mark; }
 
+  void set_real_file_size(uint64_t size) { real_file_size_ = size; }
+  uint64_t real_file_size() const { return real_file_size_; }
+
   void FileStateTransit(const FileEvent& event);
 
   void AddDiscardableSize(uint64_t _discardable_size);
@@ -156,6 +159,7 @@ class BlobFileMeta {
 
   // Not persistent field
   FileState state_{FileState::kInit};
+  uint64_t real_file_size_{0};
 
   // discardable size can be reclaim, < 0 mean last free space over reclaim
   // space

@@ -1,4 +1,5 @@
 #include "blob_storage.h"
+#include "blob_file_reader.h"
 #include "version_set.h"
 
 namespace rocksdb {
@@ -45,6 +46,19 @@ void BlobStorage::ExportBlobFiles(
 void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   MutexLock l(&mutex_);
   files_.emplace(std::make_pair(file->file_number(), file));
+  std::unique_ptr<PosixRandomRWFile> random_rw_file_;
+  if (file->file_size() > 0) {
+    Status s = OpenBlobFile(file->file_number(), 0, db_options_, EnvOptions(),
+                            db_options_.env, &random_rw_file_);
+    if (!s.ok()) {
+      // We can't return error here, set it to file_size as a workaround.
+      file->set_real_file_size(file->file_size());
+    } else {
+      uint64_t real_file_size = 0;
+      random_rw_file_->GetSizeOnDisk(&real_file_size);
+      file->set_real_file_size(real_file_size);
+    }
+  }
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
            file->file_size());
   AddStats(stats_, cf_id_, TitanInternalStats::NUM_LIVE_BLOB_FILE, 1);

@@ -600,7 +600,7 @@ bool BlobGCJob::IsShutingDown() {
 
 Status BlobGCJob::DigHole() {
   const auto& inputs =
-      blob_gc_->sampled_inputs();  // TODO(@lhy1024) modify to fs_sampled_inputs
+      blob_gc_->fs_sample_inputs(); 
   assert(!inputs.empty());
   return dig_hole_job_->Exec(inputs);
 }

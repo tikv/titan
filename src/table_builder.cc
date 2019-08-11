@@ -119,6 +119,8 @@ Status TitanTableBuilder::Finish() {
                      blob_handle_->GetNumber());
       std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
           blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize());
+      const uint64_t kBlockSize = 4096;
+      file->set_real_file_size((file->file_size() - 1) / kBlockSize * kBlockSize + kBlockSize);
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
       status_ =
           blob_manager_->FinishFile(cf_id_, file, std::move(blob_handle_));

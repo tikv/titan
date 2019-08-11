@@ -33,7 +33,8 @@ Status DigHoleJob::Exec(const std::vector<BlobFileMeta *> &inputs) {
 Status DigHoleJob::Exec(BlobFileMeta *input) {
   Status s;
   // open file
-  std::unique_ptr<PosixRandomRWFile> file;  // TODO(@DorianZheng) set read ahead size
+  std::unique_ptr<PosixRandomRWFile>
+      file;  // TODO(@DorianZheng) set read ahead size
   s = OpenBlobFile(input->file_number(), 0, db_options_, env_options_, env_,
                    &file);
   if (!s.ok()) {
@@ -92,9 +93,8 @@ Status DigHoleJob::Exec(BlobFileMeta *input) {
     return record_iter->status();
   }
 
-  // TODO(@lhy1024) post
   record_iter->GetFileRealSize(&after_size);
-  // input->finish(after_size, before_size-after_size);
+  input->FinishFreeSpace(after_size, before_size - after_size);
   return s;
 }
 }  // namespace titandb
