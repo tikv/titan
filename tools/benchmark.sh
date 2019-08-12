@@ -22,8 +22,7 @@ M=$((1024 * K))
 G=$((1024 * M))
 
 if [ -z $TITAN ]; then
-  echo "TITAN is not defined"
-  exit 0
+  TITAN="true"
 fi
 
 if [ -z $DB_DIR ]; then
