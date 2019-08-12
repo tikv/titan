@@ -25,11 +25,7 @@ Status OpenBlobFile(uint64_t file_number, uint64_t readahead_size,
   Status s = env->NewRandomRWFile(file_name, &file, env_options);
   if (!s.ok()) return s;
 
-  if (typeid(*(file.get())).name() != typeid(PosixRandomRWFile).name()) {
-    s = Status::NotSupported("While try to get PosixRandomRWFile ptr");
-    return s;
-  }
-
+  // TODO: make sure the file's type is PosixRandomRWFile*
   auto file_ptr = static_cast<PosixRandomRWFile*>(file.release());
 
   result->reset(file_ptr);
