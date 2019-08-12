@@ -30,15 +30,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   for (const auto& gc_score : gc_scores) {
     auto blob_file = blob_storage->FindFile(gc_score.file_number).lock();
     if (!blob_file ||
-        blob_file->file_state() == BlobFileMeta::FileState::kBeingGC) {
-      // Skip this file id this file is being GCed
-      // or this file had been GCed
-      continue;
-    }
-
-    if (!CheckBlobFile(blob_file.get())) {
-      ROCKS_LOG_INFO(db_options_.info_log, "file number:%lu no need gc",
-                     blob_file->file_number());
+        blob_file->file_state() == BlobFileMeta::FileState::kBeingGC ||
+        !CheckBlobFile(blob_file.get())) {
       continue;
     }
 
@@ -110,7 +103,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
           maybe_continue_next_time = true;
           ROCKS_LOG_INFO(db_options_.info_log,
                          "remain more than %" PRIu64
-                         " bytes to be gc and trigger after this gc",
+                         " bytes to be dig hole and trigger after this gc",
                          next_fs_size);
           break;
         }
@@ -121,9 +114,9 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   }
 
   ROCKS_LOG_DEBUG(db_options_.info_log,
-                  "got batch size %" PRIu64 ", estimate output %" PRIu64
-                  " bytes",
-                  gc_batch_size, estimate_output_size);
+                  "got gc batch size %" PRIu64
+                  ", got dig hole batch size %" PRIu64 " bytes",
+                  gc_batch_size, fs_batch_size);
   if ((gc_blob_files.empty() ||
        gc_batch_size < cf_options_.min_gc_batch_size) &&
       (fs_blob_files.empty() || fs_batch_size < cf_options_.min_fs_batch_size))

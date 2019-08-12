@@ -165,6 +165,10 @@ Status BlobGCJob::SampleCandidateFiles() {
     if (selected) {
       gc_selected_marks.insert(file->file_number());
       gc_sample_inputs.push_back(file);
+
+      ROCKS_LOG_INFO(db_options_.info_log,
+                     "Titan selected GC file %" PRIu64 ".",
+                     file->file_number());
     }
   }
 
@@ -193,6 +197,10 @@ Status BlobGCJob::SampleCandidateFiles() {
     }
     if (selected) {
       fs_sample_inputs.push_back(file);
+
+      ROCKS_LOG_INFO(db_options_.info_log,
+                     "Titan selected dig hole file %" PRIu64 ".",
+                     file->file_number());
     }
   }
 

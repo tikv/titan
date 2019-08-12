@@ -95,6 +95,10 @@ Status DigHoleJob::Exec(BlobFileMeta *input) {
 
   record_iter->GetFileRealSize(&after_size);
   input->FinishFreeSpace(after_size, before_size - after_size);
+  ROCKS_LOG_INFO(db_options_.info_log,
+                 "Titan selected dig hole file %" PRIu64
+                 " reclaimed space size %" PRIu64 ".",
+                 input->file_number(), before_size - after_size);
   return s;
 }
 }  // namespace titandb
