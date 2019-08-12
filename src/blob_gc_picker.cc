@@ -51,29 +51,28 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     }
 
     if (!stop_picking) {
-      if (blob_file.get()->is_cold_file())
-      {
-        if(cold_estimate_output_size < cf_options_.merge_small_file_threshold)
-        {
+      if (blob_file.get()->is_cold_file()) {
+        if (cold_estimate_output_size <
+            cf_options_.merge_small_file_threshold) {
           cold_blob_files.push_back(blob_file.get());
-        }
-        else{
+        } else {
           blob_files.push_back(blob_file.get());
           batch_size += blob_file->file_size();
         }
         cold_estimate_output_size +=
             (blob_file->file_size() - blob_file->discardable_size());
-        if (cold_estimate_output_size >= cf_options_.merge_small_file_threshold )  /* TODO-- set args */
+        if (cold_estimate_output_size >=
+            cf_options_.merge_small_file_threshold) /* TODO-- set args */
         {
-          while(!cold_blob_files.empty())
-          {
-            auto temp_blob_file=cold_blob_files[0];
+          while (!cold_blob_files.empty()) {
+            auto temp_blob_file = cold_blob_files[0];
             blob_files.push_back(temp_blob_file);
             batch_size += blob_file->file_size();
             cold_blob_files.erase(cold_blob_files.begin());
           }
         }
-        if (cold_estimate_output_size >= cf_options_.blob_file_target_size || batch_size >= cf_options_.max_gc_batch_size ) /* TODO-- set args */
+        if (cold_estimate_output_size >= cf_options_.blob_file_target_size ||
+            batch_size >= cf_options_.max_gc_batch_size) /* TODO-- set args */
         {
           stop_picking = true;
         }
@@ -108,9 +107,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       }
     }
   }
-  ROCKS_LOG_DEBUG(db_options_.info_log,
-                  "got batch size %" PRIu64 ", estimate output %" PRIu64
-                  " bytes",
+  ROCKS_LOG_DEBUG(db_options_.info_log, "got batch size %" PRIu64
+                                        ", estimate output %" PRIu64 " bytes",
                   batch_size, estimate_output_size);
   if (blob_files.empty() || batch_size < cf_options_.min_gc_batch_size)
     return nullptr;

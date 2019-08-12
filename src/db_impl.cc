@@ -24,7 +24,8 @@ class TitanDBImpl::FileManager : public BlobFileManager {
  public:
   FileManager(TitanDBImpl* db) : db_(db) {}
 
-  Status NewFile(std::unique_ptr<BlobFileHandle>* handle, uint64_t is_cold = 0) override {
+  Status NewFile(std::unique_ptr<BlobFileHandle>* handle,
+                 uint64_t is_cold = 0) override {
     auto number = db_->vset_->NewFileNumber();
     auto name = BlobFileName(db_->dirname_, number);
 
@@ -103,7 +104,10 @@ class TitanDBImpl::FileManager : public BlobFileManager {
    public:
     FileHandle(uint64_t number, const std::string& name,
                std::unique_ptr<WritableFileWriter> file, uint64_t is_cold = 0)
-        : number_(number), name_(name), file_(std::move(file)), is_cold_file_(is_cold) {}
+        : number_(number),
+          name_(name),
+          file_(std::move(file)),
+          is_cold_file_(is_cold) {}
 
     uint64_t GetNumber() const override { return number_; }
 
@@ -255,8 +259,8 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
                      titan_build_git_sha);
     db_options_.Dump(db_options_.info_log.get());
     for (auto& desc : descs) {
-      ROCKS_LOG_HEADER(db_options_.info_log,
-                       "Column family [%s], options:", desc.name.c_str());
+      ROCKS_LOG_HEADER(db_options_.info_log, "Column family [%s], options:",
+                       desc.name.c_str());
       desc.options.Dump(db_options_.info_log.get());
     }
   } else {

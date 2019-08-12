@@ -28,7 +28,8 @@ class BlobFileManager {
   // Creates a new file. The new file should not be accessed until
   // FinishFile() has been called.
   // If successful, sets "*handle* to the new file handle.
-  virtual Status NewFile(std::unique_ptr<BlobFileHandle>* handle, uint64_t is_cold = 0) = 0;
+  virtual Status NewFile(std::unique_ptr<BlobFileHandle>* handle,
+                         uint64_t is_cold = 0) = 0;
 
   // Finishes the file with the provided metadata. Stops writting to
   // the file anymore.

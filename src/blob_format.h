@@ -100,7 +100,7 @@ struct BlobIndex {
 //
 // file_number_      : varint64
 // file_size_        : varint64
-// is_cold_file      : varint64  
+// is_cold_file      : varint64
 class BlobFileMeta {
  public:
   enum class FileEvent {
@@ -125,8 +125,11 @@ class BlobFileMeta {
   };
 
   BlobFileMeta() = default;
-  BlobFileMeta(uint64_t _file_number, uint64_t _file_size, uint64_t _is_cold_file = 0 )
-      : file_number_(_file_number), file_size_(_file_size), is_cold_file_(_is_cold_file) {}
+  BlobFileMeta(uint64_t _file_number, uint64_t _file_size,
+               uint64_t _is_cold_file = 0)
+      : file_number_(_file_number),
+        file_size_(_file_size),
+        is_cold_file_(_is_cold_file) {}
 
   friend bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs);
 
@@ -153,7 +156,7 @@ class BlobFileMeta {
   // Persistent field
   uint64_t file_number_{0};
   uint64_t file_size_{0};
-  uint64_t is_cold_file_ {0};
+  uint64_t is_cold_file_{0};
 
   // Not persistent field
   FileState state_{FileState::kInit};

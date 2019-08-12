@@ -29,8 +29,10 @@ class BlobGCPickerTest : public testing::Test {
   }
 
   void AddBlobFile(uint64_t file_number, uint64_t file_size,
-                   uint64_t discardable_size, bool being_gc = false,uint64_t is_cold_file = 0) {
-    auto f = std::make_shared<BlobFileMeta>(file_number, file_size,is_cold_file);
+                   uint64_t discardable_size, bool being_gc = false,
+                   uint64_t is_cold_file = 0) {
+    auto f =
+        std::make_shared<BlobFileMeta>(file_number, file_size, is_cold_file);
     f->AddDiscardableSize(discardable_size);
     f->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
     if (being_gc) {
@@ -64,7 +66,7 @@ TEST_F(BlobGCPickerTest, Basic_cold) {
   TitanCFOptions titan_cf_options;
   titan_cf_options.min_gc_batch_size = 0;
   NewBlobStorageAndPicker(titan_db_options, titan_cf_options);
-  AddBlobFile(1U, 1U << 30, 1000U << 20,false,1);
+  AddBlobFile(1U, 1U << 30, 1000U << 20, false, 1);
   UpdateBlobStorage();
   auto blob_gc = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
   ASSERT_TRUE(blob_gc != nullptr);

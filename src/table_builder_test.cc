@@ -17,7 +17,8 @@ class FileManager : public BlobFileManager {
  public:
   FileManager(const TitanDBOptions& db_options) : db_options_(db_options) {}
 
-  Status NewFile(std::unique_ptr<BlobFileHandle>* handle, uint64_t is_cold = 0) override {
+  Status NewFile(std::unique_ptr<BlobFileHandle>* handle,
+                 uint64_t is_cold = 0) override {
     auto number = kTestFileNumber;
     auto name = BlobFileName(db_options_.dirname, number);
     std::unique_ptr<WritableFileWriter> file;
@@ -49,7 +50,10 @@ class FileManager : public BlobFileManager {
    public:
     FileHandle(uint64_t number, const std::string& name,
                std::unique_ptr<WritableFileWriter> file, uint64_t is_cold = 0)
-        : number_(number), name_(name), file_(std::move(file)), is_cold_file_(is_cold) {}
+        : number_(number),
+          name_(name),
+          file_(std::move(file)),
+          is_cold_file_(is_cold) {}
 
     uint64_t GetNumber() const override { return number_; }
 

@@ -113,7 +113,7 @@ void BlobStorage::ComputeGCScore() {
   // TODO: no need to recompute all everytime
   MutexLock l(&mutex_);
   gc_score_.clear();
-  
+
   for (auto& file : files_) {
     if (file.second->is_obsolete()) {
       continue;

@@ -20,15 +20,15 @@ bool GetChar(Slice* src, unsigned char* value) {
 void BlobRecord::EncodeTo(std::string* dst) const {
   PutLengthPrefixedSlice(dst, key);
   PutLengthPrefixedSlice(dst, value);
-  //char* temp=new char[2];
-  //temp[0]=count;
-  //temp[1]=0;
-  dst->append(1,count);
+  // char* temp=new char[2];
+  // temp[0]=count;
+  // temp[1]=0;
+  dst->append(1, count);
 }
 
 Status BlobRecord::DecodeFrom(Slice* src) {
   if (!GetLengthPrefixedSlice(src, &key) ||
-      !GetLengthPrefixedSlice(src, &value) || !GetChar(src,&count)) {
+      !GetLengthPrefixedSlice(src, &value) || !GetChar(src, &count)) {
     return Status::Corruption("BlobRecord");
   }
   return Status::OK();
@@ -41,7 +41,7 @@ bool BlobRecord::AddCount() {
 }
 
 bool operator==(const BlobRecord& lhs, const BlobRecord& rhs) {
-  return lhs.key == rhs.key && lhs.value == rhs.value && lhs.count==rhs.count;
+  return lhs.key == rhs.key && lhs.value == rhs.value && lhs.count == rhs.count;
 }
 
 void BlobEncoder::EncodeRecord(const BlobRecord& record) {
@@ -146,7 +146,8 @@ void BlobFileMeta::EncodeTo(std::string* dst) const {
 }
 
 Status BlobFileMeta::DecodeFrom(Slice* src) {
-  if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) || !GetVarint64(src, &is_cold_file_)) {
+  if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) ||
+      !GetVarint64(src, &is_cold_file_)) {
     return Status::Corruption("BlobFileMeta Decode failed");
   }
   return Status::OK();
@@ -154,7 +155,8 @@ Status BlobFileMeta::DecodeFrom(Slice* src) {
 
 bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs) {
   return (lhs.file_number_ == rhs.file_number_ &&
-          lhs.file_size_ == rhs.file_size_ && lhs.is_cold_file_==rhs.is_cold_file_);
+          lhs.file_size_ == rhs.file_size_ &&
+          lhs.is_cold_file_ == rhs.is_cold_file_);
 }
 
 void BlobFileMeta::FileStateTransit(const FileEvent& event) {
