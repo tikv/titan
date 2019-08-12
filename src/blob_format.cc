@@ -20,10 +20,10 @@ bool GetChar(Slice* src, unsigned char* value) {
 void BlobRecord::EncodeTo(std::string* dst) const {
   PutLengthPrefixedSlice(dst, key);
   PutLengthPrefixedSlice(dst, value);
-  char* temp=new char[2];
-  temp[0]=count;
-  temp[1]=0;
-  dst->append(temp);
+  //char* temp=new char[2];
+  //temp[0]=count;
+  //temp[1]=0;
+  dst->append(1,count);
 }
 
 Status BlobRecord::DecodeFrom(Slice* src) {
