@@ -80,11 +80,10 @@ class BlobStorage {
   }
 
   // For Test only
-  std::unordered_map<uint64_t, BlobFileMeta> TEST_GetAllFiles()
-      const {
+  std::unordered_map<uint64_t, BlobFileMeta> TEST_GetAllFiles() const {
     std::unordered_map<uint64_t, BlobFileMeta> _files;
-    for(const auto & iter:files_){
-      _files.insert({iter.first,*iter.second});
+    for (const auto& iter : files_) {
+      _files.insert({iter.first, *iter.second});
     }
     return _files;
   }

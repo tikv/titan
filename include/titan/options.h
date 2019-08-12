@@ -128,6 +128,12 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: 50MB
   uint64_t free_space_threshold{50 << 20};
 
+  // If set to true, some blob files with discardable_size smaller than free_space_threshold
+  // will be sample to see whether need to reclaim space
+  // 
+  // Default: false
+  bool fast_reclaim_space_by_sample{false};
+
   // The mode used to process blob file.
   //
   // Default: kNormal

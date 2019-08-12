@@ -348,8 +348,7 @@ TEST_F(TitanDBTest, FileLifetime) {
     // after dig hole the blob file still exits
     ASSERT_TRUE(files_2.find(f.first) != files_2.end());
     // after dig hole the blob file become smaller
-    ASSERT_TRUE(f.second.real_file_size() >
-                files_2[f.first].real_file_size());
+    ASSERT_TRUE(f.second.real_file_size() > files_2[f.first].real_file_size());
   }
 
   // delete more keys to trigger gc
@@ -435,6 +434,107 @@ TEST_F(TitanDBTest, PickFileToGCAndFS) {
     }
   }
   ASSERT_TRUE(had_dighole && had_gc);
+
+  Close();
+}
+
+TEST_F(TitanDBTest, FileOverReclaimByFS) {
+  // the discardable_size in blob file is lazily capture through
+  // compaction event and dig hole may reclaim more space than discardable_size
+  // because dig hole ask LSM tree about the most up to date discardable
+  // information
+  options_.disable_background_gc = false;
+  options_.min_gc_batch_size = 0;
+  options_.min_fs_batch_size = 0;
+  options_.min_blob_size = 128;
+  // make it do not trigger gc but easy to trigger dig hole
+  options_.merge_small_file_threshold = 0U;
+  options_.free_space_threshold = 50 * options_.min_blob_size;
+  Open();
+
+  auto blob = GetBlobStorage(db_->DefaultColumnFamily());
+
+  for (int i = 1; i < 1001; i++) {
+    ASSERT_OK(db_->Put(WriteOptions(), GenKey(i), GenValue(i)));
+  }
+  Flush();
+  for (int i = 1; i < 101; i++) {
+    db_->Delete(WriteOptions(), GenKey(i));
+  }
+  Flush();
+  // compaction event will update the discardable_size
+  CompactAll();
+
+  auto files_1 = blob.lock()->TEST_GetAllFiles();
+  ASSERT_EQ(files_1.size(), 1);
+  uint64_t file_number;
+  uint64_t file_size;
+  int64_t discardable_size;
+  for (auto const& f : files_1) {
+    ASSERT_TRUE(f.second.discardable_size() > 0);
+    file_number = f.first;
+    file_size = f.second.real_file_size();
+    discardable_size = f.second.discardable_size();
+  }
+
+  // delete[101..700]
+  for (int i = 101; i < 701; i++) {
+    db_->Delete(WriteOptions(), GenKey(i));
+  }
+  // flush event will not update the discardable_size
+  Flush();
+
+  // trigger dig hole and will reclaim more disk space than
+  // the space occuppied by [1..100]
+  blob.lock()->ComputeGCScore();
+  ASSERT_OK(db_impl_->TEST_StartGC(db_->DefaultColumnFamily()->GetID()));
+
+  auto files_2 = blob.lock()->TEST_GetAllFiles();
+  ASSERT_EQ(files_2.size(), 1);
+  for (auto const& f : files_2) {
+    ASSERT_EQ(file_number, f.first);
+    // dig hole had triggered
+    ASSERT_TRUE(file_size > f.second.real_file_size());
+    file_size = f.second.real_file_size();
+    // blob file had been over reclaim
+    discardable_size = f.second.discardable_size();
+    ASSERT_TRUE(discardable_size < 0);
+  }
+
+  // compact delete[101..700] and try to trigger dig hole but will not success
+  // because the size occuppied by [101..700] had already reclaim by last dig
+  // hole but this will update the discardable_size
+  CompactAll();
+  blob.lock()->ComputeGCScore();
+  ASSERT_OK(db_impl_->TEST_StartGC(db_->DefaultColumnFamily()->GetID()));
+
+  auto files_3 = blob.lock()->TEST_GetAllFiles();
+  ASSERT_EQ(files_3.size(), 1);
+  for (auto const& f : files_3) {
+    ASSERT_EQ(file_number, f.first);
+    // dig hole did not trigger
+    ASSERT_EQ(file_size, f.second.real_file_size());
+    // discardable_size had updated
+    ASSERT_TRUE(f.second.discardable_size() > discardable_size);
+  }
+
+  // delete[701..900]
+  for (int i = 701; i < 901; i++) {
+    db_->Delete(WriteOptions(), GenKey(i));
+  }
+  Flush();
+  // compact delete[201..700] and trigger dig hole
+  CompactAll();
+  blob.lock()->ComputeGCScore();
+  ASSERT_OK(db_impl_->TEST_StartGC(db_->DefaultColumnFamily()->GetID()));
+
+  auto files_4 = blob.lock()->TEST_GetAllFiles();
+  ASSERT_EQ(files_4.size(), 1);
+  for (auto const& f : files_4) {
+    ASSERT_EQ(file_number, f.first);
+    // dig hole had triggered
+    ASSERT_TRUE(f.second.real_file_size() < file_size);
+  }
 
   Close();
 }

@@ -181,7 +181,7 @@ Status BlobGCJob::SampleCandidateFiles() {
         static_cast<int64_t>(
             blob_gc_->titan_cf_options().free_space_threshold)) {
       selected = true;
-    } else {
+    } else if (blob_gc_->titan_cf_options().fast_reclaim_space_by_sample) {
       // because discardable_size are lazily captured by compaction on LSM tree
       // and can not reflect the real-time discardable_size, by sample files we
       // can query LSM tree with the most up to date discardable information and
