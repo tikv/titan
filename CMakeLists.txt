@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0)
 project(titan)
 enable_language(CXX)
 enable_language(C)
-set(ROCKSDB_DIR "/home/lhy/summer/lhy1024/rocksdb")
+
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address ")
 #set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
 #set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
