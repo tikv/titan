@@ -241,13 +241,14 @@ struct BlobFileHeader {
 
 // Format of blob file footer (BlockHandle::kMaxEncodedLength + 12):
 //
-//    +-----------------------------------+---------------------------------------------------+--------------+----------+
-//    |         meta index handle         |                      padding                      | magic number | checksum |
-//    +-----------------------------------+---------------------------------------------------+--------------+----------+
-//    | Varint64(offset) + Varint64(size) |  BlockHandle::kMaxEncodedLength - meta_handle_len |   Fixed64    | Fixed32  |
-//    +-----------------------------------+---------------------------------------------------+--------------+----------+
+//    +---------------------+-------------+--------------+----------+
+//    |  meta index handle  |   padding   | magic number | checksum |
+//    +---------------------+-------------+--------------+----------+
+//    | Varint64 + Varint64 | padding_len |   Fixed64    | Fixed32  |
+//    +---------------------+-------------+--------------+----------+
 //
-// The padding is to make the blob file footer fixed size.
+// To make the blob file footer fixed size,
+// the padding_len is `BlockHandle::kMaxEncodedLength - meta_handle_len`
 struct BlobFileFooter {
   // The first 64bits from $(echo titandb/blob | sha1sum).
   static const uint64_t kFooterMagicNumber{0x2be0a6148e39edc6ull};
