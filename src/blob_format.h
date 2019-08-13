@@ -9,17 +9,38 @@
 namespace rocksdb {
 namespace titandb {
 
-// Blob header format:
+// Blob file overall format:
 //
-// crc          : fixed32
-// size         : fixed32
-// compression  : char
+// [blob file header]
+// [blob head + record 1]
+// [blob head + record 2]
+// ...
+// [blob head + record N]
+// [meta block 1]
+// [meta block 2]
+// ...
+// [meta block K]
+// [meta index block]
+// [blob file footer]
+
+// Format of blob head (9 bytes):
+//
+//    +---------+---------+-------------+
+//    |   crc   |  size   | compression |
+//    +---------+---------+-------------+
+//    | Fixed32 | Fixed32 |    char     |
+//    +---------+---------+-------------+
+//
 const uint64_t kBlobHeaderSize = 9;
 
-// Blob record format:
+// Format of blob record (not fixed size):
 //
-// key          : varint64 length + length bytes
-// value        : varint64 length + length bytes
+//    +--------------------+----------------------+
+//    |        key         |        value         |
+//    +--------------------+----------------------+
+//    | Varint64 + key_len | Varint64 + value_len |
+//    +--------------------+----------------------+
+//
 struct BlobRecord {
   Slice key;
   Slice value;
@@ -63,10 +84,14 @@ class BlobDecoder {
   CompressionType compression_{kNoCompression};
 };
 
-// Blob handle format:
+// Format of blob handle (not fixed size):
 //
-// offset       : varint64
-// size         : varint64
+//    +----------+----------+
+//    |  offset  |   size   |
+//    +----------+----------+
+//    | Varint64 | Varint64 |
+//    +----------+----------+
+//
 struct BlobHandle {
   uint64_t offset{0};
   uint64_t size{0};
@@ -77,11 +102,16 @@ struct BlobHandle {
   friend bool operator==(const BlobHandle& lhs, const BlobHandle& rhs);
 };
 
-// Blob index format:
+// Format of blob index (not fixed size):
 //
-// type         : char
-// file_number_  : varint64
-// blob_handle  : varint64 offset + varint64 size
+//    +------+-------------+------------------------------------+
+//    | type | file number |            blob handle             |
+//    +------+-------------+------------------------------------+
+//    | char |  Varint64   | Varint64(offsest) + Varint64(size) |
+//    +------+-------------+------------------------------------+
+//
+// It is stored in LSM-Tree as the value of key, then Titan can use this blob
+// index to locate actual value from blob file.
 struct BlobIndex {
   enum Type : unsigned char {
     kBlobRecord = 1,
@@ -95,10 +125,25 @@ struct BlobIndex {
   friend bool operator==(const BlobIndex& lhs, const BlobIndex& rhs);
 };
 
-// Blob file meta format:
+// Format of blob file meta (not fixed size):
 //
-// file_number_      : varint64
-// file_size_        : varint64
+//    +-------------+-----------+--------------------+--------------------+
+//    | file number | file size |    smallest key    |    largest key     |
+//    +-------------+-----------+--------------------+--------------------+
+//    |  Varint64   | Varint64  | Varint32 + key_len | Varint32 + key_len |
+//    +-------------+-----------+--------------------+--------------------+
+//
+// The blob file meta is stored in Titan's manifest for quick constructing of
+// meta infomations of all the blob files in memory.
+//
+// Legacy format:
+//
+//    +-------------+-----------+
+//    | file number | file size |
+//    +-------------+-----------+
+//    |  Varint64   | Varint64  |
+//    +-------------+-----------+
+//
 class BlobFileMeta {
  public:
   enum class FileEvent {
@@ -172,12 +217,16 @@ class BlobFileMeta {
   bool gc_mark_{false};
 };
 
-// Blob file header format.
+// Format of blob file header (8 bytes):
+//
+//    +--------------+---------+
+//    | magic number | version |
+//    +--------------+---------+
+//    |   Fixed32    | Fixed32 |
+//    +--------------+---------+
+//
 // The header is mean to be compatible with header of BlobDB blob files, except
 // we use a different magic number.
-//
-// magic_number         : fixed32
-// version              : fixed32
 struct BlobFileHeader {
   // The first 32bits from $(echo titandb/blob | sha1sum).
   static const uint32_t kHeaderMagicNumber = 0x2be0a614ul;
@@ -190,12 +239,15 @@ struct BlobFileHeader {
   Status DecodeFrom(Slice* src);
 };
 
-// Blob file footer format:
+// Format of blob file footer (BlockHandle::kMaxEncodedLength + 12):
 //
-// meta_index_handle    : varint64 offset + varint64 size
-// <padding>            : [... kEncodedLength - 12] bytes
-// magic_number         : fixed64
-// checksum             : fixed32
+//    +-----------------------------------+---------------------------------------------------+--------------+----------+
+//    |         meta index handle         |                      padding                      | magic number | checksum |
+//    +-----------------------------------+---------------------------------------------------+--------------+----------+
+//    | Varint64(offset) + Varint64(size) |  BlockHandle::kMaxEncodedLength - meta_handle_len |   Fixed64    | Fixed32  |
+//    +-----------------------------------+---------------------------------------------------+--------------+----------+
+//
+// The padding is to make the blob file footer fixed size.
 struct BlobFileFooter {
   // The first 64bits from $(echo titandb/blob | sha1sum).
   static const uint64_t kFooterMagicNumber{0x2be0a6148e39edc6ull};
