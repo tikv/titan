@@ -112,17 +112,18 @@ class DigHoleTest : public testing::Test {
   }
 
   std::string DecodeKey(const Slice &key) {
-    std::string data = std::string(key.data());
-    assert(data.length()>=kKeyLength);
+    std::string data;
+    data = key.data();
+    assert(data.length() >= kKeyLength);
     std::string ans = data.substr(0, kKeyLength);
     return ans;
   }
 
   void AddKeyValue(const std::string &key, const std::string &value,
                    BlobHandle *blob_handle) {
-    std::string key_str= EncodeKey(key);
+    std::string key_str = EncodeKey(key);
     BlobRecord record;
-    record.key =key_str;
+    record.key = key_str;
     record.value = value;
     builder_->Add(record, blob_handle);
     ASSERT_OK(builder_->status());
