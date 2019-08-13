@@ -41,7 +41,7 @@ Status DigHoleJob::Exec(BlobFileMeta *input) {
     return s;
   }
   auto record_iter =
-      new BlobFileIterator(std::move(file), input->file_number(),
+      std::make_shared<BlobFileIterator>(std::move(file), input->file_number(),
                            input->file_size(), titan_cf_options_);
   // pre size
   uint64_t before_size = 0, after_size = 0;

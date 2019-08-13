@@ -1,7 +1,7 @@
 #include "blob_file_iterator.h"
 
 #include <cinttypes>
-
+#include <fcntl.h>
 #include "blob_file_builder.h"
 #include "blob_file_cache.h"
 #include "blob_file_reader.h"
@@ -218,7 +218,9 @@ class DigHoleTest : public testing::Test {
     GetRealSize(&after_size);
     assert(before_size >= after_size);
     GetExpectAfterSize();
+#ifdef FALLOC_FL_PUNCH_HOLE
     ASSERT_EQ(after_size, expect_after_size);
+#endif
     ASSERT_EQ(after_size, blob_file_meta.real_file_size());
     // check
     CheckKeyExists();
