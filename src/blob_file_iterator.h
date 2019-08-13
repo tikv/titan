@@ -66,9 +66,9 @@ class BlobFileIterator {
   uint64_t cur_record_offset_;
   uint64_t cur_record_size_;
 
-  //uint64_t readahead_begin_offset_{0};
-  //uint64_t readahead_end_offset_{0};
-  //uint64_t readahead_size_{kMinReadaheadSize};
+  // uint64_t readahead_begin_offset_{0};
+  // uint64_t readahead_end_offset_{0};
+  // uint64_t readahead_size_{kMinReadaheadSize};
   char empty_record_header_[kBlobHeaderSize]{0};
 
   //  void PrefetchAndGet();

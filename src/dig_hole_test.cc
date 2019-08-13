@@ -1,7 +1,7 @@
 #include "blob_file_iterator.h"
 
-#include <cinttypes>
 #include <fcntl.h>
+#include <cinttypes>
 #include "blob_file_builder.h"
 #include "blob_file_cache.h"
 #include "blob_file_reader.h"
@@ -80,7 +80,7 @@ class DigHoleTest : public testing::Test {
     expect_before_size =
         ((the_last_handle.offset + the_last_handle.size - 1) / kBlockSize + 1) *
             kBlockSize +
-        kBlockSize /*foot*/;
+            kBlockSize /*foot*/;
     assert(expect_before_size % kBlockSize == 0);
   }
 
@@ -123,7 +123,8 @@ class DigHoleTest : public testing::Test {
     record.value = value;
     builder_->Add(record, blob_handle);
     ASSERT_OK(builder_->status());
-    data_.insert({record.key.data(), blob_handle});
+    std::string key_str = record.key.data();
+    data_.insert({key_str, blob_handle});
   }
 
   void DelKeyValue(const std::string &key) {
@@ -171,7 +172,7 @@ class DigHoleTest : public testing::Test {
     for (auto &iter : data_) {
       bool ans = keys_in_file.find(iter.first) != keys_in_file.end();
       if (!ans) {
-        //LOG(INFO) << iter.first;
+        // LOG(INFO) << iter.first;
         assert(ans);
       }
     }
