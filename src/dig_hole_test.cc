@@ -45,6 +45,10 @@ class DigHoleTest : public testing::Test {
   const uint64_t kBlockSize = 4096;
 
   DigHoleTest() : dirname_(test::TmpDir(env_)) {
+
+  }
+
+  void Init(){
     titan_options_.dirname = dirname_;
     file_number_ = Random::GetTLSInstance()->Next();
     file_name_ = BlobFileName(dirname_, file_number_);
@@ -56,7 +60,6 @@ class DigHoleTest : public testing::Test {
   }
 
   ~DigHoleTest() {
-    env_->DeleteFile(file_name_);
     env_->DeleteDir(dirname_);
   }
 
@@ -186,6 +189,7 @@ class DigHoleTest : public testing::Test {
   // number records and dig. Test size before dig and size after dig, and then
   // check remain key in the file.
   void Test(uint64_t threshold_discard) {
+    Init();
     NewBuilder();
     // add records
     const int n = Random() * kRecordNum / kRandomMax + 1;
@@ -231,6 +235,7 @@ class DigHoleTest : public testing::Test {
     ASSERT_EQ(after_size, blob_file_meta.real_file_size());
     // check
     CheckKeyExists();
+    env_->DeleteFile(file_name_);
   }
 };
 
