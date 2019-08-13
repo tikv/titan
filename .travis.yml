@@ -29,6 +29,8 @@ env:
 matrix:
   exclude:
     - os: osx
+      env: SANITIZER="ASAN"
+    - os: osx
       env: SANITIZER="TSAN"
     - os: osx
       env: SANITIZER="UBSAN"
