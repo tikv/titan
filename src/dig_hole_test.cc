@@ -32,14 +32,17 @@ class DigHoleTest : public testing::Test {
   std::unique_ptr<BlobFileIterator> blob_file_iterator_;
   std::unique_ptr<PosixRandomRWFile> random_rw_file_;
   std::shared_ptr<DigHoleJob> dig_hole_job_;
+  port::Mutex lock_;
   std::unordered_map<std::string, BlobHandle *> data_;
+  std::unordered_map<std::string, BlobHandle *> data() {
+    MutexLock l(&lock_);
+    return data_;
+  }
   const uint64_t kKeyLength = 8;
   const uint64_t kBlobMaxFileSize = 256U << 20;
   const uint64_t kValueMaxLength = 32U << 10;
   const uint64_t kRecordNum = 1000;
   const uint64_t kBlockSize = 4096;
-  uint64_t expect_before_size;
-  uint64_t expect_after_size;
 
   DigHoleTest() : dirname_(test::TmpDir(env_)) {
     titan_options_.dirname = dirname_;
@@ -76,16 +79,16 @@ class DigHoleTest : public testing::Test {
     assert(s.ok());
   }
 
-  void GetExpectBeforeSize(const BlobHandle &the_last_handle) {
-    expect_before_size =
+  uint64_t GetExpectBeforeSize(const BlobHandle &the_last_handle) {
+    uint64_t expect_before_size =
         ((the_last_handle.offset + the_last_handle.size - 1) / kBlockSize + 1) *
             kBlockSize +
             kBlockSize /*foot*/;
     assert(expect_before_size % kBlockSize == 0);
+    return expect_before_size;
   }
 
-  void GetExpectAfterSize() {
-    uint64_t blocks_num = expect_before_size / kBlockSize;
+  uint64_t GetExpectAfterSize(uint64_t blocks_num) {
     std::vector<uint64_t> flags(blocks_num, 0);
     flags[0] = flags[blocks_num - 1] = 1;  // head and foot
     for (const auto &iter : data_) {
@@ -101,7 +104,7 @@ class DigHoleTest : public testing::Test {
         count++;
       }
     }
-    expect_after_size = count * kBlockSize;
+    return count * kBlockSize;
   }
 
   std::string EncodeKey(const std::string &key) {
@@ -196,7 +199,7 @@ class DigHoleTest : public testing::Test {
       assert(handles[i].offset < kBlobMaxFileSize);
     }
     FinishBuilder();
-    GetExpectBeforeSize(handles[n - 1]);
+    uint64_t expect_before_size = GetExpectBeforeSize(handles[n - 1]);
     // del records
     for (int32_t i = 0; i < n; i++) {
       auto id = std::to_string(i);
@@ -221,7 +224,8 @@ class DigHoleTest : public testing::Test {
     uint64_t after_size = 0;
     GetRealSize(&after_size);
     assert(before_size >= after_size);
-    GetExpectAfterSize();
+    uint64_t blocks_num = expect_before_size / kBlockSize;
+    uint64_t expect_after_size = GetExpectAfterSize(blocks_num);
 #ifdef FALLOC_FL_PUNCH_HOLE
     ASSERT_EQ(after_size, expect_after_size);
 #endif
