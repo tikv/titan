@@ -118,12 +118,12 @@ class DigHoleTest : public testing::Test {
 
   void AddKeyValue(const std::string &key, const std::string &value,
                    BlobHandle *blob_handle) {
+    std::string key_str= EncodeKey(key);
     BlobRecord record;
-    record.key = EncodeKey(key);
+    record.key =key_str;
     record.value = value;
     builder_->Add(record, blob_handle);
     ASSERT_OK(builder_->status());
-    std::string key_str = record.key.data();
     data_.insert({key_str, blob_handle});
   }
 
@@ -183,9 +183,9 @@ class DigHoleTest : public testing::Test {
   void Test(uint64_t threshold_discard) {
     NewBuilder();
     // add records
-    int32_t n = Random() * kRecordNum / kRandomMax + 1;
+    const int n = Random() * kRecordNum / kRandomMax + 1;
     std::vector<BlobHandle> handles(n);
-    for (int32_t i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++) {
       auto id = std::to_string(i);
       std::string value =
           std::string(Random() * kValueMaxLength / kRandomMax, 'v');
