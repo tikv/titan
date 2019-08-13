@@ -33,6 +33,7 @@ class DigHoleTest : public testing::Test {
   std::unique_ptr<PosixRandomRWFile> random_rw_file_;
   std::shared_ptr<DigHoleJob> dig_hole_job_;
   port::Mutex lock_;
+  port::Mutex test_lock_;
   std::unordered_map<std::string, BlobHandle *> data_;
   std::unordered_map<std::string, BlobHandle *> data() {
     MutexLock l(&lock_);
@@ -44,11 +45,9 @@ class DigHoleTest : public testing::Test {
   const uint64_t kRecordNum = 1000;
   const uint64_t kBlockSize = 4096;
 
-  DigHoleTest() : dirname_(test::TmpDir(env_)) {
+  DigHoleTest() : dirname_(test::TmpDir(env_)) {}
 
-  }
-
-  void Init(){
+  void Init() {
     titan_options_.dirname = dirname_;
     file_number_ = Random::GetTLSInstance()->Next();
     file_name_ = BlobFileName(dirname_, file_number_);
@@ -59,9 +58,7 @@ class DigHoleTest : public testing::Test {
                   std::placeholders::_2, std::placeholders::_3));
   }
 
-  ~DigHoleTest() {
-    env_->DeleteDir(dirname_);
-  }
+  ~DigHoleTest() { env_->DeleteDir(dirname_); }
 
   static bool IsShutingDown() { return false; }
   Status DiscardEntry(const Slice &key, const BlobIndex &blob_index,
@@ -86,7 +83,7 @@ class DigHoleTest : public testing::Test {
     uint64_t expect_before_size =
         ((the_last_handle.offset + the_last_handle.size - 1) / kBlockSize + 1) *
             kBlockSize +
-        kBlockSize /*foot*/;
+            kBlockSize /*foot*/;
     assert(expect_before_size % kBlockSize == 0);
     return expect_before_size;
   }
@@ -189,6 +186,7 @@ class DigHoleTest : public testing::Test {
   // number records and dig. Test size before dig and size after dig, and then
   // check remain key in the file.
   void Test(uint64_t threshold_discard) {
+    MutexLock l(&test_lock_);
     Init();
     NewBuilder();
     // add records
