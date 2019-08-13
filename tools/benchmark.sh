@@ -174,6 +174,8 @@ function summarize_result {
 function run_bulkload {
   # This runs with a vector memtable and the WAL disabled to load faster. It is still crash safe and the
   # client can discover where to restart a load after a crash. I think this is a good way to load.
+
+  # TITAN: The implementation of memtable is changed from vector to default skiplist. Because GC in titan need to get in memtable. Vector will cause poor performance.
   echo "Bulk loading $num_keys random keys"
   cmd="./titandb_bench --benchmarks=fillrandom \
        --use_existing_db=0 \
@@ -181,7 +183,6 @@ function run_bulkload {
        --sync=0 \
        $params_bulkload \
        --threads=1 \
-       --memtablerep=vector \
        --allow_concurrent_memtable_write=false \
        --disable_wal=1 \
        --seed=$( date +%s ) \
@@ -213,6 +214,8 @@ function run_manual_compaction_worker {
   # This runs with a vector memtable and the WAL disabled to load faster.
   # It is still crash safe and the client can discover where to restart a
   # load after a crash. I think this is a good way to load.
+
+  # TITAN: The implementation of memtable is changed from vector to default skiplist. Because GC in titan need to get in memtable. Vector will cause poor performance.
   echo "Bulk loading $num_keys random keys for manual compaction."
 
   fillrandom_output_file=$output_dir/benchmark_man_compact_fillrandom_$3.log
@@ -234,7 +237,6 @@ function run_manual_compaction_worker {
        --compaction_measure_io_stats=$1 \
        --compaction_style=$2 \
        --subcompactions=$3 \
-       --memtablerep=vector \
        --allow_concurrent_memtable_write=false \
        --disable_wal=1 \
        --max_background_jobs=$4 \
@@ -302,6 +304,8 @@ function run_fillseq {
   # safe and the client can discover where to restart a load after a crash. I
   # think this is a good way to load.
 
+  # TITAN: The implementation of memtable is changed from vector to default skiplist. Because GC in titan need to get in memtable. Vector will cause poor performance.
+
   # Make sure that we'll have unique names for all the files so that data won't
   # be overwritten.
   if [ $1 == 1 ]; then
@@ -319,7 +323,6 @@ function run_fillseq {
        $params_w \
        --min_level_to_compress=0 \
        --threads=1 \
-       --memtablerep=vector \
        --allow_concurrent_memtable_write=false \
        --disable_wal=$1 \
        --seed=$( date +%s ) \
