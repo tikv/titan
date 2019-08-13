@@ -83,7 +83,7 @@ class DigHoleTest : public testing::Test {
     uint64_t expect_before_size =
         ((the_last_handle.offset + the_last_handle.size - 1) / kBlockSize + 1) *
             kBlockSize +
-            kBlockSize /*foot*/;
+        kBlockSize /*foot*/;
     assert(expect_before_size % kBlockSize == 0);
     return expect_before_size;
   }
@@ -115,8 +115,7 @@ class DigHoleTest : public testing::Test {
   }
 
   std::string DecodeKey(const Slice &key) {
-    std::string data;
-    data = key.data();
+    std::string data = std::string(key.data());
     assert(data.length() >= kKeyLength);
     std::string ans = data.substr(0, kKeyLength);
     return ans;

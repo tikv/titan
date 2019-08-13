@@ -97,7 +97,7 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   //
   // Default: 350MB
   uint64_t min_gc_batch_size{350 << 20};
-  
+
   // Max batch size for free space.
   //
   // Default: 2GB
@@ -123,14 +123,15 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: 10MB
   uint64_t merge_small_file_threshold{10 << 20};
 
-  // The discardable size of a blob file larger than this will be candidate for free space;
+  // The discardable size of a blob file larger than this will be candidate for
+  // free space;
   //
   // Default: 50MB
   uint64_t free_space_threshold{50 << 20};
 
-  // If set to true, some blob files with discardable_size smaller than free_space_threshold
-  // will be sample to see whether need to reclaim space
-  // 
+  // If set to true, some blob files with discardable_size smaller than
+  // free_space_threshold will be sample to see whether need to reclaim space
+  //
   // Default: false
   bool fast_reclaim_space_by_sample{false};
 
