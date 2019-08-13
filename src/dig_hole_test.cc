@@ -235,8 +235,10 @@ class DigHoleTest : public testing::Test {
 };
 
 TEST_F(DigHoleTest, Test) {
+  port::Mutex m;
   assert(kRandomMax % kTestStep == 0);
   for (uint32_t i = 0; i <= kRandomMax; i += kTestStep) {
+    MutexLock l(&m);
     Test(i);
   }
 }
