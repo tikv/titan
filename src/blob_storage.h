@@ -153,7 +153,7 @@ class BlobStorage {
     InternalComparator() : comparator_(nullptr){};
     explicit InternalComparator(const Comparator* comparator)
         : comparator_(comparator){};
-    bool operator()(const Slice& key1, const Slice& key2) {
+    bool operator()(const Slice& key1, const Slice& key2) const {
       assert(comparator_ != nullptr);
       return comparator_->Compare(key1, key2) < 0;
     }
