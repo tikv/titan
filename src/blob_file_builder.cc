@@ -31,6 +31,7 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
     }
     assert(cf_options_.comparator->Compare(record.key, Slice(smallest_key_)) >=
            0);
+    // printf("%s %s\n", record.key.ToString().c_str(), largest_key_.c_str());
     assert(cf_options_.comparator->Compare(record.key, Slice(largest_key_)) >=
            0);
     largest_key_.assign(record.key.data(), record.key.size());
