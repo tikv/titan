@@ -29,9 +29,9 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
     if (smallest_key_.empty()) {
       smallest_key_.assign(record.key.data(), record.key.size());
     }
-    assert(cf_options_.comparator->Compare(record.key, Slice(smallest_key_)) <=
+    assert(cf_options_.comparator->Compare(record.key, Slice(smallest_key_)) >=
            0);
-    assert(cf_options_.comparator->Compare(record.key, Slice(largest_key_)) >=
+    assert(cf_options_.comparator->Compare(record.key, Slice(largest_key_)) <=
            0);
     largest_key_.assign(record.key.data(), record.key.size());
   }
