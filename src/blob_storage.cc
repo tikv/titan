@@ -127,11 +127,11 @@ bool BlobStorage::RemoveFile(uint64_t file_number) {
       break;
     }
   }
-  files_.erase(file_number);
-  file_cache_->Evict(file_number);
   SubStats(stats_, cf_id_, TitanInternalStats::OBSOLETE_BLOB_FILE_SIZE,
            file->second->file_size());
   SubStats(stats_, cf_id_, TitanInternalStats::NUM_OBSOLETE_BLOB_FILE, 1);
+  files_.erase(file_number);
+  file_cache_->Evict(file_number);
   return true;
 }
 
