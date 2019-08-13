@@ -151,13 +151,12 @@ class BlobGCJobTest : public testing::Test {
         s = blob_gc_job.Finish();
         ASSERT_OK(s);
       }
-    }    
+    }
     mutex_->Unlock();
     tdb_->PurgeObsoleteFiles();
     mutex_->Lock();
-    
   }
-  void RunGC_cold(bool expected = false, bool cold = false){
+  void RunGC_cold(bool expected = false, bool cold = false) {
     MutexLock l(mutex_);
     Status s;
     auto* cfh = base_db_->DefaultColumnFamily();
@@ -179,7 +178,7 @@ class BlobGCJobTest : public testing::Test {
     }
 
     if (expected) {
-      ASSERT_TRUE(blob_gc != nullptr);   
+      ASSERT_TRUE(blob_gc != nullptr);
     }
 
     if (blob_gc) {
@@ -209,14 +208,14 @@ class BlobGCJobTest : public testing::Test {
       blob_gc->ReleaseGcFiles();
     }
     if (cold) {
-      int count=0;
-      for (auto& blob_file:blob_gc->outputs() ){
-	if (blob_file->is_cold_file()){
-		count++;
-        }        
+      int count = 0;
+      for (auto& blob_file : blob_gc->outputs()) {
+        if (blob_file->is_cold_file()) {
+          count++;
+        }
       }
       ASSERT_TRUE(count != 0);
-    } 
+    }
     mutex_->Unlock();
     tdb_->PurgeObsoleteFiles();
     mutex_->Lock();
@@ -501,7 +500,7 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   ASSERT_EQ(value, "1");
 
   RunGC(true);
- 
+
   std::string key0 = GenKey(0);
   std::string key3 = GenKey(3);
   Slice start = Slice(key0);
@@ -528,7 +527,7 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
 
   DestroyDB();
 }
-TEST_F(BlobGCJobTest, Cold_Blob_Gc){
+TEST_F(BlobGCJobTest, Cold_Blob_Gc) {
   NewDB();
 
   ASSERT_OK(db_->Put(WriteOptions(), GenKey(2), GenValue(21)));
@@ -581,12 +580,12 @@ TEST_F(BlobGCJobTest, Cold_Blob_Gc){
   ASSERT_OK(db_->Put(WriteOptions(), GenKey(14), GenValue(4)));
   Flush();
   CompactAll();
-  RunGC_cold(true,true);
+  RunGC_cold(true, true);
   ASSERT_OK(db_->Put(WriteOptions(), GenKey(15), GenValue(21)));
   ASSERT_OK(db_->Put(WriteOptions(), GenKey(16), GenValue(4)));
   Flush();
   CompactAll();
-  RunGC_cold(true,true);
+  RunGC_cold(true, true);
   DestroyDB();
 }
 }  // namespace titandb
