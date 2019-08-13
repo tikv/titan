@@ -5,8 +5,8 @@ namespace rocksdb {
 namespace titandb {
 
 TablePropertiesCollector*
-    BlobFileSizeCollectorFactory::CreateTablePropertiesCollector(
-        rocksdb::TablePropertiesCollectorFactory::Context /* context */) {
+BlobFileSizeCollectorFactory::CreateTablePropertiesCollector(
+    rocksdb::TablePropertiesCollectorFactory::Context /* context */) {
   return new BlobFileSizeCollector();
 }
 

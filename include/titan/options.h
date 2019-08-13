@@ -112,11 +112,11 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   //
   // Default: 8MB
   uint64_t merge_small_file_threshold{8 << 20};
-  
+
   // The hot kv rewrite to become cold.
   //
   // Default: 5
-  char  cold_thresholds{'5'};
+  char cold_thresholds{'5'};
 
   // The mode used to process blob file.
   //

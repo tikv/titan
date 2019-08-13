@@ -259,8 +259,8 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
                      titan_build_git_sha);
     db_options_.Dump(db_options_.info_log.get());
     for (auto& desc : descs) {
-      ROCKS_LOG_HEADER(db_options_.info_log, "Column family [%s], options:",
-                       desc.name.c_str());
+      ROCKS_LOG_HEADER(db_options_.info_log, 
+                       "Column family [%s], options:", desc.name.c_str());
       desc.options.Dump(db_options_.info_log.get());
     }
   } else {

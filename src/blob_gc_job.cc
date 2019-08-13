@@ -202,9 +202,11 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   if (!iter.status().ok()) {
     s = iter.status();
     ROCKS_LOG_ERROR(
-        db_options_.info_log, "IterateForPrev failed, file number[%" PRIu64
-                              "] size[%" PRIu64 "] status[%s]",
-        file->file_number(), file->file_size(), s.ToString().c_str());
+        db_options_.info_log, 
+        "IterateForPrev failed, file number[%" PRIu64
+        "] size[%" PRIu64 "] status[%s]",
+        file->file_number(), file->file_size(), 
+        s.ToString().c_str());
     return s;
   }
 
