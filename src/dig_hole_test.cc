@@ -113,7 +113,9 @@ class DigHoleTest : public testing::Test {
 
   std::string DecodeKey(const Slice &key) {
     std::string data = std::string(key.data());
-    return data.substr(0, kKeyLength);
+    assert(data.length()>=kKeyLength);
+    std::string ans = data.substr(0, kKeyLength);
+    return ans;
   }
 
   void AddKeyValue(const std::string &key, const std::string &value,
