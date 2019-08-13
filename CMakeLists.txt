@@ -81,7 +81,6 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         dig_hole_test
         version_test)
   set(TEST_LIBS
-        glog
         titan
         rocksdb
         testutillib

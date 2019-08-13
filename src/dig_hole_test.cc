@@ -7,7 +7,6 @@
 #include "blob_file_reader.h"
 #include "dig_hole_job.h"
 #include "env/io_posix.h"
-#include "glog/logging.h"
 #include "util/filename.h"
 #include "util/testharness.h"
 namespace rocksdb {
@@ -172,7 +171,7 @@ class DigHoleTest : public testing::Test {
     for (auto &iter : data_) {
       bool ans = keys_in_file.find(iter.first) != keys_in_file.end();
       if (!ans) {
-        LOG(INFO) << iter.first;
+        //LOG(INFO) << iter.first;
         assert(ans);
       }
     }
