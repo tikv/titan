@@ -184,7 +184,7 @@ Space amplification function is.
     padding: 2px;">Figure 5: Space amplification function</div>
 </center>
 
-We can know the space amplification ratio of 2049~2730 and 4097~5461 are larger than 0.5, which will make larger space. Our test will approve it, the case of 2k and 4k, we write more zero data and in the case of 8k their write amplification are close.
+We can know the space amplification ratio of 2049\~2730 and 4097\~5461 are larger than 0.5, which will make larger space. Our test will approve it, the case of 2k and 4k, we write more zero data and in the case of 8k their write amplification are close.
 
 In theory, because Sample and reduction of rewrite LSM from GC, OPS should have improvement, but the test shows that the OPS of the two is close. We suspect that the strategy of punching hole may be somewhat radical, so it make frequent scheduling. We have reason to believe that OPS will have better optimizations when adjusting option.
 
