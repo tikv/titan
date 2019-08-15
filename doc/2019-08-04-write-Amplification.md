@@ -60,6 +60,17 @@ We choose this greedy approach to select files to perform GC instead of use disc
 
 #### 4K Alignment
 
+With testing, we found that for data that are not 4k aligned, the punching hole will fill in the corresponding 0. 
+
+![1565853651858](/home/lhy/summer/lhy1024/titan/doc/imgs/1565853651858.png)
+<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">Figure 1: Punching Hole</div>
+</center>
+
+Because the header data of the record may contain 0, such as 0000111111111111 and 1111111111110000, which leads to the inability to read the data correctly according to the past arrangement, so we take a 4k alignment, that is, if a record cannot be placed at the current block, it will use the next block.
+
 
 
 ### Overview
@@ -126,28 +137,84 @@ It does not affect the compatibility with Linux. Unfortunately, the method, fall
 - RAM: 24GB
 - SSD: SAMSUNG 970Pro 512GB 
 
-### Workload
+
+### Case 1: Different Record Size
+#### Workload
+
 - Operation: 100% update
 - Value size: from 1K to 512K
 - Record count: 4G/value size
 - Operation count: 16G/value size
-- Requestdistribution: uniform
+- Request distribution: uniform
 
-### Write Amplification
+#### Result
 
-![1565839903157](/home/lhy/summer/lhy1024/titan/doc/imgs/1565839903157.png)
-
-### Space Amplification
+![Write Amplification](/home/lhy/summer/lhy1024/titan/doc/imgs/1565839903157.png)
+<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">Figure 2: Write Amplification</div>
+</center>
 
 ![1565840445540](/home/lhy/summer/lhy1024/titan/doc/imgs/1565840445540.png)
-
-### OPS
+<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">Figure 3: Space Amplification</div>
+</center>
 
 ![1565840407310](/home/lhy/summer/lhy1024/titan/doc/imgs/1565840407310.png)
+<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">Figure 4: OPS</div>
+</center>
 
-### Reduce
+#### Analysis
+
+We can see that in both cases of 2k and 4k, the use of hole punching instead introduces a larger write amplification. Because we use 4k alignment to process data, which leads to the storage of one such record need more blocks to be filled zero. And the data we write is not exactly 2k or 4k, considering the head and key. In fact, it is just a little bigger than 2k or 4k. 
+
+Space amplification function is.
+
+![1565852025889](/home/lhy/summer/lhy1024/titan/doc/imgs/1565852025889.png)
+
+<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">Figure 5: Space amplification function</div>
+</center>
+
+We can know the space amplification ratio of 2049~2730 and 4097~5461 are larger than 0.5, which will make larger space. Our test will approve it, the case of 2k and 4k, we write more zero data and in the case of 8k their write amplification are close.
+
+In theory, because Sample and reduction of rewrite LSM from GC, OPS should have improvement, but the test shows that the OPS of the two is close. We suspect that the strategy of punching hole may be somewhat radical, so it make frequent scheduling. We have reason to believe that OPS will have better optimizations when adjusting option.
+
+### Case 2: Different Write Size
+
+#### Workload
+
+- Operation: 100% update
+
+- Value size: 64k
+
+- Request distribution: uniform
+
+#### Result  
 
 ![1565840325221](/home/lhy/summer/lhy1024/titan/doc/imgs/1565840325221.png)
+
+<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">Figure 6: Reduce</div>
+</center>
+
+- x : Record size/Operation size/Titan Write Size
+- y : Titan++ Size/Titan Size
+
+#### Analysis
+
+As the size of the data increases, Titan's GC is increasing. At the same time, Titan++ only needs to increase the corresponding punching hole, so the optimization of write amplification is more and more significant.
+
 
 ## Open issues (if applicable)
 
