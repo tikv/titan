@@ -62,7 +62,7 @@ We choose this greedy approach to select files to perform GC instead of use disc
 
 With testing, we found that for data that are not 4k aligned, the punching hole will fill in the corresponding 0. 
 
-![1565853651858](/home/lhy/summer/lhy1024/titan/doc/imgs/1565853651858.png)
+![1565853651858](./imgs/1565853651858.png)
 <center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
     display: inline-block;
     color: #999;
@@ -149,21 +149,21 @@ It does not affect the compatibility with Linux. Unfortunately, the method, fall
 
 #### Result
 
-![Write Amplification](/home/lhy/summer/lhy1024/titan/doc/imgs/1565839903157.png)
+![Write Amplification](./imgs/1565839903157.png)
 <center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
     display: inline-block;
     color: #999;
     padding: 2px;">Figure 2: Write Amplification</div>
 </center>
 
-![1565840445540](/home/lhy/summer/lhy1024/titan/doc/imgs/1565840445540.png)
+![1565840445540](./imgs/1565840445540.png)
 <center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
     display: inline-block;
     color: #999;
     padding: 2px;">Figure 3: Space Amplification</div>
 </center>
 
-![1565840407310](/home/lhy/summer/lhy1024/titan/doc/imgs/1565840407310.png)
+![1565840407310](./imgs/1565840407310.png)
 <center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
     display: inline-block;
     color: #999;
@@ -176,7 +176,7 @@ We can see that in both cases of 2k and 4k, the use of hole punching instead int
 
 Space amplification function is.
 
-![1565852025889](/home/lhy/summer/lhy1024/titan/doc/imgs/1565852025889.png)
+![1565852025889](./imgs/1565852025889.png)
 
 <center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
     display: inline-block;
@@ -200,7 +200,7 @@ In theory, because Sample and reduction of rewrite LSM from GC, OPS should have 
 
 #### Result  
 
-![1565840325221](/home/lhy/summer/lhy1024/titan/doc/imgs/1565840325221.png)
+![1565840325221](./imgs/1565840325221.png)
 
 <center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
     display: inline-block;
