@@ -166,7 +166,7 @@ It does not affect the compatibility with Linux. Unfortunately, the method, fall
 
 We can see that in both cases of 2k and 4k, the use of hole punching instead introduces a larger write amplification. Because we use 4k alignment to process data, which leads to the storage of one such record need more blocks to be filled zero. And the data we write is not exactly 2k or 4k, considering the head and key. In fact, it is just a little bigger than 2k or 4k. 
 
-Space amplification function is.
+Space amplification function is ![img](./imgs/function.gif)
 
 
 <p align="center">
