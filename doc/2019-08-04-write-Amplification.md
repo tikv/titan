@@ -62,12 +62,10 @@ We choose this greedy approach to select files to perform GC instead of use disc
 
 With testing, we found that for data that are not 4k aligned, the punching hole will fill in the corresponding 0. 
 
-![1565853651858](./imgs/1565853651858.png)
-<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
-    display: inline-block;
-    color: #999;
-    padding: 2px;">Figure 1: Punching Hole</div>
-</center>
+<p align="center">
+  <img src="./imgs/1565853651858.png"><br> 
+  Figure 1: Punching Hole
+</p>
 
 Because the header data of the record may contain 0, such as 0000111111111111 and 1111111111110000, which leads to the inability to read the data correctly according to the past arrangement, so we take a 4k alignment, that is, if a record cannot be placed at the current block, it will use the next block.
 
@@ -149,26 +147,20 @@ It does not affect the compatibility with Linux. Unfortunately, the method, fall
 
 #### Result
 
-![Write Amplification](./imgs/1565839903157.png)
-<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
-    display: inline-block;
-    color: #999;
-    padding: 2px;">Figure 2: Write Amplification</div>
-</center>
+<p align="center">
+  <img src="./imgs/1565839903157.png"><br> 
+  Figure 2: Write Amplification
+</p>
 
-![1565840445540](./imgs/1565840445540.png)
-<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
-    display: inline-block;
-    color: #999;
-    padding: 2px;">Figure 3: Space Amplification</div>
-</center>
+<p align="center">
+  <img src="./imgs/1565840445540.png"><br> 
+  Figure 3: Space Amplification
+</p>
 
-![1565840407310](./imgs/1565840407310.png)
-<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
-    display: inline-block;
-    color: #999;
-    padding: 2px;">Figure 4: OPS</div>
-</center>
+<p align="center">
+  <img src="./imgs/1565840407310.png"><br> 
+  Figure 4: OPS
+</p>
 
 #### Analysis
 
@@ -176,13 +168,11 @@ We can see that in both cases of 2k and 4k, the use of hole punching instead int
 
 Space amplification function is.
 
-![1565852025889](./imgs/1565852025889.png)
 
-<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
-    display: inline-block;
-    color: #999;
-    padding: 2px;">Figure 5: Space amplification function</div>
-</center>
+<p align="center">
+  <img src="./imgs/1565852025889.png"><br> 
+  Figure 5: Space amplification function
+</p>
 
 We can know the space amplification ratio of 2049\~2730 and 4097\~5461 are larger than 0.5, which will make larger space. Our test will approve it, the case of 2k and 4k, we write more zero data and in the case of 8k their write amplification are close.
 
@@ -200,13 +190,10 @@ In theory, because Sample and reduction of rewrite LSM from GC, OPS should have 
 
 #### Result  
 
-![1565840325221](./imgs/1565840325221.png)
-
-<center><div style="color:orange; border-bottom: 1px solid #d9d9d9;
-    display: inline-block;
-    color: #999;
-    padding: 2px;">Figure 6: Reduce</div>
-</center>
+<p align="center">
+  <img src="./imgs/1565840325221.png"><br> 
+  Figure 6: Reduce
+</p>
 
 - x : Record size/Operation size/Titan Write Size
 - y : Titan++ Size/Titan Size
