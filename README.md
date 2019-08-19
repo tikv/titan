@@ -15,8 +15,13 @@ and provide the path to Titan build script.
 # To build:
 mkdir -p build
 cd build
-cmake .. -DROCKSDB_DIR=<rocksdb_source_dir>
+cmake ..
 make -j<n>
+
+# To specify custom rocksdb
+cmake .. -DROCKSDB_DIR=<rocksdb_source_dir>
+# or
+cmake .. -DROCKSDB_GIT_REPO=<git_repo> -DROCKSDB_GIT_BRANCH=<branch>
 
 # Build static lib (i.e. libtitan.a) only:
 make titan -j<n>

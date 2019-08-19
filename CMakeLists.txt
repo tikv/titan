@@ -4,8 +4,13 @@ enable_language(CXX)
 enable_language(C)
 find_package(Git)
 
-set(ROCKSDB_GIT_REPO "https://github.com/pingcap/rocksdb.git")
-set(ROCKSDB_GIT_BRANCH "tikv-3.0")
+if (NOT ROCKSDB_GIT_REPO)
+  set(ROCKSDB_GIT_REPO "https://github.com/pingcap/rocksdb.git")
+endif()
+
+if (NOT ROCKSDB_GIT_BRANCH)
+  set(ROCKSDB_GIT_BRANCH "tikv-3.0")
+endif()
 
 if (NOT DEFINED ROCKSDB_DIR)
   if (GIT_FOUND)
