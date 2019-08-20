@@ -167,7 +167,7 @@ class BlobGCJobTest : public testing::Test {
       return s;
     }
     iter->reset(new BlobFileIterator(std::move(file), file_number, file_size,
-                                     TitanCFOptions()));
+                                     TitanCFOptions(), false /*for_gc*/));
     return Status::OK();
   }
 

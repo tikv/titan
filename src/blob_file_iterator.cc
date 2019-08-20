@@ -8,18 +8,20 @@ namespace titandb {
 
 BlobFileIterator::BlobFileIterator(
     std::unique_ptr<RandomAccessFileReader>&& file, uint64_t file_name,
-    uint64_t file_size, const TitanCFOptions& titan_cf_options)
+    uint64_t file_size, const TitanCFOptions& titan_cf_options, bool for_gc)
     : file_(std::move(file)),
       file_number_(file_name),
       file_size_(file_size),
-      titan_cf_options_(titan_cf_options) {}
+      titan_cf_options_(titan_cf_options),
+      for_gc_(for_gc) {}
 
 BlobFileIterator::~BlobFileIterator() {}
 
 bool BlobFileIterator::Init() {
   Slice slice;
   char header_buf[BlobFileHeader::kEncodedLength];
-  status_ = file_->Read(0, BlobFileHeader::kEncodedLength, &slice, header_buf);
+  status_ = file_->Read(0, BlobFileHeader::kEncodedLength, &slice, header_buf,
+                        for_gc_);
   if (!status_.ok()) {
     return false;
   }
@@ -29,8 +31,9 @@ bool BlobFileIterator::Init() {
     return false;
   }
   char footer_buf[BlobFileFooter::kEncodedLength];
-  status_ = file_->Read(file_size_ - BlobFileFooter::kEncodedLength,
-                        BlobFileFooter::kEncodedLength, &slice, footer_buf);
+  status_ =
+      file_->Read(file_size_ - BlobFileFooter::kEncodedLength,
+                  BlobFileFooter::kEncodedLength, &slice, footer_buf, for_gc_);
   if (!status_.ok()) return false;
   BlobFileFooter blob_file_footer;
   status_ = blob_file_footer.DecodeFrom(&slice);
@@ -75,7 +78,7 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
   iterate_offset_ = BlobFileHeader::kEncodedLength;
   for (; iterate_offset_ < offset; iterate_offset_ += total_length) {
     status_ = file_->Read(iterate_offset_, kBlobHeaderSize, &header_buffer,
-                          header_buffer.get());
+                          header_buffer.get(), for_gc_);
     if (!status_.ok()) return;
     status_ = decoder_.DecodeHeader(&header_buffer);
     if (!status_.ok()) return;
@@ -89,7 +92,7 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
 void BlobFileIterator::GetBlobRecord() {
   FixedSlice<kBlobHeaderSize> header_buffer;
   status_ = file_->Read(iterate_offset_, kBlobHeaderSize, &header_buffer,
-                        header_buffer.get());
+                        header_buffer.get(), for_gc_);
   if (!status_.ok()) return;
   status_ = decoder_.DecodeHeader(&header_buffer);
   if (!status_.ok()) return;
@@ -98,7 +101,7 @@ void BlobFileIterator::GetBlobRecord() {
   auto record_size = decoder_.GetRecordSize();
   buffer_.resize(record_size);
   status_ = file_->Read(iterate_offset_ + kBlobHeaderSize, record_size,
-                        &record_slice, buffer_.data());
+                        &record_slice, buffer_.data(), for_gc_);
   if (status_.ok()) {
     status_ =
         decoder_.DecodeRecord(&record_slice, &cur_blob_record_, &uncompressed_);

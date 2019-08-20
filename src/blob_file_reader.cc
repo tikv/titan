@@ -7,9 +7,9 @@
 #include <inttypes.h>
 
 #include "file/filename.h"
+#include "test_util/sync_point.h"
 #include "util/crc32c.h"
 #include "util/string_util.h"
-#include "test_util/sync_point.h"
 
 #include "titan_stats.h"
 
@@ -28,12 +28,9 @@ Status NewBlobFileReader(uint64_t file_number, uint64_t readahead_size,
   if (readahead_size > 0) {
     file = NewReadaheadRandomAccessFile(std::move(file), readahead_size);
   }
-  // Currently only `BlobGCJob` will call `NewBlobFileReader()`. We set
-  // `for_compaction=true` in this case to enable rate limiter.
   result->reset(new RandomAccessFileReader(
       std::move(file), file_name, nullptr /*env*/, nullptr /*stats*/,
-      0 /*hist_type*/, nullptr /*file_read_hist*/, env_options.rate_limiter,
-      true /*for compaction*/));
+      0 /*hist_type*/, nullptr /*file_read_hist*/, env_options.rate_limiter));
   return s;
 }
 

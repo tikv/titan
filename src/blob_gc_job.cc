@@ -192,7 +192,8 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
     return s;
   }
   BlobFileIterator iter(std::move(file_reader), file->file_number(),
-                        file->file_size(), blob_gc_->titan_cf_options());
+                        file->file_size(), blob_gc_->titan_cf_options(),
+                        true /*for_gc*/);
   iter.IterateForPrev(sample_begin_offset);
   // TODO(@DorianZheng) sample_begin_offset maybe out of data block size, need
   // more elegant solution
@@ -384,7 +385,7 @@ Status BlobGCJob::BuildIterator(
     }
     list.emplace_back(std::unique_ptr<BlobFileIterator>(new BlobFileIterator(
         std::move(file), inputs[i]->file_number(), inputs[i]->file_size(),
-        blob_gc_->titan_cf_options())));
+        blob_gc_->titan_cf_options(), true /*for_gc*/)));
   }
 
   if (s.ok()) result->reset(new BlobFileMergeIterator(std::move(list)));
