@@ -65,7 +65,8 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       }
       if (!s.ok()) return s;
 
-      ROCKS_LOG_INFO(db_->db_options_.info_log, "Titan adding blob file [%llu]",
+      ROCKS_LOG_INFO(db_->db_options_.info_log,
+                     "Titan adding blob file [%" PRIu64 "]",
                      file.first->file_number());
       edit.AddBlobFile(file.first);
     }
@@ -746,7 +747,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   if (!bs) {
     // TODO: Should treat it as background error and make DB read-only.
     ROCKS_LOG_ERROR(db_options_.info_log,
-                    "Column family id:% " PRIu32 " not Found.", cf_id);
+                    "Column family id:%" PRIu32 " not Found.", cf_id);
     return Status::NotFound("Column family id: " + std::to_string(cf_id) +
                             " not Found.");
   }
@@ -1008,7 +1009,7 @@ void TitanDBImpl::OnCompactionCompleted(
     if (!bs) {
       // TODO: Should treat it as background error and make DB read-only.
       ROCKS_LOG_ERROR(db_options_.info_log,
-                      "OnCompactionCompleted[%d] Column family id:% " PRIu32
+                      "OnCompactionCompleted[%d] Column family id:%" PRIu32
                       " not Found.",
                       compaction_job_info.job_id, compaction_job_info.cf_id);
       return;

@@ -568,7 +568,8 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   VersionEdit edit;
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
   for (const auto& file : blob_gc_->sampled_inputs()) {
-    ROCKS_LOG_INFO(db_options_.info_log, "Titan add obsolete file [%llu]",
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "Titan add obsolete file [%" PRIu64 "]",
                    file->file_number());
     metrics_.blob_db_gc_num_files++;
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
