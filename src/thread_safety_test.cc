@@ -5,12 +5,12 @@
 
 #include "db_impl.h"
 #include "db_iter.h"
+#include "file/filename.h"
 #include "port/port.h"
 #include "rocksdb/utilities/debug.h"
+#include "test_util/testharness.h"
 #include "titan/db.h"
-#include "util/filename.h"
 #include "util/random.h"
-#include "util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {

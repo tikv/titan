@@ -1,7 +1,7 @@
 #include "blob_format.h"
 
 #include "util/crc32c.h"
-#include "util/sync_point.h"
+#include "test_util/sync_point.h"
 
 namespace rocksdb {
 namespace titandb {

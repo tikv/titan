@@ -4,7 +4,7 @@
 #include <unordered_map>
 
 #include "rocksdb/options.h"
-#include "util/logging.h"
+#include "logging/logging.h"
 
 namespace rocksdb {
 namespace titandb {

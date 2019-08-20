@@ -2,8 +2,9 @@
 
 #include <inttypes.h>
 
+#include "file/filename.h"
+
 #include "edit_collector.h"
-#include "util/filename.h"
 
 namespace rocksdb {
 namespace titandb {

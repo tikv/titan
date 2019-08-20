@@ -1,5 +1,6 @@
 #include "util.h"
-#include "util/testharness.h"
+
+#include "test_util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {

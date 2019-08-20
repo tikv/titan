@@ -6,9 +6,9 @@
 
 #include <inttypes.h>
 
+#include "logging/logging.h"
 #include "options/options_helper.h"
 #include "rocksdb/convenience.h"
-#include "util/logging.h"
 
 namespace rocksdb {
 namespace titandb {

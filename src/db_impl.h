@@ -1,7 +1,7 @@
 #pragma once
 
 #include "blob_file_manager.h"
-#include "db/db_impl.h"
+#include "db/db_impl/db_impl.h"
 #include "rocksdb/statistics.h"
 #include "table_factory.h"
 #include "titan/db.h"

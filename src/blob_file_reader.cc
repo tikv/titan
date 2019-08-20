@@ -6,10 +6,10 @@
 
 #include <inttypes.h>
 
+#include "file/filename.h"
 #include "util/crc32c.h"
-#include "util/filename.h"
 #include "util/string_util.h"
-#include "util/sync_point.h"
+#include "test_util/sync_point.h"
 
 #include "titan_stats.h"
 
