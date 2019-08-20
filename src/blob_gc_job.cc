@@ -3,6 +3,8 @@
 #endif
 #include <inttypes.h>
 
+#include <memory>
+
 #include "blob_gc_job.h"
 
 namespace rocksdb {
@@ -492,7 +494,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       }
     }
   } else {
-    std::vector<unique_ptr<BlobFileHandle>> handles;
+    std::vector<std::unique_ptr<BlobFileHandle>> handles;
     std::string to_delete_files;
     for (auto& builder : this->blob_file_builders_) {
       if (!to_delete_files.empty()) {
