@@ -72,7 +72,7 @@ Status VersionSet::Recover() {
     LogReporter reporter;
     reporter.status = &s;
     log::Reader reader(nullptr, std::move(file), &reporter, true /*checksum*/,
-                       0 /*initial_offset*/, 0);
+                       0 /*log_num*/);
     Slice record;
     std::string scratch;
     EditCollector collector;
