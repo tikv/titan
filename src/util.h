@@ -55,13 +55,13 @@ class FixedSlice : public Slice {
 // compressed data. However, if the compression ratio is not good, it
 // returns the input slice directly and sets "*type" to
 // kNoCompression.
-Slice Compress(const CompressionContext& ctx, const Slice& input,
+Slice Compress(const CompressionInfo& info, const Slice& input,
                std::string* output, CompressionType* type);
 
 // Uncompresses the input data according to the uncompression type.
 // If successful, fills "*buffer" with the uncompressed data and
 // points "*output" to it.
-Status Uncompress(const UncompressionContext& ctx, const Slice& input,
+Status Uncompress(const UncompressionInfo& info, const Slice& input,
                   OwnedSlice* output);
 
 void UnrefCacheHandle(void* cache, void* handle);

@@ -40,7 +40,7 @@ void BlobEncoder::EncodeRecord(const BlobRecord& record) {
 
   CompressionType compression;
   record.EncodeTo(&record_buffer_);
-  record_ = Compress(compression_ctx_, record_buffer_, &compressed_buffer_,
+  record_ = Compress(compression_info_, record_buffer_, &compressed_buffer_,
                      &compression);
 
   assert(record_.size() < std::numeric_limits<uint32_t>::max());
@@ -82,7 +82,8 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
     return DecodeInto(input, record);
   }
   UncompressionContext ctx(compression_);
-  Status s = Uncompress(ctx, input, buffer);
+  UncompressionInfo info(ctx, UncompressionDict::GetEmptyDict(), compression_);
+  Status s = Uncompress(info, input, buffer);
   if (!s.ok()) {
     return s;
   }

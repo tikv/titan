@@ -32,7 +32,11 @@ struct BlobRecord {
 
 class BlobEncoder {
  public:
-  BlobEncoder(CompressionType compression) : compression_ctx_(compression) {}
+  BlobEncoder(CompressionType compression)
+      : compression_ctx_(compression), 
+        compression_info_(compression_opt_, compression_ctx_,
+                          CompressionDict::GetEmptyDict(), compression,
+                          0 /*sample_for_compression*/) {}
 
   void EncodeRecord(const BlobRecord& record);
 
@@ -46,7 +50,9 @@ class BlobEncoder {
   Slice record_;
   std::string record_buffer_;
   std::string compressed_buffer_;
+  CompressionOptions compression_opt_;
   CompressionContext compression_ctx_;
+  CompressionInfo compression_info_;
 };
 
 class BlobDecoder {
