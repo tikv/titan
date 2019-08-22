@@ -32,7 +32,7 @@ endif()
 
 option(WITH_ZLIB "build with zlib" OFF)
 if (WITH_ZLIB)
-  find_package(zlib REQUIRED)
+  find_package(ZLIB REQUIRED)
   add_definitions(-DZLIB)
   include_directories(${ZLIB_INCLUDE_DIR})
 endif()
