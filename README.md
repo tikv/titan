@@ -42,5 +42,5 @@ ctest -R titan
 bash scripts/format-diff.sh
 ```
 
-## Compatibility
-Currently Titan is only compatible with RocksDB 5.18.
+## Compatibility with RocksDB
+Current version of Titan is developed and tested with RocksDB 6.4.
