@@ -85,7 +85,7 @@ class BlobFileIteratorTest : public testing::Test {
     NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
                       &readable_file_);
     blob_file_iterator_.reset(new BlobFileIterator{
-        std::move(readable_file_), file_number_, file_size, TitanCFOptions()}, false /*for_gc*/);
+        std::move(readable_file_), file_number_, file_size, TitanCFOptions(), false /*for_gc*/});
   }
 
   void TestBlobFileIterator() {

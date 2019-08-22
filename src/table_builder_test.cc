@@ -204,7 +204,9 @@ TEST_F(TableBuilderTest, Basic) {
 
   ReadOptions ro;
   std::unique_ptr<InternalIterator> iter;
-  iter.reset(base_reader->NewIterator(ro, nullptr));
+  iter.reset(base_reader->NewIterator(
+        ro, nullptr/*prefix_extractor*/, nullptr /*arena*/,
+        false /*skip_filters*/, TableReaderCaller::kUncategorized));
   iter->SeekToFirst();
   for (char i = 0; i < n; i++) {
     ASSERT_TRUE(iter->Valid());
@@ -253,7 +255,9 @@ TEST_F(TableBuilderTest, NoBlob) {
 
   ReadOptions ro;
   std::unique_ptr<InternalIterator> iter;
-  iter.reset(base_reader->NewIterator(ro, nullptr));
+  iter.reset(base_reader->NewIterator(
+        ro, nullptr/*prefix_extractor*/, nullptr /*arena*/,
+        false /*skip_filters*/, TableReaderCaller::kUncategorized));
   iter->SeekToFirst();
   for (char i = 0; i < n; i++) {
     ASSERT_TRUE(iter->Valid());
