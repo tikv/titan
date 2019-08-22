@@ -2100,13 +2100,12 @@ class Benchmark {
   int64_t range_tombstone_width_;
   int64_t max_num_range_tombstones_;
   WriteOptions write_options_;
-  Options open_options_;  // keep options around to properly destroy db later
+  titandb::TitanOptions
+      open_options_;  // keep options around to properly destroy db later
 #ifndef ROCKSDB_LITE
   TraceOptions trace_options_;
   TraceOptions block_cache_trace_options_;
 #endif
-  titandb::TitanOptions
-      open_options_;  // keep options around to properly destroy db later  
   int64_t reads_;
   int64_t deletes_;
   double read_random_exp_range_;
