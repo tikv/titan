@@ -2,11 +2,11 @@
 #include <options/cf_options.h>
 #include <unordered_map>
 
-#include "rocksdb/utilities/debug.h"
 #include "file/filename.h"
-#include "util/random.h"
+#include "rocksdb/utilities/debug.h"
 #include "test_util/sync_point.h"
 #include "test_util/testharness.h"
+#include "util/random.h"
 
 #include "blob_file_iterator.h"
 #include "blob_file_reader.h"

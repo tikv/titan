@@ -51,8 +51,9 @@ class BlobFileSizeCollectorTest : public testing::Test {
     CompressionOptions compression_opts;
     TableBuilderOptions options(cf_ioptions_, cf_moptions_,
                                 cf_ioptions_.internal_comparator, &collectors_,
-                                kNoCompression, 0 /*sample_for_compression*/, compression_opts, 
-                                false /*skip_filters*/, kDefaultColumnFamilyName, 0 /*level*/);
+                                kNoCompression, 0 /*sample_for_compression*/,
+                                compression_opts, false /*skip_filters*/,
+                                kDefaultColumnFamilyName, 0 /*level*/);
     result->reset(table_factory_->NewTableBuilder(options, 0, file));
     ASSERT_TRUE(*result);
   }

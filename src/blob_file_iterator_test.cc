@@ -84,8 +84,9 @@ class BlobFileIteratorTest : public testing::Test {
     ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
     NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
                       &readable_file_);
-    blob_file_iterator_.reset(new BlobFileIterator{
-        std::move(readable_file_), file_number_, file_size, TitanCFOptions(), false /*for_gc*/});
+    blob_file_iterator_.reset(
+        new BlobFileIterator{std::move(readable_file_), file_number_, file_size,
+                             TitanCFOptions(), false /*for_gc*/});
   }
 
   void TestBlobFileIterator() {
@@ -205,8 +206,9 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
   ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
   NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
                     &readable_file_);
-  iters.emplace_back(std::unique_ptr<BlobFileIterator>(new BlobFileIterator{
-      std::move(readable_file_), file_number_, file_size, TitanCFOptions(), false /*for_gc*/}));
+  iters.emplace_back(std::unique_ptr<BlobFileIterator>(
+      new BlobFileIterator{std::move(readable_file_), file_number_, file_size,
+                           TitanCFOptions(), false /*for_gc*/}));
   BlobFileMergeIterator iter(std::move(iters));
 
   iter.SeekToFirst();
