@@ -183,7 +183,7 @@ class TitanDBTest : public testing::Test {
     ASSERT_OK(env_->GetFileSize(file_name, &file_size));
     NewBlobFileReader(file_number, 0, options_, env_opt, env_, &readable_file);
     BlobFileIterator iter(std::move(readable_file), file_number, file_size,
-                          options_, false /*for_gc*/);
+                          options_);
     iter.SeekToFirst();
     for (auto& kv : data) {
       if (kv.second.size() < options_.min_blob_size) {

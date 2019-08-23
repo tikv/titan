@@ -8,20 +8,21 @@ namespace titandb {
 
 BlobFileIterator::BlobFileIterator(
     std::unique_ptr<RandomAccessFileReader>&& file, uint64_t file_name,
-    uint64_t file_size, const TitanCFOptions& titan_cf_options, bool for_gc)
+    uint64_t file_size, const TitanCFOptions& titan_cf_options)
     : file_(std::move(file)),
       file_number_(file_name),
       file_size_(file_size),
-      titan_cf_options_(titan_cf_options),
-      for_gc_(for_gc) {}
+      titan_cf_options_(titan_cf_options) {}
 
 BlobFileIterator::~BlobFileIterator() {}
 
 bool BlobFileIterator::Init() {
   Slice slice;
   char header_buf[BlobFileHeader::kEncodedLength];
+  // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
+  // is only used for GC, we always set for_compaction to true.
   status_ = file_->Read(0, BlobFileHeader::kEncodedLength, &slice, header_buf,
-                        for_gc_);
+                        true /*for_compaction*/);
   if (!status_.ok()) {
     return false;
   }
@@ -31,9 +32,11 @@ bool BlobFileIterator::Init() {
     return false;
   }
   char footer_buf[BlobFileFooter::kEncodedLength];
-  status_ =
-      file_->Read(file_size_ - BlobFileFooter::kEncodedLength,
-                  BlobFileFooter::kEncodedLength, &slice, footer_buf, for_gc_);
+  // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
+  // is only used for GC, we always set for_compaction to true.
+  status_ = file_->Read(file_size_ - BlobFileFooter::kEncodedLength,
+                        BlobFileFooter::kEncodedLength, &slice, footer_buf,
+                        true /*for_compaction*/);
   if (!status_.ok()) return false;
   BlobFileFooter blob_file_footer;
   status_ = blob_file_footer.DecodeFrom(&slice);
@@ -77,8 +80,10 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
   FixedSlice<kBlobHeaderSize> header_buffer;
   iterate_offset_ = BlobFileHeader::kEncodedLength;
   for (; iterate_offset_ < offset; iterate_offset_ += total_length) {
+    // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
+    // is only used for GC, we always set for_compaction to true.
     status_ = file_->Read(iterate_offset_, kBlobHeaderSize, &header_buffer,
-                          header_buffer.get(), for_gc_);
+                          header_buffer.get(), true /*for_compaction*/);
     if (!status_.ok()) return;
     status_ = decoder_.DecodeHeader(&header_buffer);
     if (!status_.ok()) return;
@@ -91,8 +96,10 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
 
 void BlobFileIterator::GetBlobRecord() {
   FixedSlice<kBlobHeaderSize> header_buffer;
+  // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
+  // is only used for GC, we always set for_compaction to true.
   status_ = file_->Read(iterate_offset_, kBlobHeaderSize, &header_buffer,
-                        header_buffer.get(), for_gc_);
+                        header_buffer.get(), true /*for_compaction*/);
   if (!status_.ok()) return;
   status_ = decoder_.DecodeHeader(&header_buffer);
   if (!status_.ok()) return;
@@ -100,8 +107,10 @@ void BlobFileIterator::GetBlobRecord() {
   Slice record_slice;
   auto record_size = decoder_.GetRecordSize();
   buffer_.resize(record_size);
+  // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
+  // is only used for GC, we always set for_compaction to true.
   status_ = file_->Read(iterate_offset_ + kBlobHeaderSize, record_size,
-                        &record_slice, buffer_.data(), for_gc_);
+                        &record_slice, buffer_.data(), true /*for_compaction*/);
   if (status_.ok()) {
     status_ =
         decoder_.DecodeRecord(&record_slice, &cur_blob_record_, &uncompressed_);

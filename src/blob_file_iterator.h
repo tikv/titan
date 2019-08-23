@@ -14,6 +14,7 @@
 namespace rocksdb {
 namespace titandb {
 
+// Used by GC job for iterate through blob file.
 class BlobFileIterator {
  public:
   const uint64_t kMinReadaheadSize = 4 << 10;
@@ -21,7 +22,7 @@ class BlobFileIterator {
 
   BlobFileIterator(std::unique_ptr<RandomAccessFileReader>&& file,
                    uint64_t file_name, uint64_t file_size,
-                   const TitanCFOptions& titan_cf_options, bool for_gc);
+                   const TitanCFOptions& titan_cf_options);
   ~BlobFileIterator();
 
   bool Init();
@@ -48,7 +49,6 @@ class BlobFileIterator {
   const uint64_t file_number_;
   const uint64_t file_size_;
   TitanCFOptions titan_cf_options_;
-  const bool for_gc_;
 
   bool init_{false};
   uint64_t end_of_blob_record_{0};
