@@ -150,12 +150,12 @@ Status BlobFileMeta::DecodeFrom(Slice* src) {
     return Status::Corruption("BlobFileMeta decode failed");
   }
   Slice str;
-  if (GetLengthPrefixedSlice(src, &str)) {
+  if (GetLengthPrefixedSlice(src, &str) && str.size() != 0) {
     smallest_key_.assign(str.data(), str.size());
   } else {
     return Status::Corruption("BlobSmallestKey Decode failed");
   }
-  if (GetLengthPrefixedSlice(src, &str)) {
+  if (GetLengthPrefixedSlice(src, &str) && str.size() != 0) {
     largest_key_.assign(str.data(), str.size());
   } else {
     return Status::Corruption("BlobLargestKey decode failed");
