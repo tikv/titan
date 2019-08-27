@@ -1,10 +1,11 @@
 #include "table/table_builder.h"
+#include "file/filename.h"
+#include "table/table_reader.h"
+#include "test_util/testharness.h"
+
 #include "blob_file_manager.h"
 #include "blob_file_reader.h"
-#include "table/table_reader.h"
 #include "table_factory.h"
-#include "util/filename.h"
-#include "util/testharness.h"
 #include "version_set.h"
 
 namespace rocksdb {
@@ -149,8 +150,9 @@ class TableBuilderTest : public testing::Test {
     CompressionOptions compression_opts;
     TableBuilderOptions options(cf_ioptions_, cf_moptions_,
                                 cf_ioptions_.internal_comparator, &collectors_,
-                                kNoCompression, compression_opts, nullptr,
-                                false, kDefaultColumnFamilyName, 0);
+                                kNoCompression, 0 /*sample_for_compression*/,
+                                compression_opts, false /*skip_filters*/,
+                                kDefaultColumnFamilyName, 0 /*level*/);
     result->reset(table_factory_->NewTableBuilder(options, 0, file));
   }
 
@@ -203,7 +205,9 @@ TEST_F(TableBuilderTest, Basic) {
 
   ReadOptions ro;
   std::unique_ptr<InternalIterator> iter;
-  iter.reset(base_reader->NewIterator(ro, nullptr));
+  iter.reset(base_reader->NewIterator(ro, nullptr /*prefix_extractor*/,
+                                      nullptr /*arena*/, false /*skip_filters*/,
+                                      TableReaderCaller::kUncategorized));
   iter->SeekToFirst();
   for (char i = 0; i < n; i++) {
     ASSERT_TRUE(iter->Valid());
@@ -252,7 +256,9 @@ TEST_F(TableBuilderTest, NoBlob) {
 
   ReadOptions ro;
   std::unique_ptr<InternalIterator> iter;
-  iter.reset(base_reader->NewIterator(ro, nullptr));
+  iter.reset(base_reader->NewIterator(ro, nullptr /*prefix_extractor*/,
+                                      nullptr /*arena*/, false /*skip_filters*/,
+                                      TableReaderCaller::kUncategorized));
   iter->SeekToFirst();
   for (char i = 0; i < n; i++) {
     ASSERT_TRUE(iter->Valid());

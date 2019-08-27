@@ -3,6 +3,8 @@
 #endif
 #include <inttypes.h>
 
+#include <memory>
+
 #include "blob_gc_job.h"
 
 namespace rocksdb {
@@ -491,7 +493,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       }
     }
   } else {
-    std::vector<unique_ptr<BlobFileHandle>> handles;
+    std::vector<std::unique_ptr<BlobFileHandle>> handles;
     std::string to_delete_files;
     for (auto& builder : this->blob_file_builders_) {
       if (!to_delete_files.empty()) {
@@ -565,7 +567,8 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   VersionEdit edit;
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
   for (const auto& file : blob_gc_->sampled_inputs()) {
-    ROCKS_LOG_INFO(db_options_.info_log, "Titan add obsolete file [%llu]",
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "Titan add obsolete file [%" PRIu64 "]",
                    file->file_number());
     metrics_.blob_db_gc_num_files++;
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);

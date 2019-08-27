@@ -3,8 +3,8 @@
 #include <map>
 #include <unordered_map>
 
+#include "logging/logging.h"
 #include "rocksdb/options.h"
-#include "util/logging.h"
 
 namespace rocksdb {
 namespace titandb {

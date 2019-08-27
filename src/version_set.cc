@@ -2,8 +2,9 @@
 
 #include <inttypes.h>
 
+#include "file/filename.h"
+
 #include "edit_collector.h"
-#include "util/filename.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -71,7 +72,7 @@ Status VersionSet::Recover() {
     LogReporter reporter;
     reporter.status = &s;
     log::Reader reader(nullptr, std::move(file), &reporter, true /*checksum*/,
-                       0 /*initial_offset*/, 0);
+                       0 /*log_num*/);
     Slice record;
     std::string scratch;
     EditCollector collector;
@@ -248,7 +249,8 @@ Status VersionSet::DropColumnFamilies(
       VersionEdit edit;
       edit.SetColumnFamilyID(it->first);
       for (auto& file : it->second->files_) {
-        ROCKS_LOG_INFO(db_options_.info_log, "Titan add obsolete file [%llu]",
+        ROCKS_LOG_INFO(db_options_.info_log,
+                       "Titan add obsolete file [%" PRIu64 "]",
                        file.second->file_number());
         edit.DeleteBlobFile(file.first, obsolete_sequence);
       }

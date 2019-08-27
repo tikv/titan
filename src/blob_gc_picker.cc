@@ -1,5 +1,11 @@
 #include "blob_gc_picker.h"
 
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
+
+#include <inttypes.h>
+
 namespace rocksdb {
 namespace titandb {
 
@@ -16,9 +22,6 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
 
   uint64_t batch_size = 0;
   uint64_t estimate_output_size = 0;
-  //  ROCKS_LOG_INFO(db_options_.info_log, "blob file num:%lu gc score:%lu",
-  //                 blob_storage->NumBlobFiles(),
-  //                 blob_storage->gc_score().size());
   bool stop_picking = false;
   bool maybe_continue_next_time = false;
   uint64_t next_gc_size = 0;
@@ -30,23 +33,11 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       // or this file had been GCed
       continue;
     }
-
-    //    ROCKS_LOG_INFO(db_options_.info_log,
-    //                   "file number:%lu score:%f being_gc:%d pending:%d, "
-    //                   "size:%lu discard:%lu mark_for_gc:%d
-    //                   mark_for_sample:%d", blob_file->file_number_,
-    //                   gc_score.score, blob_file->being_gc,
-    //                   blob_file->pending, blob_file->file_size_,
-    //                   blob_file->discardable_size_,
-    //                   blob_file->marked_for_gc_,
-    //                   blob_file->marked_for_sample);
-
     if (!CheckBlobFile(blob_file.get())) {
-      ROCKS_LOG_INFO(db_options_.info_log, "file number:%lu no need gc",
+      ROCKS_LOG_INFO(db_options_.info_log, "Blob file %" PRIu64 "  no need gc",
                      blob_file->file_number());
       continue;
     }
-
     if (!stop_picking) {
       blob_files.push_back(blob_file.get());
       batch_size += blob_file->file_size();
