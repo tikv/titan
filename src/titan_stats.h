@@ -17,29 +17,66 @@ namespace titandb {
 class TitanInternalStats {
  public:
   enum StatsType {
-    LIVE_BLOB_SIZE,
+    LIVE_BLOB_SIZE = 0,
     NUM_LIVE_BLOB_FILE,
     NUM_OBSOLETE_BLOB_FILE,
     LIVE_BLOB_FILE_SIZE,
     OBSOLETE_BLOB_FILE_SIZE,
     INTERNAL_STATS_ENUM_MAX,
   };
+
+  enum InternalOpStatsType {
+    COUNT = 0,
+    TOTAL_SEC,
+    TOTAL_CPU_SEC,
+    READ_BYTES,
+    WRITE_BYTES,
+    DISCARDED_BYTES,
+    IO_READ_BYTES,
+    IO_WRITE_BYTES,
+    READ_FILES_NUM,
+    WRITE_FILES_NUM,
+    INTERNAL_OP_STATS_ENUM_MAX,
+  };
+
+  enum InternalOpType {
+    FLUSH = 0,
+    COMPACTION,
+    GC,
+    INTERNAL_OP_ENUM_MAX,
+  };
+
+  using InternalOpStats =
+      std::array<std::atomic<uint64_t>, INTERNAL_OP_STATS_ENUM_MAX>;
+
+  TitanInternalStats() { Clear(); }
+
   void Clear() {
-    for (int i = 0; i < INTERNAL_STATS_ENUM_MAX; i++) {
-      stats_[i].store(0, std::memory_order_relaxed);
+    for (int stat = 0; stat < INTERNAL_STATS_ENUM_MAX; stat++) {
+      stats_[stat].store(0, std::memory_order_relaxed);
+    }
+    for (int op = 0; op < INTERNAL_OP_ENUM_MAX; op++) {
+      assert(internal_op_stats_[op].size() == INTERNAL_OP_STATS_ENUM_MAX);
+      for (int stat = 0; stat < INTERNAL_OP_STATS_ENUM_MAX; stat++) {
+        internal_op_stats_[op][stat].store(0, std::memory_order_relaxed);
+      }
     }
   }
+
   void ResetStats(StatsType type) {
     stats_[type].store(0, std::memory_order_relaxed);
   }
+
   void AddStats(StatsType type, uint64_t value) {
     auto& v = stats_[type];
     v.fetch_add(value, std::memory_order_relaxed);
   }
+
   void SubStats(StatsType type, uint64_t value) {
     auto& v = stats_[type];
     v.fetch_sub(value, std::memory_order_relaxed);
   }
+
   bool GetIntProperty(const Slice& property, uint64_t* value) const {
     auto p = stats_type_string_map.find(property.ToString());
     if (p != stats_type_string_map.end()) {
@@ -48,6 +85,7 @@ class TitanInternalStats {
     }
     return false;
   }
+
   bool GetStringProperty(const Slice& property, std::string* value) const {
     uint64_t int_value;
     if (GetIntProperty(property, &int_value)) {
@@ -57,15 +95,23 @@ class TitanInternalStats {
     return false;
   }
 
+  InternalOpStats* GetInternalOpStatsForType(InternalOpType type) {
+    return &internal_op_stats_[type];
+  }
+
  private:
   static const std::unordered_map<std::string, TitanInternalStats::StatsType>
       stats_type_string_map;
-  std::atomic<uint64_t> stats_[INTERNAL_STATS_ENUM_MAX];
+  std::array<std::atomic<uint64_t>, INTERNAL_STATS_ENUM_MAX> stats_;
+  std::array<InternalOpStats, INTERNAL_OP_ENUM_MAX> internal_op_stats_;
 };
 
 class TitanStats {
  public:
   TitanStats(Statistics* stats) : stats_(stats) {}
+
+  // TODO: Initialize corresponding internal stats struct for Column families
+  // created after DB open.
   Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options,
                     uint32_t default_cf) {
     for (auto& opts : cf_options) {
@@ -74,7 +120,9 @@ class TitanStats {
     default_cf_ = default_cf;
     return Status::OK();
   }
+
   Statistics* statistics() { return stats_; }
+
   TitanInternalStats* internal_stats(uint32_t cf_id) {
     auto p = internal_stats_.find(cf_id);
     if (p == internal_stats_.end()) {
@@ -149,6 +197,23 @@ inline void SubStats(TitanStats* stats, uint32_t cf_id,
       p->SubStats(type, value);
     }
   }
+}
+
+inline void ResetStats(TitanInternalStats::InternalOpStats* stats,
+                       TitanInternalStats::InternalOpStatsType type) {
+  (*stats)[type].store(0, std::memory_order_relaxed);
+}
+
+inline void AddStats(TitanInternalStats::InternalOpStats* stats,
+                     TitanInternalStats::InternalOpStatsType type,
+                     uint64_t value = 1) {
+  (*stats)[type].fetch_add(value, std::memory_order_relaxed);
+}
+
+inline void SubStats(TitanInternalStats::InternalOpStats* stats,
+                     TitanInternalStats::InternalOpStatsType type,
+                     uint64_t value = 1) {
+  (*stats)[type].fetch_sub(value, std::memory_order_relaxed);
 }
 
 }  // namespace titandb
