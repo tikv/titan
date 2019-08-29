@@ -15,8 +15,6 @@ namespace titandb {
 
 enum class InternalOpStatsType : int {
   COUNT = 0,
-  TOTAL_SEC,
-  TOTAL_CPU_SEC,
   BYTES_READ,
   BYTES_WRITTEN,
   IO_BYTES_READ,

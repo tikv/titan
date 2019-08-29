@@ -112,7 +112,10 @@ BlobGCJob::~BlobGCJob() {
   RecordTick(stats_, BLOB_DB_GC_NUM_FILES, metrics_.blob_db_gc_num_files);
 }
 
-Status BlobGCJob::Prepare() { return Status::OK(); }
+Status BlobGCJob::Prepare() {
+  SavePrevIOBytes(&prev_bytes_read_, &prev_bytes_written_);
+  return Status::OK();
+}
 
 Status BlobGCJob::Run() {
   Status s = SampleCandidateFiles();
@@ -331,8 +334,7 @@ Status BlobGCJob::DoRunGC() {
     blob_record.value = gc_iter->value();
     // count written bytes for new blob record,
     // blob index's size is counted in `RewriteValidKeyToLSM`
-    metrics_.blob_db_bytes_written +=
-        blob_record.key.size() + blob_record.value.size();
+    metrics_.blob_db_bytes_written += blob_record.size();
 
     BlobIndex new_blob_index;
     new_blob_index.file_number = blob_file_handle->GetNumber();
@@ -453,6 +455,10 @@ Status BlobGCJob::Finish() {
 
   if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
     s = DeleteInputBlobFiles();
+  }
+
+  if (s.ok()) {
+    UpdateInternalOpStats();
   }
 
   return s;
@@ -581,6 +587,36 @@ Status BlobGCJob::DeleteInputBlobFiles() {
 
 bool BlobGCJob::IsShutingDown() {
   return (shuting_down_ && shuting_down_->load(std::memory_order_acquire));
+}
+
+void BlobGCJob::UpdateInternalOpStats() {
+  if (stats_ == nullptr) {
+    return;
+  }
+  UpdateIOBytes(prev_bytes_read_, prev_bytes_written_, &io_bytes_read_,
+                &io_bytes_written_);
+  uint32_t cf_id = blob_gc_->column_family_handle()->GetID();
+  TitanInternalStats* internal_stats = stats_->internal_stats(cf_id);
+  if (internal_stats == nullptr) {
+    return;
+  }
+  InternalOpType op_type = InternalOpType::GC;
+  InternalOpStats* internal_op_stats =
+      internal_stats->GetInternalOpStatsForType(InternalOpType::GC);
+  assert(internal_op_stats != nullptr);
+  AddStats(internal_op_stats, InternalOpStatsType::COUNT);
+  AddStats(internal_op_stats, InternalOpStatsType::BYTES_READ,
+           metrics_.blob_db_bytes_read);
+  AddStats(internal_op_stats, InternalOpStatsType::BYTES_WRITTEN,
+           metrics_.blob_db_bytes_written);
+  AddStats(internal_op_stats, InternalOpStatsType::IO_BYTES_READ,
+           io_bytes_read_);
+  AddStats(internal_op_stats, InternalOpStatsType::IO_BYTES_WRITTEN,
+           io_bytes_written_);
+  AddStats(internal_op_stats, InternalOpStatsType::INPUT_FILE_NUM,
+           metrics_.blob_db_gc_num_files);
+  AddStats(internal_op_stats, InternalOpStatsType::INPUT_FILE_NUM,
+           metrics_.blob_db_gc_num_new_files);
 }
 
 }  // namespace titandb
