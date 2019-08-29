@@ -6,7 +6,9 @@
 
 #include <inttypes.h>
 
+#include "logging/log_buffer.h"
 #include "port/port.h"
+#include "util/autovector.h"
 
 #include "base_db_listener.h"
 #include "blob_file_builder.h"
@@ -1088,7 +1090,28 @@ Status TitanDBImpl::SetBGError(const Status& s) {
   return bg_err;
 }
 
-void TitanDBImpl::DumpStats() {}
+void TitanDBImpl::DumpStats() {
+  if (stats_ == nullptr) {
+    return;
+  }
+  LogBuffer log_buffer(InfoLogLevel::HEADER_LEVEL, db_options_.info_log.get());
+  {
+    MutexLock l(&mutex_);
+    for (auto& cf : cf_info_) {
+      TitanInternalStats* internal_stats = stats_->internal_stats(cf.first);
+      if (internal_stats == nullptr) {
+        ROCKS_LOG_WARN(db_options_.info_log,
+                       "Column family [%s] missing internal stats.",
+                       cf.second.name.c_str());
+        continue;
+      }
+      LogToBuffer(&log_buffer, "Titan internal stats for column family [%s]:",
+                  cf.second.name.c_str());
+      internal_stats->DumpAndResetInternalOpStats(&log_buffer);
+    }
+  }
+  log_buffer.FlushBufferToLog();
+}
 
 }  // namespace titandb
 }  // namespace rocksdb

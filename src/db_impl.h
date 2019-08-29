@@ -1,11 +1,13 @@
 #pragma once
 
-#include "blob_file_manager.h"
 #include "db/db_impl/db_impl.h"
 #include "rocksdb/statistics.h"
+#include "util/repeatable_thread.h"
+
+#include "blob_file_manager.h"
 #include "table_factory.h"
 #include "titan/db.h"
-#include "util/repeatable_thread.h"
+#include "titan_stats.h"
 #include "version_set.h"
 
 namespace rocksdb {

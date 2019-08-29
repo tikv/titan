@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "logging/log_buffer.h"
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
 
@@ -106,9 +107,14 @@ class TitanInternalStats {
     return &internal_op_stats_[static_cast<int>(type)];
   }
 
+  void DumpAndResetInternalOpStats(LogBuffer* log_buffer);
+
  private:
   static const std::unordered_map<std::string, TitanInternalStats::StatsType>
       stats_type_string_map;
+  static const std::array<
+      std::string, static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
+      internal_op_names;
   std::array<std::atomic<uint64_t>, INTERNAL_STATS_ENUM_MAX> stats_;
   std::array<InternalOpStats,
              static_cast<size_t>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
@@ -140,6 +146,8 @@ class TitanStats {
       return p->second.get();
     }
   }
+
+  void DumpInternalOpStats(uint32_t cf_id, const std::string& cf_name);
 
  private:
   Statistics* stats_ = nullptr;
@@ -208,10 +216,13 @@ inline void SubStats(TitanStats* stats, uint32_t cf_id,
   }
 }
 
-inline void ResetStats(InternalOpStats* stats, InternalOpStatsType type) {
+inline uint64_t GetAndResetStats(InternalOpStats* stats,
+                                 InternalOpStatsType type) {
   if (stats != nullptr) {
-    (*stats)[static_cast<int>(type)].store(0, std::memory_order_relaxed);
+    return (*stats)[static_cast<int>(type)].exchange(0,
+                                                     std::memory_order_relaxed);
   }
+  return 0;
 }
 
 inline void AddStats(InternalOpStats* stats, InternalOpStatsType type,
