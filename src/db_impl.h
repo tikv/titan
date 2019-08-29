@@ -204,6 +204,8 @@ class TitanDBImpl : public TitanDB {
 
   bool HasBGError() { return has_bg_error_.load(); }
 
+  void DumpStats();
+
   FileLock* lock_{nullptr};
   // The lock sequence must be Titan.mutex_.Lock() -> Base DB mutex_.Lock()
   // while the unlock sequence must be Base DB mutex.Unlock() ->
@@ -233,6 +235,9 @@ class TitanDBImpl : public TitanDB {
 
   // handle for purging obsolete blob files at fixed intervals
   std::unique_ptr<RepeatableThread> thread_purge_obsolete_;
+
+  // handle for dump internal stats at fixed intervals.
+  std::unique_ptr<RepeatableThread> thread_dump_stats_;
 
   std::unique_ptr<VersionSet> vset_;
   std::set<uint64_t> pending_outputs_;

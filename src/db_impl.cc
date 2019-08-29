@@ -141,10 +141,16 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
 TitanDBImpl::~TitanDBImpl() { Close(); }
 
 void TitanDBImpl::StartBackgroundTasks() {
-  if (!thread_purge_obsolete_) {
+  if (thread_purge_obsolete_ == nullptr) {
     thread_purge_obsolete_.reset(new rocksdb::RepeatableThread(
         [this]() { TitanDBImpl::PurgeObsoleteFiles(); }, "titanbg", env_,
-        db_options_.purge_obsolete_files_period * 1000 * 1000));
+        db_options_.purge_obsolete_files_period_sec * 1000 * 1000));
+  }
+  if (thread_dump_stats_ == nullptr &&
+      db_options_.titan_stats_dump_period_sec > 0) {
+    thread_dump_stats_.reset(new rocksdb::RepeatableThread(
+        [this]() { TitanDBImpl::DumpStats(); }, "titanst", env_,
+        db_options_.titan_stats_dump_period_sec * 1000 * 1000));
   }
 }
 
@@ -1081,6 +1087,8 @@ Status TitanDBImpl::SetBGError(const Status& s) {
   }
   return bg_err;
 }
+
+void TitanDBImpl::DumpStats() {}
 
 }  // namespace titandb
 }  // namespace rocksdb
