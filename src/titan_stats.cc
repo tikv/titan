@@ -50,14 +50,15 @@ const std::array<std::string, static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_
 void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
   constexpr double GB = 1.0 * 1024 * 1024 * 1024;
   LogToBuffer(log_buffer,
-              "OP         COUNT  READ(GB)  WRITE(GB) IO_READ(GB) IO_WRITE(GB)  "
-              "FILE_IN FILE_OUT");
+              "OP           COUNT READ(GB)  WRITE(GB) IO_READ(GB) IO_WRITE(GB) "
+              " FILE_IN FILE_OUT");
   LogToBuffer(log_buffer,
-              "--------------------------------------------------------------");
+              "----------------------------------------------------------------"
+              "-----------------");
   for (int op = 0; op < static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX);
        op++) {
     LogToBuffer(
-        log_buffer, "%s %5d %8.1f %8.1f  %8.1f   %8.1f %8d %8d",
+        log_buffer, "%s %5d %10.1f %10.1f  %10.1f   %10.1f %8d %8d",
         internal_op_names[op].c_str(),
         GetAndResetStats(&internal_op_stats_[op], InternalOpStatsType::COUNT),
         GetAndResetStats(&internal_op_stats_[op],
