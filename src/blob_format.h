@@ -27,6 +27,8 @@ struct BlobRecord {
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
 
+  size_t size() const { return key.size() + value.size(); }
+
   friend bool operator==(const BlobRecord& lhs, const BlobRecord& rhs);
 };
 

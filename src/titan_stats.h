@@ -1,15 +1,42 @@
 #pragma once
 
-#include "rocksdb/statistics.h"
-#include "titan/options.h"
-
 #include <atomic>
 #include <map>
 #include <string>
 #include <unordered_map>
 
+#include "rocksdb/iostats_context.h"
+#include "rocksdb/statistics.h"
+
+#include "titan/options.h"
+
 namespace rocksdb {
 namespace titandb {
+
+enum class InternalOpStatsType : int {
+  COUNT = 0,
+  TOTAL_SEC,
+  TOTAL_CPU_SEC,
+  BYTES_READ,
+  BYTES_WRITTEN,
+  IO_BYTES_READ,
+  IO_BYTES_WRITTEN,
+  INPUT_FILE_NUM,
+  OUTPUT_FILE_NUM,
+  INTERNAL_OP_STATS_ENUM_MAX,
+};
+
+enum class InternalOpType : int {
+  FLUSH = 0,
+  COMPACTION,
+  GC,
+  INTERNAL_OP_ENUM_MAX,
+};
+
+using InternalOpStats =
+    std::array<std::atomic<uint64_t>,
+               static_cast<size_t>(
+                   InternalOpStatsType::INTERNAL_OP_STATS_ENUM_MAX)>;
 
 // Titan internal stats does NOT optimize race
 // condition by making thread local copies of
@@ -25,39 +52,21 @@ class TitanInternalStats {
     INTERNAL_STATS_ENUM_MAX,
   };
 
-  enum InternalOpStatsType {
-    COUNT = 0,
-    TOTAL_SEC,
-    TOTAL_CPU_SEC,
-    READ_BYTES,
-    WRITE_BYTES,
-    DISCARDED_BYTES,
-    IO_READ_BYTES,
-    IO_WRITE_BYTES,
-    READ_FILES_NUM,
-    WRITE_FILES_NUM,
-    INTERNAL_OP_STATS_ENUM_MAX,
-  };
-
-  enum InternalOpType {
-    FLUSH = 0,
-    COMPACTION,
-    GC,
-    INTERNAL_OP_ENUM_MAX,
-  };
-
-  using InternalOpStats =
-      std::array<std::atomic<uint64_t>, INTERNAL_OP_STATS_ENUM_MAX>;
-
   TitanInternalStats() { Clear(); }
 
   void Clear() {
     for (int stat = 0; stat < INTERNAL_STATS_ENUM_MAX; stat++) {
       stats_[stat].store(0, std::memory_order_relaxed);
     }
-    for (int op = 0; op < INTERNAL_OP_ENUM_MAX; op++) {
-      assert(internal_op_stats_[op].size() == INTERNAL_OP_STATS_ENUM_MAX);
-      for (int stat = 0; stat < INTERNAL_OP_STATS_ENUM_MAX; stat++) {
+    for (int op = 0;
+         op < static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX); op++) {
+      assert(
+          internal_op_stats_[op].size() ==
+          static_cast<size_t>(InternalOpStatsType::INTERNAL_OP_STATS_ENUM_MAX));
+      for (int stat = 0;
+           stat <
+           static_cast<int>(InternalOpStatsType::INTERNAL_OP_STATS_ENUM_MAX);
+           stat++) {
         internal_op_stats_[op][stat].store(0, std::memory_order_relaxed);
       }
     }
@@ -96,14 +105,16 @@ class TitanInternalStats {
   }
 
   InternalOpStats* GetInternalOpStatsForType(InternalOpType type) {
-    return &internal_op_stats_[type];
+    return &internal_op_stats_[static_cast<int>(type)];
   }
 
  private:
   static const std::unordered_map<std::string, TitanInternalStats::StatsType>
       stats_type_string_map;
   std::array<std::atomic<uint64_t>, INTERNAL_STATS_ENUM_MAX> stats_;
-  std::array<InternalOpStats, INTERNAL_OP_ENUM_MAX> internal_op_stats_;
+  std::array<InternalOpStats,
+             static_cast<size_t>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
+      internal_op_stats_;
 };
 
 class TitanStats {
@@ -199,21 +210,46 @@ inline void SubStats(TitanStats* stats, uint32_t cf_id,
   }
 }
 
-inline void ResetStats(TitanInternalStats::InternalOpStats* stats,
-                       TitanInternalStats::InternalOpStatsType type) {
-  (*stats)[type].store(0, std::memory_order_relaxed);
+inline void ResetStats(InternalOpStats* stats, InternalOpStatsType type) {
+  if (stats != nullptr) {
+    (*stats)[static_cast<int>(type)].store(0, std::memory_order_relaxed);
+  }
 }
 
-inline void AddStats(TitanInternalStats::InternalOpStats* stats,
-                     TitanInternalStats::InternalOpStatsType type,
+inline void AddStats(InternalOpStats* stats, InternalOpStatsType type,
                      uint64_t value = 1) {
-  (*stats)[type].fetch_add(value, std::memory_order_relaxed);
+  if (stats != nullptr) {
+    (*stats)[static_cast<int>(type)].fetch_add(value,
+                                               std::memory_order_relaxed);
+  }
 }
 
-inline void SubStats(TitanInternalStats::InternalOpStats* stats,
-                     TitanInternalStats::InternalOpStatsType type,
+inline void SubStats(InternalOpStats* stats, InternalOpStatsType type,
                      uint64_t value = 1) {
-  (*stats)[type].fetch_sub(value, std::memory_order_relaxed);
+  if (stats != nullptr) {
+    (*stats)[static_cast<int>(type)].fetch_sub(value,
+                                               std::memory_order_relaxed);
+  }
+}
+
+// IOStatsContext helper
+
+inline void SavePrevIOBytes(uint64_t* prev_bytes_read,
+                            uint64_t* prev_bytes_written) {
+  IOStatsContext* io_stats = get_iostats_context();
+  if (io_stats != nullptr) {
+    *prev_bytes_read = io_stats->bytes_read;
+    *prev_bytes_written = io_stats->bytes_written;
+  }
+}
+
+inline void UpdateIOBytes(uint64_t prev_bytes_read, uint64_t prev_bytes_written,
+                          uint64_t* bytes_read, uint64_t* bytes_written) {
+  IOStatsContext* io_stats = get_iostats_context();
+  if (io_stats != nullptr) {
+    *bytes_read += io_stats->bytes_read - prev_bytes_read;
+    *bytes_written += io_stats->bytes_written - prev_bytes_written;
+  }
 }
 
 }  // namespace titandb
