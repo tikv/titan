@@ -40,11 +40,12 @@ const std::unordered_map<std::string, TitanInternalStats::StatsType>
          TitanInternalStats::OBSOLETE_BLOB_FILE_SIZE},
 };
 
-const std::array<std::string, static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
+const std::array<std::string,
+                 static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
     TitanInternalStats::internal_op_names = {
-  "Flush     ",
-  "Compaction",
-  "GC        ",
+        "Flush     ",
+        "Compaction",
+        "GC        ",
 };
 
 void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
