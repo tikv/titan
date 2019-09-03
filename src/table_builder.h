@@ -16,8 +16,11 @@ class TitanTableBuilder : public TableBuilder {
                     const TitanCFOptions& cf_options,
                     std::unique_ptr<TableBuilder> base_builder,
                     std::shared_ptr<BlobFileManager> blob_manager,
-                    std::weak_ptr<BlobStorage> blob_storage, TitanStats* stats)
+                    std::weak_ptr<BlobStorage> blob_storage, TitanStats* stats,
+                    int num_levels, int target_level)
       : cf_id_(cf_id),
+        merge_level_(std::max(num_levels - 1, 2)),
+        target_level_(target_level),
         db_options_(db_options),
         cf_options_(cf_options),
         base_builder_(std::move(base_builder)),
@@ -46,8 +49,15 @@ class TitanTableBuilder : public TableBuilder {
 
   void AddBlob(const Slice& key, const Slice& value, std::string* index_value);
 
+  bool ShouldMerge(const std::shared_ptr<BlobFileMeta>& file);
+
+  void FinishBlob();
+
   Status status_;
   uint32_t cf_id_;
+  std::unique_ptr<ColumnFamilyHandle> cf_handle_;
+  int merge_level_;
+  int target_level_;
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
   std::unique_ptr<TableBuilder> base_builder_;

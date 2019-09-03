@@ -23,13 +23,19 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
   TitanCFOptions cf_options = cf_options_;
   cf_options.blob_run_mode = blob_run_mode_.load();
   std::weak_ptr<BlobStorage> blob_storage;
+  int num_levels =
+      db_impl_ == nullptr
+          ? INT_MAX
+          : db_impl_->NumberLevels(
+                db_impl_->GetColumnFamilyHandleUnlocked(column_family_id)
+                    .get());
   {
     MutexLock l(db_mutex_);
     blob_storage = vset_->GetBlobStorage(column_family_id);
   }
   return new TitanTableBuilder(column_family_id, db_options_, cf_options,
                                std::move(base_builder), blob_manager_,
-                               blob_storage, stats_);
+                               blob_storage, stats_, num_levels, options.level);
 }
 
 std::string TitanTableFactory::GetPrintableTableOptions() const {

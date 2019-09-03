@@ -211,8 +211,8 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
                                   MutableTitanCFOptions(descs[i].options));
       base_table_factory_[cf_id] = base_table_factory;
       titan_table_factory_[cf_id] = std::make_shared<TitanTableFactory>(
-          db_options_, descs[i].options, blob_manager_, &mutex_, vset_.get(),
-          stats_.get());
+          db_impl_, db_options_, descs[i].options, blob_manager_, &mutex_,
+          vset_.get(), stats_.get());
       base_descs[i].options.table_factory = titan_table_factory_[cf_id];
       // Add TableProperties for collecting statistics GC
       base_descs[i].options.table_properties_collector_factories.emplace_back(
@@ -323,8 +323,8 @@ Status TitanDBImpl::CreateColumnFamilies(
     // Replaces the provided table factory with TitanTableFactory.
     base_table_factory.emplace_back(options.table_factory);
     titan_table_factory.emplace_back(std::make_shared<TitanTableFactory>(
-        db_options_, desc.options, blob_manager_, &mutex_, vset_.get(),
-        stats_.get()));
+        db_impl_, db_options_, desc.options, blob_manager_, &mutex_,
+        vset_.get(), stats_.get()));
     options.table_factory = titan_table_factory.back();
     base_descs.emplace_back(desc.name, options);
   }

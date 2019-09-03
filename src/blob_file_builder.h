@@ -54,6 +54,9 @@ class BlobFileBuilder {
   // REQUIRES: Finish(), Abandon() have not been called.
   void Abandon();
 
+  // Number of calls to Add() so far.
+  uint64_t NumEntries();
+
  private:
   bool ok() const { return status().ok(); }
 
@@ -62,6 +65,8 @@ class BlobFileBuilder {
 
   Status status_;
   BlobEncoder encoder_;
+
+  uint64_t num_entries_{0};
 };
 
 }  // namespace titandb

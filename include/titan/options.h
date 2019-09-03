@@ -118,6 +118,12 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: kNormal
   TitanBlobRunMode blob_run_mode{TitanBlobRunMode::kNormal};
 
+  // If set true, values will be merged to a new blob file while their
+  // corresponding keys are compacted to last two level in LSM-Tree.
+  //
+  // Default: false
+  bool level_merge{false};
+
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}

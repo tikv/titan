@@ -3,6 +3,7 @@
 #include <atomic>
 
 #include "blob_file_manager.h"
+#include "db/db_impl/db_impl.h"
 #include "rocksdb/table.h"
 #include "titan/options.h"
 #include "titan_stats.h"
@@ -13,11 +14,12 @@ namespace titandb {
 
 class TitanTableFactory : public TableFactory {
  public:
-  TitanTableFactory(const TitanDBOptions& db_options,
+  TitanTableFactory(DBImpl*& db_impl, const TitanDBOptions& db_options,
                     const TitanCFOptions& cf_options,
                     std::shared_ptr<BlobFileManager> blob_manager,
                     port::Mutex* db_mutex, VersionSet* vset, TitanStats* stats)
-      : db_options_(db_options),
+      : db_impl_(db_impl),
+        db_options_(db_options),
         cf_options_(cf_options),
         blob_run_mode_(cf_options.blob_run_mode),
         base_factory_(cf_options.table_factory),
@@ -61,6 +63,7 @@ class TitanTableFactory : public TableFactory {
   }
 
  private:
+  DBImpl*& db_impl_;
   const TitanDBOptions db_options_;
   const TitanCFOptions cf_options_;
   std::atomic<TitanBlobRunMode> blob_run_mode_;

@@ -83,7 +83,7 @@ class TableBuilderTest : public testing::Test {
     cf_options_.min_blob_size = kMinBlobSize;
     vset_.reset(new VersionSet(db_options_, nullptr));
     blob_manager_.reset(new FileManager(db_options_));
-    table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+    table_factory_.reset(new TitanTableFactory(db_, db_options_, cf_options_,
                                                blob_manager_, &mutex_,
                                                vset_.get(), nullptr));
   }
@@ -158,6 +158,7 @@ class TableBuilderTest : public testing::Test {
 
   port::Mutex mutex_;
 
+  DBImpl* db_{nullptr};
   Env* env_{Env::Default()};
   EnvOptions env_options_;
   Options options_;

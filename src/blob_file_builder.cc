@@ -25,6 +25,7 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
   status_ = file_->Append(encoder_.GetHeader());
   if (ok()) {
     status_ = file_->Append(encoder_.GetRecord());
+    num_entries_++;
   }
 }
 
@@ -44,6 +45,8 @@ Status BlobFileBuilder::Finish() {
 }
 
 void BlobFileBuilder::Abandon() {}
+
+uint64_t BlobFileBuilder::NumEntries() { return num_entries_; }
 
 }  // namespace titandb
 }  // namespace rocksdb
