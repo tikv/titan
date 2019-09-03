@@ -615,7 +615,7 @@ void BlobGCJob::UpdateInternalOpStats() {
            io_bytes_written_);
   AddStats(internal_op_stats, InternalOpStatsType::INPUT_FILE_NUM,
            metrics_.blob_db_gc_num_files);
-  AddStats(internal_op_stats, InternalOpStatsType::INPUT_FILE_NUM,
+  AddStats(internal_op_stats, InternalOpStatsType::OUTPUT_FILE_NUM,
            metrics_.blob_db_gc_num_new_files);
 }
 
