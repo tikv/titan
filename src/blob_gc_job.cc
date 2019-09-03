@@ -600,7 +600,6 @@ void BlobGCJob::UpdateInternalOpStats() {
   if (internal_stats == nullptr) {
     return;
   }
-  InternalOpType op_type = InternalOpType::GC;
   InternalOpStats* internal_op_stats =
       internal_stats->GetInternalOpStatsForType(InternalOpType::GC);
   assert(internal_op_stats != nullptr);

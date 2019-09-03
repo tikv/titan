@@ -156,10 +156,22 @@ void TitanDBImpl::StartBackgroundTasks() {
   }
 }
 
+Status TitanDBImpl::ValidateOptions() const {
+  if (db_options_.purge_obsolete_files_period_sec == 0) {
+    return Status::InvalidArgument(
+        "Require non-zero purge_obsolete_files_period_sec");
+  }
+  return Status::OK();
+}
+
 Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
                          std::vector<ColumnFamilyHandle*>* handles) {
+  Status s = ValidateOptions();
+  if (!s.ok()) {
+    return s;
+  }
   // Sets up directories for base DB and Titan.
-  Status s = env_->CreateDirIfMissing(dbname_);
+  s = env_->CreateDirIfMissing(dbname_);
   if (!s.ok()) return s;
   if (!db_options_.info_log) {
     s = CreateLoggerFromOptions(dbname_, db_options_, &db_options_.info_log);
