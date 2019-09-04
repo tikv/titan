@@ -260,12 +260,12 @@ TEST_F(VersionTest, ObsoleteFiles) {
   ASSERT_EQ(of.size(), 1);
   CheckColumnFamiliesSize(10);
 
-  ASSERT_OK(vset_->DestroyColumnFamily(1));
+  ASSERT_OK(vset_->MaybeDestroyColumnFamily(1));
   vset_->GetObsoleteFiles(&of, kMaxSequenceNumber);
   ASSERT_EQ(of.size(), 4);
   CheckColumnFamiliesSize(9);
 
-  ASSERT_OK(vset_->DestroyColumnFamily(2));
+  ASSERT_OK(vset_->MaybeDestroyColumnFamily(2));
   CheckColumnFamiliesSize(8);
 }
 

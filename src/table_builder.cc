@@ -18,6 +18,10 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     return;
   }
 
+  uint64_t prev_bytes_read = 0;
+  uint64_t prev_bytes_written = 0;
+  SavePrevIOBytes(&prev_bytes_read, &prev_bytes_written);
+
   if (ikey.type == kTypeBlobIndex &&
       cf_options_.blob_run_mode == TitanBlobRunMode::kFallback) {
     // we ingest value from blob file
@@ -33,14 +37,16 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
 
     auto storage = blob_storage_.lock();
     assert(storage != nullptr);
-
     ReadOptions options;  // dummy option
     Status get_status = storage->Get(options, index, &record, &buffer);
+    UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
+                  &io_bytes_written_);
     if (get_status.ok()) {
       ikey.type = kTypeValue;
       std::string index_key;
       AppendInternalKey(&index_key, ikey);
       base_builder_->Add(index_key, record.value);
+      bytes_read_ += record.size();
     } else {
       // Get blob value can fail if corresponding blob file has been GC-ed
       // deleted. In this case we write the blob index as is to compaction
@@ -54,6 +60,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     // we write to blob file and insert index
     std::string index_value;
     AddBlob(ikey.user_key, value, &index_value);
+    UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
+                  &io_bytes_written_);
     if (ok()) {
       ikey.type = kTypeBlobIndex;
       std::string index_key;
@@ -85,6 +93,7 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
   MeasureTime(stats_, BLOB_DB_KEY_SIZE, key.size());
   MeasureTime(stats_, BLOB_DB_VALUE_SIZE, value.size());
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE, value.size());
+  bytes_written_ += key.size() + value.size();
 
   BlobIndex index;
   BlobRecord record;
@@ -93,6 +102,7 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
   index.file_number = blob_handle_->GetNumber();
   blob_builder_->Add(record, &index.blob_handle);
   RecordTick(stats_, BLOB_DB_BLOB_FILE_BYTES_WRITTEN, index.blob_handle.size);
+  bytes_written_ += record.size();
   if (ok()) {
     index.EncodeTo(index_value);
   }
@@ -135,6 +145,7 @@ Status TitanTableBuilder::Finish() {
                     "Titan table builder failed on finish: %s",
                     status_.ToString().c_str());
   }
+  UpdateInternalOpStats();
   return status();
 }
 
@@ -164,6 +175,34 @@ bool TitanTableBuilder::NeedCompact() const {
 
 TableProperties TitanTableBuilder::GetTableProperties() const {
   return base_builder_->GetTableProperties();
+}
+
+void TitanTableBuilder::UpdateInternalOpStats() {
+  if (stats_ == nullptr) {
+    return;
+  }
+  TitanInternalStats* internal_stats = stats_->internal_stats(cf_id_);
+  if (internal_stats == nullptr) {
+    return;
+  }
+  InternalOpType op_type = InternalOpType::COMPACTION;
+  if (level_ == 0) {
+    op_type = InternalOpType::FLUSH;
+  }
+  InternalOpStats* internal_op_stats =
+      internal_stats->GetInternalOpStatsForType(op_type);
+  assert(internal_op_stats != nullptr);
+  AddStats(internal_op_stats, InternalOpStatsType::COUNT);
+  AddStats(internal_op_stats, InternalOpStatsType::BYTES_READ, bytes_read_);
+  AddStats(internal_op_stats, InternalOpStatsType::BYTES_WRITTEN,
+           bytes_written_);
+  AddStats(internal_op_stats, InternalOpStatsType::IO_BYTES_READ,
+           io_bytes_read_);
+  AddStats(internal_op_stats, InternalOpStatsType::IO_BYTES_WRITTEN,
+           io_bytes_written_);
+  if (blob_builder_ != nullptr) {
+    AddStats(internal_op_stats, InternalOpStatsType::OUTPUT_FILE_NUM);
+  }
 }
 
 }  // namespace titandb
