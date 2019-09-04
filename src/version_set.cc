@@ -264,7 +264,7 @@ Status VersionSet::DropColumnFamilies(
   return s;
 }
 
-Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
+Status VersionSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
   obsolete_columns_.erase(cf_id);
   auto it = column_families_.find(cf_id);
   if (it != column_families_.end()) {
