@@ -5,6 +5,7 @@
 
 #include "blob_file_manager.h"
 #include "blob_file_reader.h"
+#include "table_builder.h"
 #include "table_factory.h"
 #include "version_set.h"
 
@@ -13,13 +14,15 @@ namespace titandb {
 
 const uint64_t kMinBlobSize = 128;
 const uint64_t kTestFileNumber = 123;
+const uint64_t kTargetBlobFileSize = 4096;
 
 class FileManager : public BlobFileManager {
  public:
-  FileManager(const TitanDBOptions& db_options) : db_options_(db_options) {}
+  FileManager(const TitanDBOptions& db_options, VersionSet* vset)
+      : db_options_(db_options), number_(kTestFileNumber), vset_(vset) {}
 
   Status NewFile(std::unique_ptr<BlobFileHandle>* handle) override {
-    auto number = kTestFileNumber;
+    auto number = number_.fetch_add(1);
     auto name = BlobFileName(db_options_.dirname, number);
     std::unique_ptr<WritableFileWriter> file;
     {
@@ -32,12 +35,15 @@ class FileManager : public BlobFileManager {
     return Status::OK();
   }
 
-  Status FinishFile(uint32_t /*cf_id*/, std::shared_ptr<BlobFileMeta> /*file*/,
+  Status FinishFile(uint32_t /*cf_id*/,
+                    std::shared_ptr<BlobFileMeta> file /*file*/,
                     std::unique_ptr<BlobFileHandle>&& handle) override {
     Status s = handle->GetFile()->Sync(true);
     if (s.ok()) {
       s = handle->GetFile()->Close();
     }
+    auto storage = vset_->GetBlobStorage(0).lock();
+    storage->AddBlobFile(file);
     return s;
   }
 
@@ -69,6 +75,8 @@ class FileManager : public BlobFileManager {
   Env* env_{Env::Default()};
   EnvOptions env_options_;
   TitanDBOptions db_options_;
+  std::atomic<uint64_t> number_{0};
+  VersionSet* vset_;
 };
 
 class TableBuilderTest : public testing::Test {
@@ -82,7 +90,9 @@ class TableBuilderTest : public testing::Test {
     db_options_.dirname = tmpdir_;
     cf_options_.min_blob_size = kMinBlobSize;
     vset_.reset(new VersionSet(db_options_, nullptr));
-    blob_manager_.reset(new FileManager(db_options_));
+    std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
+    vset_->AddColumnFamilies(cfs);
+    blob_manager_.reset(new FileManager(db_options_, vset_.get()));
     table_factory_.reset(new TitanTableFactory(db_, db_options_, cf_options_,
                                                blob_manager_, &mutex_,
                                                vset_.get(), nullptr));
@@ -154,6 +164,13 @@ class TableBuilderTest : public testing::Test {
                                 compression_opts, false /*skip_filters*/,
                                 kDefaultColumnFamilyName, 0 /*level*/);
     result->reset(table_factory_->NewTableBuilder(options, 0, file));
+  }
+
+  void SetBuilderLevel(TitanTableBuilder* builder, int merge_level,
+                       int target_level) {
+    ASSERT_TRUE(builder != nullptr);
+    builder->merge_level_ = merge_level;
+    builder->target_level_ = target_level;
   }
 
   port::Mutex mutex_;
@@ -317,6 +334,107 @@ TEST_F(TableBuilderTest, NumEntries) {
   }
   ASSERT_EQ(n, table_builder->NumEntries());
   ASSERT_OK(table_builder->Finish());
+}
+
+TEST_F(TableBuilderTest, TargeSize) {
+  cf_options_.blob_file_target_size = kTargetBlobFileSize;
+  table_factory_.reset(new TitanTableFactory(db_, db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             vset_.get(), nullptr));
+  std::unique_ptr<WritableFileWriter> base_file;
+  NewBaseFileWriter(&base_file);
+  std::unique_ptr<TableBuilder> table_builder;
+  NewTableBuilder(base_file.get(), &table_builder);
+  const int n = 255;
+  for (unsigned char i = 0; i < n; i++) {
+    std::string key(1, i);
+    InternalKey ikey(key, 1, kTypeValue);
+    std::string value(kMinBlobSize, i);
+    table_builder->Add(ikey.Encode(), value);
+  }
+  ASSERT_OK(table_builder->Finish());
+  uint64_t file_size = 0;
+  ASSERT_OK(env_->GetFileSize(blob_name_, &file_size));
+  ASSERT_TRUE(file_size < kTargetBlobFileSize + 1 + kMinBlobSize);
+  ASSERT_TRUE(file_size > kTargetBlobFileSize - 1 - kMinBlobSize);
+}
+
+TEST_F(TableBuilderTest, LevelMerge) {
+  cf_options_.blob_file_target_size = kTargetBlobFileSize;
+  cf_options_.level_merge = true;
+  table_factory_.reset(new TitanTableFactory(db_, db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             vset_.get(), nullptr));
+  std::unique_ptr<WritableFileWriter> base_file;
+  NewBaseFileWriter(&base_file);
+  std::unique_ptr<TableBuilder> table_builder;
+  NewTableBuilder(base_file.get(), &table_builder);
+
+  // generate a level 0 sst with blob file
+  const int n = 255;
+  for (unsigned char i = 0; i < n; i++) {
+    std::string key(1, i);
+    InternalKey ikey(key, 1, kTypeValue);
+    std::string value(kMinBlobSize, i);
+    table_builder->Add(ikey.Encode(), value);
+  }
+  ASSERT_OK(table_builder->Finish());
+  ASSERT_OK(base_file->Sync(true));
+  ASSERT_OK(base_file->Close());
+
+  std::unique_ptr<TableReader> base_reader;
+  NewTableReader(&base_reader);
+
+  std::string first_base_name = base_name_;
+  base_name_ = base_name_ + "second";
+  NewBaseFileWriter(&base_file);
+  NewTableBuilder(base_file.get(), &table_builder);
+  SetBuilderLevel(reinterpret_cast<TitanTableBuilder*>(table_builder.get()),
+                  1 /* merge level */, 1 /* target level */);
+
+  ReadOptions ro;
+  std::unique_ptr<InternalIterator> first_iter;
+  first_iter.reset(base_reader->NewIterator(
+      ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
+      false /*skip_filters*/, TableReaderCaller::kUncategorized));
+
+  // compact level0 sst to level1, values will be merge to another blob file
+  first_iter->SeekToFirst();
+  for (unsigned char i = 0; i < n; i++) {
+    ASSERT_TRUE(first_iter->Valid());
+    table_builder->Add(first_iter->key(), first_iter->value());
+    first_iter->Next();
+  }
+  ASSERT_OK(table_builder->Finish());
+  ASSERT_OK(base_file->Sync(true));
+  ASSERT_OK(base_file->Close());
+
+  std::unique_ptr<TableReader> second_base_reader;
+  NewTableReader(&second_base_reader);
+  std::unique_ptr<InternalIterator> second_iter;
+  second_iter.reset(second_base_reader->NewIterator(
+      ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
+      false /*skip_filters*/, TableReaderCaller::kUncategorized));
+
+  // make sure value address has changed after compaction
+  first_iter->SeekToFirst();
+  second_iter->SeekToFirst();
+  for (unsigned char i = 0; i < n; i++) {
+    ASSERT_TRUE(first_iter->Valid());
+    ASSERT_TRUE(second_iter->Valid());
+    ParsedInternalKey first_ikey, second_ikey;
+    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &first_ikey));
+    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &second_ikey));
+    ASSERT_EQ(first_ikey.type, kTypeBlobIndex);
+    ASSERT_EQ(second_ikey.type, kTypeBlobIndex);
+    ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
+    ASSERT_NE(first_iter->value().ToString(), second_iter->value().ToString());
+
+    first_iter->Next();
+    second_iter->Next();
+  }
+
+  env_->DeleteFile(first_base_name);
 }
 
 }  // namespace titandb

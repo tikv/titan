@@ -17,9 +17,9 @@ class TitanTableBuilder : public TableBuilder {
                     std::unique_ptr<TableBuilder> base_builder,
                     std::shared_ptr<BlobFileManager> blob_manager,
                     std::weak_ptr<BlobStorage> blob_storage, TitanStats* stats,
-                    int num_levels, int target_level)
+                    int merge_level, int target_level)
       : cf_id_(cf_id),
-        merge_level_(std::max(num_levels - 1, 2)),
+        merge_level_(merge_level),
         target_level_(target_level),
         db_options_(db_options),
         cf_options_(cf_options),
@@ -52,6 +52,8 @@ class TitanTableBuilder : public TableBuilder {
   bool ShouldMerge(const std::shared_ptr<BlobFileMeta>& file);
 
   void FinishBlob();
+
+  friend class TableBuilderTest;
 
   Status status_;
   uint32_t cf_id_;

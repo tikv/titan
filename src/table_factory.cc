@@ -23,19 +23,25 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
   TitanCFOptions cf_options = cf_options_;
   cf_options.blob_run_mode = blob_run_mode_.load();
   std::weak_ptr<BlobStorage> blob_storage;
-  int num_levels =
-      db_impl_ == nullptr
-          ? INT_MAX
-          : db_impl_->NumberLevels(
-                db_impl_->GetColumnFamilyHandleUnlocked(column_family_id)
-                    .get());
+  // While table factory constructed in titan for first time, db_impl_ is
+  // uninitialized (nullptr), and flush may trigger. Since flush won't merge
+  // blob files, we set merge level to a unreachable value.
+  int num_levels = INT_MAX;
+  if (db_impl_ != nullptr) {
+    InstrumentedMutexLock l(db_impl_->mutex());
+    auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(
+        db_impl_->GetColumnFamilyHandle(column_family_id));
+    auto cfd = cfh->cfd();
+    num_levels = cfd->current()->storage_info()->num_non_empty_levels();
+  }
   {
     MutexLock l(db_mutex_);
     blob_storage = vset_->GetBlobStorage(column_family_id);
   }
-  return new TitanTableBuilder(column_family_id, db_options_, cf_options,
-                               std::move(base_builder), blob_manager_,
-                               blob_storage, stats_, num_levels, options.level);
+  return new TitanTableBuilder(
+      column_family_id, db_options_, cf_options, std::move(base_builder),
+      blob_manager_, blob_storage, stats_,
+      std::max(1, num_levels - 2) /* merge level */, options.level);
 }
 
 std::string TitanTableFactory::GetPrintableTableOptions() const {

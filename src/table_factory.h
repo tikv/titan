@@ -63,7 +63,9 @@ class TitanTableFactory : public TableFactory {
   }
 
  private:
-  DBImpl*& db_impl_;
+  // we use reference here because table factory is constructed before
+  // initialize db_impl_ in titan
+  DBImpl* const& db_impl_;
   const TitanDBOptions db_options_;
   const TitanCFOptions cf_options_;
   std::atomic<TitanBlobRunMode> blob_run_mode_;

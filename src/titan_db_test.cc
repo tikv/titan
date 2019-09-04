@@ -12,7 +12,6 @@
 #include "blob_file_reader.h"
 #include "db_impl.h"
 #include "db_iter.h"
-#include "iostream"
 #include "titan/db.h"
 #include "titan_fault_injection_test_env.h"
 

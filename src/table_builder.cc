@@ -72,7 +72,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     auto storage = blob_storage_.lock();
     assert(storage != nullptr);
     auto blob_file = storage->FindFile(index.file_number).lock();
-    if (blob_file != nullptr && (int)blob_file->file_level() < target_level_) {
+    if (ShouldMerge(blob_file)) {
       BlobRecord record;
       PinnableSlice buffer;
       Status s = storage->Get(ReadOptions(), index, &record, &buffer);
