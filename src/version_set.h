@@ -50,7 +50,7 @@ class VersionSet {
   // Destroy the column family. Only after this is called, the obsolete files
   // of the dropped column family can be physical deleted.
   // REQUIRES: mutex is held
-  Status DestroyColumnFamily(uint32_t cf_id);
+  Status MaybeDestroyColumnFamily(uint32_t cf_id);
 
   // Allocates a new file number.
   uint64_t NewFileNumber() { return next_file_number_.fetch_add(1); }

@@ -1,0 +1,13 @@
+/usr/local/bin/cmake -DCMAKE_BUILD_TYPE=Release -DROCKSDB_DIR=/home/pingcap/wujiayu/rocksdb -G "CodeBlocks - Unix Makefiles" /home/pingcap/wujiayu/remote/titan
+-- Enabling RTTI in Debug builds only (default)
+Unknown option: -C
+usage: git [--version] [--help] [-c name=value]
+           [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path]
+           [-p|--paginate|--no-pager] [--no-replace-objects] [--bare]
+           [--git-dir=<path>] [--work-tree=<path>] [--namespace=<name>]
+           <command> [<args>]
+-- Enabling RTTI in Debug builds only (default)
+-- JNI library is disabled
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/pingcap/wujiayu/remote/titan/cmake-build-release-idc

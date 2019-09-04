@@ -1,0 +1,2 @@
+/usr/bin/ar qc libtestutillib.a  CMakeFiles/testutillib.dir/db/db_test_util.cc.o CMakeFiles/testutillib.dir/monitoring/thread_status_updater_debug.cc.o CMakeFiles/testutillib.dir/table/mock_table.cc.o CMakeFiles/testutillib.dir/test_util/fault_injection_test_env.cc.o CMakeFiles/testutillib.dir/utilities/cassandra/test_utils.cc.o
+/usr/bin/ranlib libtestutillib.a

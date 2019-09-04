@@ -45,6 +45,8 @@ class TitanTableBuilder : public TableBuilder {
   TableProperties GetTableProperties() const override;
 
  private:
+  friend class TableBuilderTest;
+
   bool ok() const { return status().ok(); }
 
   void AddBlob(const Slice& key, const Slice& value, std::string* index_value);
@@ -53,7 +55,7 @@ class TitanTableBuilder : public TableBuilder {
 
   void FinishBlob();
 
-  friend class TableBuilderTest;
+  void UpdateInternalOpStats();
 
   Status status_;
   uint32_t cf_id_;
@@ -67,8 +69,13 @@ class TitanTableBuilder : public TableBuilder {
   std::shared_ptr<BlobFileManager> blob_manager_;
   std::unique_ptr<BlobFileBuilder> blob_builder_;
   std::weak_ptr<BlobStorage> blob_storage_;
-
   TitanStats* stats_;
+
+  // counters
+  uint64_t bytes_read_ = 0;
+  uint64_t bytes_written_ = 0;
+  uint64_t io_bytes_read_ = 0;
+  uint64_t io_bytes_written_ = 0;
 };
 
 }  // namespace titandb

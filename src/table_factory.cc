@@ -34,10 +34,12 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
     auto cfd = cfh->cfd();
     num_levels = cfd->current()->storage_info()->num_non_empty_levels();
   }
+
   {
     MutexLock l(db_mutex_);
     blob_storage = vset_->GetBlobStorage(column_family_id);
   }
+
   return new TitanTableBuilder(
       column_family_id, db_options_, cf_options, std::move(base_builder),
       blob_manager_, blob_storage, stats_,
