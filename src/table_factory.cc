@@ -23,8 +23,8 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
   TitanCFOptions cf_options = cf_options_;
   cf_options.blob_run_mode = blob_run_mode_.load();
   std::weak_ptr<BlobStorage> blob_storage;
-  // While table factory constructed in titan for first time, db_impl_ is
-  // uninitialized (nullptr), and flush may trigger. Since flush won't merge
+  // While table factory constructed in Titan for the first time, db_impl_ is
+  // uninitialized (nullptr), and only flush may triggered before initialization. Since flush won't merge
   // blob files, we set merge level to a unreachable value.
   int num_levels = INT_MAX;
   if (db_impl_ != nullptr) {

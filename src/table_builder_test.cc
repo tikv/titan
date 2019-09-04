@@ -428,7 +428,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
     ASSERT_EQ(first_ikey.type, kTypeBlobIndex);
     ASSERT_EQ(second_ikey.type, kTypeBlobIndex);
     ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
-    ASSERT_NE(first_iter->value().ToString(), second_iter->value().ToString());
+    ASSERT_NE(first_iter->value(), second_iter->value());
 
     first_iter->Next();
     second_iter->Next();
