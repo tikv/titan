@@ -295,6 +295,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
 
 Status TitanDBImpl::RecoverGCStats(const std::vector<uint32_t>& column_families) {
   auto persist_cf_handle = db_impl_->PersistentStatsColumnFamily();
+  Status s;
   for (auto cf_id : column_families){
     std::map<uint64_t, std::weak_ptr<BlobFileMeta>> files;
     auto blob_storage = vset_->GetBlobStorage(cf_id).lock();
@@ -307,15 +308,15 @@ Status TitanDBImpl::RecoverGCStats(const std::vector<uint32_t>& column_families)
       file_number_str[15] = 0;
       ReadOptions ro;
       PinnableSlice stats_value;
-      Status s = db_->Get(ro, persist_cf_handle, file_number_str, &stats_value);
+      s = db_->Get(ro, persist_cf_handle, file_number_str, &stats_value);
       if (!s.ok()){
         ROCKS_LOG_ERROR(db_options_.info_log, "GC stats not found for file %" PRIu64 ".", file_number);
       }
       uint64_t discardable_size = std::stoull(std::string(stats_value.data(), stats_value.size()));
       file.second.lock()->AddDiscardableSize(discardable_size);
     }
-
   }
+  return s;
 
 }
 
