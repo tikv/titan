@@ -161,6 +161,14 @@ Status TitanDBImpl::ValidateOptions() const {
     return Status::InvalidArgument(
         "Require non-zero purge_obsolete_files_period_sec");
   }
+  for (auto& cf_info : cf_info_) {
+    const auto& im_op = cf_info.second.immutable_cf_options;
+    if (im_op.level_merge && !im_op.level_compaction_dynamic_level_bytes) {
+      return Status::InvalidArgument(
+          "Require enabling level_compaction_dynamic_level_bytes for "
+          "level_merge");
+    }
+  }
   return Status::OK();
 }
 
@@ -227,8 +235,8 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       auto& base_table_factory = base_descs[i].options.table_factory;
       assert(base_table_factory != nullptr);
       auto titan_table_factory = std::make_shared<TitanTableFactory>(
-          db_impl_, db_options_, descs[i].options, blob_manager_, &mutex_,
-          vset_.get(), stats_.get());
+          db_options_, descs[i].options, blob_manager_, &mutex_, vset_.get(),
+          stats_.get());
       cf_info_.emplace(cf_id,
                        TitanColumnFamilyInfo(
                            {cf_name, ImmutableTitanCFOptions(descs[i].options),
@@ -344,8 +352,8 @@ Status TitanDBImpl::CreateColumnFamilies(
     // Replaces the provided table factory with TitanTableFactory.
     base_table_factory.emplace_back(options.table_factory);
     titan_table_factory.emplace_back(std::make_shared<TitanTableFactory>(
-        db_impl_, db_options_, desc.options, blob_manager_, &mutex_,
-        vset_.get(), stats_.get()));
+        db_options_, desc.options, blob_manager_, &mutex_, vset_.get(),
+        stats_.get()));
     options.table_factory = titan_table_factory.back();
     base_descs.emplace_back(desc.name, options);
   }

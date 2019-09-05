@@ -152,8 +152,7 @@ void TitanTableBuilder::FinishBlob() {
           blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(),
           blob_builder_->NumEntries(), target_level_);
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
-      status_ =
-          blob_manager_->FinishFile(cf_id_, file, std::move(blob_handle_));
+      finished_blobs_.push_back({file, std::move(blob_handle_)});
       blob_builder_.reset();
     } else {
       ROCKS_LOG_WARN(
@@ -179,6 +178,7 @@ Status TitanTableBuilder::status() const {
 Status TitanTableBuilder::Finish() {
   base_builder_->Finish();
   FinishBlob();
+  status_ = blob_manager_->BatchFinishFiles(cf_id_, finished_blobs_);
   if (!status_.ok()) {
     ROCKS_LOG_ERROR(db_options_.info_log,
                     "Titan table builder failed on finish: %s",

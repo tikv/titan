@@ -66,6 +66,9 @@ class TitanTableBuilder : public TableBuilder {
   std::shared_ptr<BlobFileManager> blob_manager_;
   std::unique_ptr<BlobFileBuilder> blob_builder_;
   std::weak_ptr<BlobStorage> blob_storage_;
+  std::vector<
+      std::pair<std::shared_ptr<BlobFileMeta>, std::unique_ptr<BlobFileHandle>>>
+      finished_blobs_;
   TitanStats* stats_;
 
   // target level in LSM-Tree for generated SSTs and blob files

@@ -93,7 +93,7 @@ class TableBuilderTest : public testing::Test {
     std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
     vset_->AddColumnFamilies(cfs);
     blob_manager_.reset(new FileManager(db_options_, vset_.get()));
-    table_factory_.reset(new TitanTableFactory(db_, db_options_, cf_options_,
+    table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
                                                blob_manager_, &mutex_,
                                                vset_.get(), nullptr));
   }
@@ -175,7 +175,6 @@ class TableBuilderTest : public testing::Test {
 
   port::Mutex mutex_;
 
-  DBImpl* db_{nullptr};
   Env* env_{Env::Default()};
   EnvOptions env_options_;
   Options options_;
@@ -338,9 +337,8 @@ TEST_F(TableBuilderTest, NumEntries) {
 
 TEST_F(TableBuilderTest, TargeSize) {
   cf_options_.blob_file_target_size = kTargetBlobFileSize;
-  table_factory_.reset(new TitanTableFactory(db_, db_options_, cf_options_,
-                                             blob_manager_, &mutex_,
-                                             vset_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, blob_manager_, &mutex_, vset_.get(), nullptr));
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
@@ -362,9 +360,8 @@ TEST_F(TableBuilderTest, TargeSize) {
 TEST_F(TableBuilderTest, LevelMerge) {
   cf_options_.blob_file_target_size = kTargetBlobFileSize;
   cf_options_.level_merge = true;
-  table_factory_.reset(new TitanTableFactory(db_, db_options_, cf_options_,
-                                             blob_manager_, &mutex_,
-                                             vset_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, blob_manager_, &mutex_, vset_.get(), nullptr));
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;

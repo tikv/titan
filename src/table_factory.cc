@@ -23,18 +23,10 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
   TitanCFOptions cf_options = cf_options_;
   cf_options.blob_run_mode = blob_run_mode_.load();
   std::weak_ptr<BlobStorage> blob_storage;
-  // While table factory constructed in Titan for the first time, db_impl_ is
-  // uninitialized (nullptr), and only flush may triggered before
-  // initialization. Since flush won't merge blob files, we set merge level to a
-  // unreachable value.
-  int num_levels = INT_MAX;
-  if (db_impl_ != nullptr) {
-    InstrumentedMutexLock dl(db_impl_->mutex());
-    auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(
-        db_impl_->GetColumnFamilyHandle(column_family_id));
-    auto cfd = cfh->cfd();
-    num_levels = cfd->current()->storage_info()->num_non_empty_levels();
-  }
+
+  // since we force use dynamic_level_bytes=true when level_merge=true, the last
+  // level of a cf is always cf_options.num_levels - 1.
+  int num_levels = cf_options.num_levels;
 
   {
     MutexLock l(db_mutex_);
