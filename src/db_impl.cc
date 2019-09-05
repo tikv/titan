@@ -224,7 +224,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   if (!s.ok()) return s;
 
   if (stats_.get()) {
-    stats_->Initialize(column_families, db_->DefaultColumnFamily()->GetID());
+    stats_->Initialize(column_families);
   }
   s = vset_->Open(column_families);
   if (!s.ok()) return s;

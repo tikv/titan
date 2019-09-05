@@ -66,12 +66,10 @@ class TitanInternalStats {
 class TitanStats {
  public:
   TitanStats(Statistics* stats) : stats_(stats) {}
-  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options,
-                    uint32_t default_cf) {
+  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options) {
     for (auto& opts : cf_options) {
       internal_stats_[opts.first] = NewTitanInternalStats(opts.second);
     }
-    default_cf_ = default_cf;
     return Status::OK();
   }
   Statistics* statistics() { return stats_; }
@@ -86,7 +84,6 @@ class TitanStats {
 
  private:
   Statistics* stats_ = nullptr;
-  uint32_t default_cf_ = 0;
   std::unordered_map<uint32_t, std::shared_ptr<TitanInternalStats>>
       internal_stats_;
   std::shared_ptr<TitanInternalStats> NewTitanInternalStats(
