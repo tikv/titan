@@ -40,6 +40,8 @@ class BlobGCJob {
   class GarbageCollectionWriteCallback;
   friend class BlobGCJobTest;
 
+  void UpdateInternalOpStats();
+
   BlobGC* blob_gc_;
   DB* base_db_;
   DBImpl* base_db_impl_;
@@ -72,6 +74,11 @@ class BlobGCJob {
     uint64_t blob_db_gc_num_new_files = 0;
     uint64_t blob_db_gc_num_files = 0;
   } metrics_;
+
+  uint64_t prev_bytes_read_ = 0;
+  uint64_t prev_bytes_written_ = 0;
+  uint64_t io_bytes_read_ = 0;
+  uint64_t io_bytes_written_ = 0;
 
   Status SampleCandidateFiles();
   Status DoSample(const BlobFileMeta* file, bool* selected);
