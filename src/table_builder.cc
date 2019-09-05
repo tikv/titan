@@ -92,13 +92,11 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
           ikey.type = kTypeBlobIndex;
           AppendInternalKey(&index_key, ikey);
           base_builder_->Add(index_key, index_value);
+          return;
         }
-      } else {
-        base_builder_->Add(key, value);
       }
-    } else {
-      base_builder_->Add(key, value);
     }
+    base_builder_->Add(key, value);
   } else {
     base_builder_->Add(key, value);
   }
@@ -220,7 +218,7 @@ TableProperties TitanTableBuilder::GetTableProperties() const {
 
 bool TitanTableBuilder::ShouldMerge(
     const std::shared_ptr<rocksdb::titandb::BlobFileMeta>& file) {
-  return file != nullptr && (int) file->file_level() < target_level_;
+  return file != nullptr && (int)file->file_level() < target_level_;
 }
 
 void TitanTableBuilder::UpdateInternalOpStats() {

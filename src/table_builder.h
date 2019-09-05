@@ -19,14 +19,14 @@ class TitanTableBuilder : public TableBuilder {
                     std::weak_ptr<BlobStorage> blob_storage, TitanStats* stats,
                     int merge_level, int target_level)
       : cf_id_(cf_id),
-        merge_level_(merge_level),
-        target_level_(target_level),
         db_options_(db_options),
         cf_options_(cf_options),
         base_builder_(std::move(base_builder)),
         blob_manager_(blob_manager),
         blob_storage_(blob_storage),
-        stats_(stats) {}
+        stats_(stats),
+        target_level_(target_level),
+        merge_level_(merge_level) {}
 
   void Add(const Slice& key, const Slice& value) override;
 
@@ -59,9 +59,6 @@ class TitanTableBuilder : public TableBuilder {
 
   Status status_;
   uint32_t cf_id_;
-  std::unique_ptr<ColumnFamilyHandle> cf_handle_;
-  int merge_level_;
-  int target_level_;
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
   std::unique_ptr<TableBuilder> base_builder_;
@@ -70,6 +67,13 @@ class TitanTableBuilder : public TableBuilder {
   std::unique_ptr<BlobFileBuilder> blob_builder_;
   std::weak_ptr<BlobStorage> blob_storage_;
   TitanStats* stats_;
+
+  // target level in LSM-Tree for generated SSTs and blob files
+  int target_level_;
+  // with cf_options_.level_merge == true, if target_level_ is higher than or
+  // equals to merge_level_, values belong to blob files which have lower level
+  // than target_level_ will be merged to new blob file
+  int merge_level_;
 
   // counters
   uint64_t bytes_read_ = 0;

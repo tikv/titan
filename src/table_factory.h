@@ -63,8 +63,8 @@ class TitanTableFactory : public TableFactory {
   }
 
  private:
-  // we use reference here because table factory is constructed before
-  // initialize db_impl_ in titan
+  // We use reference here because table factory is constructed before
+  // initialize db_impl_ in titan.
   DBImpl* const& db_impl_;
   const TitanDBOptions db_options_;
   const TitanCFOptions cf_options_;

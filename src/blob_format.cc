@@ -138,9 +138,14 @@ void BlobFileMeta::EncodeTo(std::string* dst) const {
 }
 
 Status BlobFileMeta::DecodeFrom(Slice* src) {
-  if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) ||
-      !GetVarint64(src, &file_entries_) || !GetVarint32(src, &file_level_)) {
+  if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_)) {
     return Status::Corruption("BlobFileMeta Decode failed");
+  }
+  if (!GetVarint64(src, &file_entries_) || !GetVarint32(src, &file_level_)) {
+    // For compatibility, we set file_level_ to zero for old blob files, so it
+    // will be merged in the future with level_merge enabled.
+    file_entries_ = 0;
+    file_level_ = 0;
   }
   return Status::OK();
 }
