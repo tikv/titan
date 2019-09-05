@@ -149,6 +149,7 @@ Status BlobGCJob::SampleCandidateFiles() {
   std::vector<BlobFileMeta*> result;
   for (const auto& file : blob_gc_->inputs()) {
     bool selected = false;
+    file->set_gc_mark(false);
     Status s = DoSample(file, &selected);
     if (!s.ok()) {
       return s;
