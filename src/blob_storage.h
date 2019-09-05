@@ -66,7 +66,7 @@ class BlobStorage {
   void MarkAllFilesForGC() {
     MutexLock l(&mutex_);
     for (auto& file : files_) {
-      file.second->set_gc_mark(true);
+      // file.second->set_gc_mark(true);
       file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
     }
   }

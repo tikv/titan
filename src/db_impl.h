@@ -173,6 +173,8 @@ class TitanDBImpl : public TitanDB {
   void PurgeObsoleteFiles();
   Status PurgeObsoleteFilesImpl();
 
+  Status RecoverGCStats(const std::vector<uint32_t>& column_families);
+
   SequenceNumber GetOldestSnapshotSequence() {
     SequenceNumber oldest_snapshot = kMaxSequenceNumber;
     {

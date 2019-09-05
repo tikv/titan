@@ -261,7 +261,41 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
     ROCKS_LOG_ERROR(db_options_.info_log, "Titan DB open failed: %s",
                     s.ToString().c_str());
   }
+
+  if(s.ok()){
+    std::vector<uint32_t> cf_ids;
+    for (auto cf : column_families){
+      cf_ids.push_back(cf.first);
+    }
+    RecoverGCStats(cf_ids);
+  }
   return s;
+}
+
+Status TitanDBImpl::RecoverGCStats(const std::vector<uint32_t>& column_families) {
+  auto persist_cf_handle = db_impl_->PersistentStatsColumnFamily();
+  for (auto cf_id : column_families){
+    std::map<uint64_t, std::weak_ptr<BlobFileMeta>> files;
+    auto blob_storage = vset_->GetBlobStorage(cf_id).lock();
+    assert(blob_storage != nullptr);
+    blob_storage->ExportBlobFiles(files);
+    for (auto file : files){
+      uint64_t file_number = file.first;
+      char file_number_str[16];
+      sprintf(file_number_str, "%015llu", file_number);
+      file_number_str[15] = 0;
+      ReadOptions ro;
+      PinnableSlice stats_value;
+      Status s = db_->Get(ro, persist_cf_handle, file_number_str, &stats_value);
+      if (!s.ok()){
+        ROCKS_LOG_ERROR(db_options_.info_log, "GC stats not found for file %" PRIu64 ".", file_number);
+      }
+      uint64_t discardable_size = std::stoull(std::string(stats_value.data(), stats_value.size()));
+      file.second.lock()->AddDiscardableSize(discardable_size);
+    }
+
+  }
+
 }
 
 Status TitanDBImpl::Close() {
@@ -911,10 +945,23 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
   }
   assert(!blob_files_size.empty());
   std::set<uint64_t> outputs;
+  WriteBatch new_blob;
+  char blob_file_name_str[16];
+  char blob_discardable_size_str[16];
+  ColumnFamilyHandle* persist_cf_handle = db_impl_->PersistentStatsColumnFamily();
   for (const auto f : blob_files_size) {
     outputs.insert(f.first);
+    sprintf(blob_file_name_str, "%015llu", f.first);
+    blob_file_name_str[15] = 0;
+    sprintf(blob_discardable_size_str, "%015llu", 0LL);
+    blob_discardable_size_str[15] = 0;
+    WriteBatchInternal::Put(&new_blob, persist_cf_handle->GetID(), blob_file_name_str, blob_discardable_size_str);
   }
-
+  WriteOptions wo;
+  wo.low_pri = true;
+  wo.sync = true;
+  // Persist new blob file stats to db_impl
+  db_impl_->Write(wo, &new_blob);
   {
     MutexLock l(&mutex_);
     auto blob_storage = vset_->GetBlobStorage(flush_job_info.cf_id).lock();
@@ -1014,6 +1061,18 @@ void TitanDBImpl::OnCompactionCompleted(
                       compaction_job_info.job_id, compaction_job_info.cf_id);
       return;
     }
+    ColumnFamilyHandle* persist_cf_handle = db_impl_->PersistentStatsColumnFamily();
+    WriteBatch new_blob;
+    char blob_file_name_str[16];
+    char blob_discardable_size_str[16];
+    for (const auto f : blob_files_size) {
+      outputs.insert(f.first);
+      sprintf(blob_file_name_str, "%015llu", f.first);
+      blob_file_name_str[15] = 0;
+      sprintf(blob_discardable_size_str, "%015llu", 0LL);
+      blob_discardable_size_str[15] = 0;
+      WriteBatchInternal::Put(&new_blob, persist_cf_handle->GetID(), blob_file_name_str, blob_discardable_size_str);
+    }
     for (const auto& file_number : outputs) {
       auto file = bs->FindFile(file_number).lock();
       if (!file) {
@@ -1046,8 +1105,19 @@ void TitanDBImpl::OnCompactionCompleted(
       if (!file->is_obsolete()) {
         delta += -bfs.second;
       }
+      // update discardable_size
       file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
+      sprintf(blob_file_name_str, "%015llu", file->file_number());
+      blob_file_name_str[15] = 0;
+      sprintf(blob_discardable_size_str, "%015llu", file->discardable_size());
+      blob_discardable_size_str[15] = 0;
+      WriteBatchInternal::Put(&new_blob, persist_cf_handle->GetID(), blob_file_name_str, blob_discardable_size_str);
     }
+    WriteOptions wo;
+    wo.low_pri = true;
+    wo.sync = true;
+    // Persist new blob file stats to db_impl
+    db_impl_->Write(wo, &new_blob);
     SubStats(stats_.get(), compaction_job_info.cf_id,
              TitanInternalStats::LIVE_BLOB_SIZE, delta);
     bs->ComputeGCScore();

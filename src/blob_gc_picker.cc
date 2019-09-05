@@ -26,6 +26,11 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   bool maybe_continue_next_time = false;
   uint64_t next_gc_size = 0;
   for (auto& gc_score : blob_storage->gc_score()) {
+    if (gc_score.score < cf_options_.blob_file_discardable_ratio){
+      // If the largest gc score of a file is smaller than blob_file_discardable_ratio,
+      // files behind it will smaller than this ratio too.
+      break;
+    }
     auto blob_file = blob_storage->FindFile(gc_score.file_number).lock();
     if (!blob_file ||
         blob_file->file_state() == BlobFileMeta::FileState::kBeingGC) {
@@ -51,7 +56,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       }
     } else {
       if (blob_file->file_size() <= cf_options_.merge_small_file_threshold ||
-          blob_file->gc_mark() ||
+          //blob_file->gc_mark() ||
           blob_file->GetDiscardableRatio() >=
               cf_options_.blob_file_discardable_ratio) {
         next_gc_size += blob_file->file_size();
