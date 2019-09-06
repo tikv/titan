@@ -1,12 +1,12 @@
 #pragma once
 
 #include "blob_file_manager.h"
+#include "blob_set.h"
 #include "db/db_impl/db_impl.h"
 #include "rocksdb/statistics.h"
 #include "table_factory.h"
 #include "titan/db.h"
 #include "util/repeatable_thread.h"
-#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -237,7 +237,7 @@ class TitanDBImpl : public TitanDB {
   // handle for purging obsolete blob files at fixed intervals
   std::unique_ptr<RepeatableThread> thread_purge_obsolete_;
 
-  std::unique_ptr<VersionSet> vset_;
+  std::unique_ptr<BlobSet> blob_set_;
   std::set<uint64_t> pending_outputs_;
   std::shared_ptr<BlobFileManager> blob_manager_;
 

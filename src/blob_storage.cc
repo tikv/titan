@@ -1,5 +1,5 @@
 #include "blob_storage.h"
-#include "version_set.h"
+#include "blob_set.h"
 
 namespace rocksdb {
 namespace titandb {

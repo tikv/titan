@@ -3,10 +3,10 @@
 #include <atomic>
 
 #include "blob_file_manager.h"
+#include "blob_set.h"
 #include "rocksdb/table.h"
 #include "titan/options.h"
 #include "titan_stats.h"
-#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -16,14 +16,14 @@ class TitanTableFactory : public TableFactory {
   TitanTableFactory(const TitanDBOptions& db_options,
                     const TitanCFOptions& cf_options,
                     std::shared_ptr<BlobFileManager> blob_manager,
-                    port::Mutex* db_mutex, VersionSet* vset, TitanStats* stats)
+                    port::Mutex* db_mutex, BlobSet* blob_set, TitanStats* stats)
       : db_options_(db_options),
         cf_options_(cf_options),
         blob_run_mode_(cf_options.blob_run_mode),
         base_factory_(cf_options.table_factory),
         blob_manager_(blob_manager),
         db_mutex_(db_mutex),
-        vset_(vset),
+        blob_set_(blob_set),
         stats_(stats) {}
 
   const char* Name() const override { return "TitanTable"; }
@@ -67,7 +67,7 @@ class TitanTableFactory : public TableFactory {
   std::shared_ptr<TableFactory> base_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
   port::Mutex* db_mutex_;
-  VersionSet* vset_;
+  BlobSet* blob_set_;
   TitanStats* stats_;
 };
 

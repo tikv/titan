@@ -44,7 +44,7 @@ int main() {
 #include <thread>
 
 #include "db/db_impl/db_impl.h"
-#include "db/version_set.h"
+#include "db/blob_set.h"
 #include "hdfs/env_hdfs.h"
 #include "logging/logging.h"
 #include "monitoring/histogram.h"
