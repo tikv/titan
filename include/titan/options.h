@@ -164,8 +164,6 @@ struct ImmutableTitanCFOptions {
         blob_file_discardable_ratio(opts.blob_file_discardable_ratio),
         sample_file_size_ratio(opts.sample_file_size_ratio),
         merge_small_file_threshold(opts.merge_small_file_threshold),
-        level_compaction_dynamic_level_bytes(
-            opts.level_compaction_dynamic_level_bytes),
         level_merge(opts.level_merge) {}
 
   uint64_t min_blob_size;
@@ -185,8 +183,6 @@ struct ImmutableTitanCFOptions {
   double sample_file_size_ratio;
 
   uint64_t merge_small_file_threshold;
-
-  bool level_compaction_dynamic_level_bytes;
 
   bool level_merge;
 };

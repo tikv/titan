@@ -156,14 +156,16 @@ void TitanDBImpl::StartBackgroundTasks() {
   }
 }
 
-Status TitanDBImpl::ValidateOptions() const {
-  if (db_options_.purge_obsolete_files_period_sec == 0) {
+Status TitanDBImpl::ValidateOptions(
+    const TitanDBOptions& options,
+    const std::vector<TitanCFDescriptor>& column_families) const {
+  if (options.purge_obsolete_files_period_sec == 0) {
     return Status::InvalidArgument(
         "Require non-zero purge_obsolete_files_period_sec");
   }
-  for (auto& cf_info : cf_info_) {
-    const auto& im_op = cf_info.second.immutable_cf_options;
-    if (im_op.level_merge && !im_op.level_compaction_dynamic_level_bytes) {
+  for (const auto& cf : column_families) {
+    if (cf.options.level_merge &&
+        !cf.options.level_compaction_dynamic_level_bytes) {
       return Status::InvalidArgument(
           "Require enabling level_compaction_dynamic_level_bytes for "
           "level_merge");
@@ -174,7 +176,7 @@ Status TitanDBImpl::ValidateOptions() const {
 
 Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
                          std::vector<ColumnFamilyHandle*>* handles) {
-  Status s = ValidateOptions();
+  Status s = ValidateOptions(db_options_, descs);
   if (!s.ok()) {
     return s;
   }
