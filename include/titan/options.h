@@ -29,7 +29,13 @@ struct TitanDBOptions : public DBOptions {
   // How often to schedule delete obsolete blob files periods
   //
   // Default: 10
-  uint32_t purge_obsolete_files_period{10};  // 10s
+  uint32_t purge_obsolete_files_period_sec{10};  // 10s
+
+  // If non-zero, dump titan internal stats to info log every
+  // titan_stats_dump_period_sec.
+  //
+  // Default: 600 (10 min)
+  uint32_t titan_stats_dump_period_sec{600};
 
   TitanDBOptions() = default;
   explicit TitanDBOptions(const DBOptions& options) : DBOptions(options) {}

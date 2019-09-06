@@ -265,7 +265,7 @@ Status BlobSet::DropColumnFamilies(const std::vector<uint32_t>& column_families,
   return s;
 }
 
-Status BlobSet::DestroyColumnFamily(uint32_t cf_id) {
+Status BlobSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
   obsolete_columns_.erase(cf_id);
   auto it = column_families_.find(cf_id);
   if (it != column_families_.end()) {

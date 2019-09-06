@@ -1,15 +1,25 @@
 #pragma once
 
-#include "blob_file_manager.h"
-#include "blob_set.h"
 #include "db/db_impl/db_impl.h"
 #include "rocksdb/statistics.h"
+#include "util/repeatable_thread.h"
+
+#include "blob_file_manager.h"
+#include "blob_set.h"
 #include "table_factory.h"
 #include "titan/db.h"
-#include "util/repeatable_thread.h"
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
+
+struct TitanColumnFamilyInfo {
+  const std::string name;
+  const ImmutableTitanCFOptions immutable_cf_options;
+  MutableTitanCFOptions mutable_cf_options;
+  std::shared_ptr<TableFactory> base_table_factory;
+  std::shared_ptr<TitanTableFactory> titan_table_factory;
+};
 
 class TitanDBImpl : public TitanDB {
  public:
@@ -135,6 +145,8 @@ class TitanDBImpl : public TitanDB {
   friend class TitanDBTest;
   friend class TitanThreadSafetyTest;
 
+  Status ValidateOptions() const;
+
   Status GetImpl(const ReadOptions& options, ColumnFamilyHandle* handle,
                  const Slice& key, PinnableSlice* value);
 
@@ -196,6 +208,8 @@ class TitanDBImpl : public TitanDB {
 
   bool HasBGError() { return has_bg_error_.load(); }
 
+  void DumpStats();
+
   FileLock* lock_{nullptr};
   // The lock sequence must be Titan.mutex_.Lock() -> Base DB mutex_.Lock()
   // while the unlock sequence must be Base DB mutex.Unlock() ->
@@ -220,24 +234,16 @@ class TitanDBImpl : public TitanDB {
   // is not null.
   std::unique_ptr<TitanStats> stats_;
 
-  // Guarded by mutex_.
-  std::unordered_map<uint32_t, ImmutableTitanCFOptions> immutable_cf_options_;
-
-  // Guarded by mutex_.
-  std::unordered_map<uint32_t, MutableTitanCFOptions> mutable_cf_options_;
-
-  // Guarded by mutex_.
-  std::unordered_map<uint32_t, std::shared_ptr<TableFactory>>
-      base_table_factory_;
-
-  // Guarded by mutex_.
-  std::unordered_map<uint32_t, std::shared_ptr<TitanTableFactory>>
-      titan_table_factory_;
+  // Access while holding mutex_ lock or during DB open.
+  std::unordered_map<uint32_t, TitanColumnFamilyInfo> cf_info_;
 
   // handle for purging obsolete blob files at fixed intervals
   std::unique_ptr<RepeatableThread> thread_purge_obsolete_;
 
-  std::unique_ptr<BlobSet> blob_set_;
+  // handle for dump internal stats at fixed intervals.
+  std::unique_ptr<RepeatableThread> thread_dump_stats_;
+
+  std::unique_ptr<BlobSet> vset_;
   std::set<uint64_t> pending_outputs_;
   std::shared_ptr<BlobFileManager> blob_manager_;
 
