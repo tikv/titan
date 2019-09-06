@@ -391,7 +391,9 @@ Status BlobGCJob::BuildIterator(
         blob_gc_->titan_cf_options())));
   }
 
-  if (s.ok()) result->reset(new BlobFileMergeIterator(std::move(list)));
+  if (s.ok())
+    result->reset(new BlobFileMergeIterator(
+        std::move(list), blob_gc_->titan_cf_options().comparator));
 
   return s;
 }
@@ -480,7 +482,8 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     std::string tmp;
     for (auto& builder : this->blob_file_builders_) {
       auto file = std::make_shared<BlobFileMeta>(
-          builder.first->GetNumber(), builder.first->GetFile()->GetFileSize());
+          builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(),
+          builder.second->GetSmallestKey(), builder.second->GetLargestKey());
 
       if (!tmp.empty()) {
         tmp.append(" ");

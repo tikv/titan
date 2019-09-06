@@ -1,6 +1,7 @@
 #include "file/filename.h"
 #include "test_util/testharness.h"
 
+#include "blob_format.h"
 #include "edit_collector.h"
 #include "testutil.h"
 #include "util.h"
@@ -67,7 +68,7 @@ class VersionTest : public testing::Test {
   void AddBlobFiles(uint32_t cf_id, uint64_t start, uint64_t end) {
     auto storage = column_families_[cf_id];
     for (auto i = start; i < end; i++) {
-      auto file = std::make_shared<BlobFileMeta>(i, i);
+      auto file = std::make_shared<BlobFileMeta>(i, i, "", "");
       storage->files_.emplace(i, file);
     }
   }
@@ -107,6 +108,20 @@ class VersionTest : public testing::Test {
   void CheckColumnFamiliesSize(uint64_t size) {
     ASSERT_EQ(vset_->column_families_.size(), size);
   }
+
+  void LegacyEncode(const VersionEdit& edit, std::string* dst) {
+    PutVarint32Varint32(dst, Tag::kColumnFamilyID, edit.column_family_id_);
+
+    for (auto& file : edit.added_files_) {
+      PutVarint32(dst, Tag::kAddedBlobFile);
+      PutVarint64(dst, file->file_number());
+      PutVarint64(dst, file->file_size());
+    }
+    for (auto& file : edit.deleted_files_) {
+      // obsolete sequence is a inpersistent field, so no need to encode it.
+      PutVarint32Varint64(dst, Tag::kDeletedBlobFile, file.first);
+    }
+  }
 };
 
 TEST_F(VersionTest, VersionEdit) {
@@ -115,8 +130,8 @@ TEST_F(VersionTest, VersionEdit) {
   input.SetNextFileNumber(1);
   input.SetColumnFamilyID(2);
   CheckCodec(input);
-  auto file1 = std::make_shared<BlobFileMeta>(3, 4);
-  auto file2 = std::make_shared<BlobFileMeta>(5, 6);
+  auto file1 = std::make_shared<BlobFileMeta>(3, 4, "", "");
+  auto file2 = std::make_shared<BlobFileMeta>(5, 6, "", "");
   input.AddBlobFile(file1);
   input.AddBlobFile(file2);
   input.DeleteBlobFile(7);
@@ -128,7 +143,7 @@ VersionEdit AddBlobFilesEdit(uint32_t cf_id, uint64_t start, uint64_t end) {
   VersionEdit edit;
   edit.SetColumnFamilyID(cf_id);
   for (auto i = start; i < end; i++) {
-    auto file = std::make_shared<BlobFileMeta>(i, i);
+    auto file = std::make_shared<BlobFileMeta>(i, i, "", "");
     edit.AddBlobFile(file);
   }
   return edit;
@@ -267,6 +282,20 @@ TEST_F(VersionTest, ObsoleteFiles) {
 
   ASSERT_OK(vset_->MaybeDestroyColumnFamily(2));
   CheckColumnFamiliesSize(8);
+}
+
+TEST_F(VersionTest, BlobFileMetaV1ToV2) {
+  VersionEdit edit;
+  edit.SetColumnFamilyID(1);
+  edit.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, "", ""));
+  edit.DeleteBlobFile(1);
+  edit.AddBlobFile(std::make_shared<BlobFileMeta>(2, 2, "", ""));
+  std::string str;
+  LegacyEncode(edit, &str);
+
+  VersionEdit edit1;
+  ASSERT_OK(DecodeInto(Slice(str), &edit1));
+  CheckCodec(edit1);
 }
 
 }  // namespace titandb
