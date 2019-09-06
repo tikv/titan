@@ -41,9 +41,24 @@ class FileManager : public BlobFileManager {
     Status s = handle->GetFile()->Sync(true);
     if (s.ok()) {
       s = handle->GetFile()->Close();
+      auto storage = vset_->GetBlobStorage(0).lock();
+      storage->AddBlobFile(file);
     }
-    auto storage = vset_->GetBlobStorage(0).lock();
-    storage->AddBlobFile(file);
+    return s;
+  }
+
+  Status BatchFinishFiles(
+      uint32_t cf_id,
+      const std::vector<std::pair<std::shared_ptr<BlobFileMeta>,
+                                  std::unique_ptr<BlobFileHandle>>>& files)
+      override {
+    Status s;
+    for (auto& file : files) {
+      s = FinishFile(cf_id, file.first,
+                     const_cast<std::unique_ptr<BlobFileHandle>&&>(
+                         std::move(file.second)));
+      if (!s.ok()) return s;
+    }
     return s;
   }
 

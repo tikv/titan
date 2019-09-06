@@ -69,7 +69,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       base_builder_->Add(index_key, index_value);
     }
   } else if (ikey.type == kTypeBlobIndex && cf_options_.level_merge &&
-             target_level_ >= merge_level_) {
+             target_level_ >= merge_level_ &&
+             cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     // we merge value to new blob file
     BlobIndex index;
     Slice copy = value;

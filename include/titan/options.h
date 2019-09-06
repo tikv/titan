@@ -128,8 +128,8 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // their corresponding keys are compacted to last two level in LSM-Tree.
   //
   // With this feature enabled, Titan could get better scan performance, and
-  // better write performance during GC, but will suffer around 1.1 space amplification
-  // and 3 more write amplification if no GC needed (eg. uniformly
+  // better write performance during GC, but will suffer around 1.1 space
+  // amplification and 3 more write amplification if no GC needed (eg. uniformly
   // distributed keys) under default rocksdb setting.
   //
   // Requirement: level_compaction_dynamic_level_base = true
