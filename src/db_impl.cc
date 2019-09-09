@@ -242,6 +242,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
     handles->clear();
     s = db_->Close();
     delete db_;
+    db_ = nullptr;
   }
   if (!s.ok()) return s;
 
