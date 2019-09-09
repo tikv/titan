@@ -182,10 +182,13 @@ class BlobFileMeta {
 
   BlobFileMeta() = default;
   BlobFileMeta(uint64_t _file_number, uint64_t _file_size,
+               uint64_t _file_entries, uint32_t _file_level,
                const std::string& _smallest_key,
                const std::string& _largest_key)
       : file_number_(_file_number),
         file_size_(_file_size),
+        file_entries_(_file_entries),
+        file_level_(_file_level),
         smallest_key_(_smallest_key),
         largest_key_(_largest_key) {}
 
@@ -197,6 +200,8 @@ class BlobFileMeta {
 
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }
+  uint64_t file_entries() const { return file_entries_; }
+  uint32_t file_level() const { return file_level_; }
   Slice smallest_key() const { return smallest_key_; }
   Slice largest_key() const { return largest_key_; }
 
