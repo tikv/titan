@@ -26,6 +26,7 @@ Status VersionEdit::DecodeFrom(Slice* src) {
   uint32_t tag;
   uint64_t file_number;
   std::shared_ptr<BlobFileMeta> blob_file;
+  Status s;
 
   const char* error = nullptr;
   while (!error && !src->empty()) {
@@ -50,18 +51,20 @@ Status VersionEdit::DecodeFrom(Slice* src) {
       // for compatibility issue
       case kAddedBlobFile:
         blob_file = std::make_shared<BlobFileMeta>();
-        if (blob_file->DecodeFromLegacy(src).ok()) {
+        s = blob_file->DecodeFromLegacy(src);
+        if (s.ok()) {
           AddBlobFile(blob_file);
         } else {
-          error = "added blob file";
+          error = s.ToString().c_str();
         }
         break;
       case kAddedBlobFileV2:
         blob_file = std::make_shared<BlobFileMeta>();
-        if (blob_file->DecodeFrom(src).ok()) {
+        s = blob_file->DecodeFrom(src);
+        if (s.ok()) {
           AddBlobFile(blob_file);
         } else {
-          error = "added blob file";
+          error = s.ToString().c_str();
         }
         break;
       case kDeletedBlobFile:

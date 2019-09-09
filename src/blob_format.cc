@@ -141,7 +141,7 @@ void BlobFileMeta::EncodeTo(std::string* dst) const {
 
 Status BlobFileMeta::DecodeFromLegacy(Slice* src) {
   if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_)) {
-    return Status::Corruption("BlobFileMeta decode failed");
+    return Status::Corruption("BlobFileMeta decode legacy failed");
   }
   assert(smallest_key_.empty());
   assert(largest_key_.empty());
@@ -154,12 +154,12 @@ Status BlobFileMeta::DecodeFrom(Slice* src) {
     return Status::Corruption("BlobFileMeta decode failed");
   }
   Slice str;
-  if (GetLengthPrefixedSlice(src, &str) && str.size() != 0) {
+  if (GetLengthPrefixedSlice(src, &str)) {
     smallest_key_.assign(str.data(), str.size());
   } else {
     return Status::Corruption("BlobSmallestKey Decode failed");
   }
-  if (GetLengthPrefixedSlice(src, &str) && str.size() != 0) {
+  if (GetLengthPrefixedSlice(src, &str)) {
     largest_key_.assign(str.data(), str.size());
   } else {
     return Status::Corruption("BlobLargestKey decode failed");
