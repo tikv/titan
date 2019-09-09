@@ -43,8 +43,8 @@ int main() {
 #include <queue>
 #include <thread>
 
-#include "db/db_impl/db_impl.h"
 #include "db/blob_set.h"
+#include "db/db_impl/db_impl.h"
 #include "hdfs/env_hdfs.h"
 #include "logging/logging.h"
 #include "monitoring/histogram.h"
