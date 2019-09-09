@@ -135,11 +135,16 @@ struct BlobIndex {
 
 // Format of blob file meta (not fixed size):
 //
-//    +-------------+-----------+--------------+------------+----------------+----------------+
-//    | file number | file size | file entries | file level |  smallest key  |  largest key   |
-//    +-------------+-----------+--------------+------------+----------------+----------------+
-//    |  Varint64   | Varint64  |   Varint64   |  Varint32  | Varint32 + len | Varint32 + len |
-//    +-------------+-----------+--------------+------------+----------------+----------------+
+//    +-------------+-----------+--------------+------------+
+//    | file number | file size | file entries | file level |
+//    +-------------+-----------+--------------+------------+
+//    |  Varint64   | Varint64  |   Varint64   |  Varint32  |
+//    +-------------+-----------+--------------+------------+
+//    +--------------------+--------------------+
+//    |    smallest key    |    largest key     |
+//    +--------------------+--------------------+
+//    | Varint32 + key_len | Varint32 + key_len |
+//    +--------------------+--------------------+
 //
 // The blob file meta is stored in Titan's manifest for quick constructing of
 // meta infomations of all the blob files in memory.
