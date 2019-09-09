@@ -243,7 +243,7 @@ class TitanDBImpl : public TitanDB {
   // handle for dump internal stats at fixed intervals.
   std::unique_ptr<RepeatableThread> thread_dump_stats_;
 
-  std::unique_ptr<BlobSet> vset_;
+  std::unique_ptr<BlobSet> blob_set_;
   std::set<uint64_t> pending_outputs_;
   std::shared_ptr<BlobFileManager> blob_manager_;
 
