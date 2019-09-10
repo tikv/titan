@@ -32,7 +32,7 @@ void TitanDBImpl::BackgroundCallGC() {
   {
     MutexLock l(&mutex_);
     assert(bg_gc_scheduled_ > 0);
-    if (drop_cf_requests_ > 0) {
+    while (drop_cf_requests_ > 0) {
       bg_cv_.Wait();
     }
     bg_gc_running_++;
