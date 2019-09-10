@@ -975,20 +975,24 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
   WriteBatch new_blob;
   char blob_file_name_str[16];
   char blob_discardable_size_str[16];
-  ColumnFamilyHandle* persist_cf_handle = db_impl_->PersistentStatsColumnFamily();
   for (const auto f : blob_files_size) {
     outputs.insert(f.first);
     sprintf(blob_file_name_str, "%015llu", f.first);
     blob_file_name_str[15] = 0;
     sprintf(blob_discardable_size_str, "%015llu", 0LL);
     blob_discardable_size_str[15] = 0;
-    WriteBatchInternal::Put(&new_blob, persist_cf_handle->GetID(), blob_file_name_str, blob_discardable_size_str);
+    new_blob.Put(db_impl_->PersistentStatsColumnFamily(), Slice(blob_file_name_str), Slice(blob_discardable_size_str));
   }
   WriteOptions wo;
   wo.low_pri = true;
-  wo.sync = true;
+  wo.sync = false;
   // Persist new blob file stats to db_impl
-  db_impl_->Write(wo, &new_blob);
+  Status s = db_->Write(wo, &new_blob);
+  if (!s.ok()){
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "Persist GC stats failed because %s", s.ToString().c_str());
+    return;
+  }
   {
     MutexLock l(&mutex_);
     auto blob_storage = vset_->GetBlobStorage(flush_job_info.cf_id).lock();
@@ -1077,6 +1081,8 @@ void TitanDBImpl::OnCompactionCompleted(
   calc_bfs(compaction_job_info.input_files, -1, false);
   calc_bfs(compaction_job_info.output_files, 1, true);
 
+  WriteBatch new_blob;
+  ColumnFamilyHandle* persist_cf_handle = db_impl_->PersistentStatsColumnFamily();
   {
     MutexLock l(&mutex_);
     auto bs = vset_->GetBlobStorage(compaction_job_info.cf_id).lock();
@@ -1088,17 +1094,14 @@ void TitanDBImpl::OnCompactionCompleted(
                       compaction_job_info.job_id, compaction_job_info.cf_id);
       return;
     }
-    ColumnFamilyHandle* persist_cf_handle = db_impl_->PersistentStatsColumnFamily();
-    WriteBatch new_blob;
     char blob_file_name_str[16];
     char blob_discardable_size_str[16];
-    for (const auto f : blob_files_size) {
-      outputs.insert(f.first);
-      sprintf(blob_file_name_str, "%015llu", f.first);
+    for (const auto f : outputs) {
+      sprintf(blob_file_name_str, "%015llu", f);
       blob_file_name_str[15] = 0;
       sprintf(blob_discardable_size_str, "%015llu", 0LL);
       blob_discardable_size_str[15] = 0;
-      WriteBatchInternal::Put(&new_blob, persist_cf_handle->GetID(), blob_file_name_str, blob_discardable_size_str);
+      new_blob.Put(persist_cf_handle, Slice(blob_file_name_str), Slice(blob_discardable_size_str));
     }
     for (const auto& file_number : outputs) {
       auto file = bs->FindFile(file_number).lock();
@@ -1138,19 +1141,23 @@ void TitanDBImpl::OnCompactionCompleted(
       blob_file_name_str[15] = 0;
       sprintf(blob_discardable_size_str, "%015llu", file->discardable_size());
       blob_discardable_size_str[15] = 0;
-      WriteBatchInternal::Put(&new_blob, persist_cf_handle->GetID(), blob_file_name_str, blob_discardable_size_str);
+      new_blob.Put(persist_cf_handle, Slice(blob_file_name_str), Slice(blob_discardable_size_str));
     }
-    WriteOptions wo;
-    wo.low_pri = true;
-    wo.sync = true;
-    // Persist new blob file stats to db_impl
-    db_impl_->Write(wo, &new_blob);
     SubStats(stats_.get(), compaction_job_info.cf_id,
              TitanInternalStats::LIVE_BLOB_SIZE, delta);
     bs->ComputeGCScore();
 
     AddToGCQueue(compaction_job_info.cf_id);
     MaybeScheduleGC();
+  }
+  WriteOptions wo;
+  wo.low_pri = true;
+  wo.sync = true;
+  // Persist new blob file stats to db_impl
+  Status s = db_impl_->Write(wo, &new_blob);
+  if (!s.ok()){
+    assert(false);
+    return;
   }
 }
 

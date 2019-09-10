@@ -509,7 +509,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
         file_number_str[15] = 0;
         sprintf(discardable_size_str, "%015llu", 0LL);
         discardable_size_str[15] = 0;
-        WriteBatchInternal::Put(&stats_batch_, persist_cf_handle->GetID(),file_number_str, discardable_size_str);
+        stats_batch_.Put(persist_cf_handle, Slice(file_number_str), Slice(discardable_size_str));
         blob_gc_->AddOutputFile(file.first.get());
       }
     }
@@ -589,7 +589,6 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
   ColumnFamilyHandle* persist_cf_handle = base_db_impl_->PersistentStatsColumnFamily();
   char file_number_str[16];
-  char discardable_size_str[16];
   for (const auto& file : blob_gc_->sampled_inputs()) {
     ROCKS_LOG_INFO(db_options_.info_log,
                    "Titan add obsolete file [%" PRIu64 "]",
@@ -599,7 +598,11 @@ Status BlobGCJob::DeleteInputBlobFiles() {
     sprintf(file_number_str, "%015llu", file->file_number());
     file_number_str[15] = 0;
     // delete obsoleted file
-    WriteBatchInternal::Delete(&stats_batch_, persist_cf_handle->GetID(),file_number_str);
+    stats_batch_.Delete(persist_cf_handle, Slice(file_number_str));
+    WriteOptions wo;
+    wo.low_pri = true;
+    wo.sync = true;
+    base_db_->Write(wo, &stats_batch_);
   }
   s = version_set_->LogAndApply(edit);
   // TODO(@DorianZheng) Purge pending outputs
