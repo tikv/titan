@@ -553,7 +553,7 @@ TEST_F(TitanDBTest, VersionEditError) {
   auto cf_id = db_->DefaultColumnFamily()->GetID();
   VersionEdit edit;
   edit.SetColumnFamilyID(cf_id);
-  edit.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, 0, 0, "", ""));
+  edit.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, 0, 0, "a", "b"));
   ASSERT_OK(LogAndApply(edit));
 
   VerifyDB(data);
@@ -561,7 +561,7 @@ TEST_F(TitanDBTest, VersionEditError) {
   // add same blob file twice
   VersionEdit edit1;
   edit1.SetColumnFamilyID(cf_id);
-  edit1.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, 0, 0, "", ""));
+  edit1.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, 0, 0, "a", "b"));
   ASSERT_NOK(LogAndApply(edit));
 
   Reopen();
