@@ -199,6 +199,9 @@ class TitanDBImpl : public TitanDB {
   }
 
   // REQUIRE: mutex_ held
+  bool HasPendingDropCFRequest(uint32_t cf_id);
+
+  // REQUIRE: mutex_ held
   Status SetBGError(const Status& s);
 
   Status GetBGError() {
@@ -217,7 +220,9 @@ class TitanDBImpl : public TitanDB {
   // potential dead lock.
   mutable port::Mutex mutex_;
   // This condition variable is signaled on these conditions:
-  // * whenever bg_gc_scheduled_ goes down to 0
+  // * whenever bg_gc_scheduled_ goes down to 0.
+  // * whenever bg_gc_running_ goes down to 0.
+  // * whenever drop_cf_requests_ goes down to 0.
   port::CondVar bg_cv_;
 
   std::string dbname_;
@@ -251,10 +256,14 @@ class TitanDBImpl : public TitanDB {
   // pending_gc_ hold column families that already on gc_queue_.
   std::deque<uint32_t> gc_queue_;
 
-  // Guarded by mutex_.
-  int bg_gc_scheduled_{0};
-  // REQUIRE: mutex_ held
-  int unscheduled_gc_{0};
+  // REQUIRE: mutex_ held.
+  int bg_gc_scheduled_ = 0;
+  // REQUIRE: mutex_ held.
+  int bg_gc_running_ = 0;
+  // REQUIRE: mutex_ held.
+  int unscheduled_gc_ = 0;
+  // REQUIRE: mutex_ held.
+  int drop_cf_requests_ = 0;
 
   std::atomic_bool shuting_down_{false};
 };

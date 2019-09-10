@@ -397,11 +397,26 @@ Status TitanDBImpl::DropColumnFamilies(
     column_families.emplace_back(handle->GetID());
     column_families_str += "[" + handle->GetName() + "]";
   }
+  {
+    MutexLock l(&mutex_);
+    drop_cf_requests_++;
+
+    // Has to wait till no GC job is running before proceed, otherwise GC jobs
+    // can fail and set background error.
+    // TODO(yiwu): only wait for GC jobs of CFs being dropped.
+    while (bg_gc_running_ > 0) {
+      bg_cv_.Wait();
+    }
+  }
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
     MutexLock l(&mutex_);
     SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
     s = vset_->DropColumnFamilies(column_families, obsolete_sequence);
+    drop_cf_requests_--;
+    if (drop_cf_requests_ == 0) {
+      bg_cv_.SignalAll();
+    }
   }
   if (s.ok()) {
     ROCKS_LOG_INFO(db_options_.info_log, "Dropped column families: %s",

@@ -32,6 +32,10 @@ void TitanDBImpl::BackgroundCallGC() {
   {
     MutexLock l(&mutex_);
     assert(bg_gc_scheduled_ > 0);
+    if (drop_cf_requests_ > 0) {
+      bg_cv_.Wait();
+    }
+    bg_gc_running_++;
 
     BackgroundGC(&log_buffer);
 
@@ -42,13 +46,14 @@ void TitanDBImpl::BackgroundCallGC() {
       mutex_.Lock();
     }
 
+    bg_gc_running_--;
     bg_gc_scheduled_--;
     MaybeScheduleGC();
-    if (bg_gc_scheduled_ == 0) {
-      // signal if
-      // * bg_gc_scheduled_ == 0 -- need to wakeup ~TitanDBImpl
+    if (bg_gc_scheduled_ == 0 || bg_gc_running_ == 0) {
+      // Signal DB destructor if bg_gc_scheduled_ drop to 0.
+      // Signal drop CF requests if bg_gc_running_ drop to 0.
       // If none of this is true, there is no need to signal since nobody is
-      // waiting for it
+      // waiting for it.
       bg_cv_.SignalAll();
     }
     // IMPORTANT: there should be no code after calling SignalAll. This call may
@@ -67,13 +72,19 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   Status s;
   if (!gc_queue_.empty()) {
     uint32_t column_family_id = PopFirstFromGCQueue();
-    auto bs = vset_->GetBlobStorage(column_family_id).lock().get();
-
-    if (bs) {
-      const auto& cf_options = bs->cf_options();
+    std::shared_ptr<BlobStorage> blob_storage;
+    // Skip CFs that have been dropped.
+    if (!vset_->IsColumnFamilyObsolete(column_family_id)) {
+      blob_storage = vset_->GetBlobStorage(column_family_id).lock();
+    } else {
+      ROCKS_LOG_BUFFER(log_buffer, "GC skip dropped colum family [%s].",
+                       cf_info_[column_family_id].name.c_str());
+    }
+    if (blob_storage != nullptr) {
+      const auto& cf_options = blob_storage->cf_options();
       std::shared_ptr<BlobGCPicker> blob_gc_picker =
           std::make_shared<BasicBlobGCPicker>(db_options_, cf_options);
-      blob_gc = blob_gc_picker->PickBlobGC(bs);
+      blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get());
 
       if (blob_gc) {
         cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
@@ -124,17 +135,19 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   return s;
 }
 
+// TODO(yiwu): merge with BackgroundGC().
 Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
-  {
-    MutexLock l(&mutex_);
-    bg_gc_scheduled_++;
-  }
   // BackgroundCallGC
   Status s;
   LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
   {
     MutexLock l(&mutex_);
-    assert(bg_gc_scheduled_ > 0);
+    // Prevent CF being dropped while GC is running.
+    while (drop_cf_requests_ > 0) {
+      bg_cv_.Wait();
+    }
+    bg_gc_running_++;
+    bg_gc_scheduled_++;
 
     // BackgroudGC
     StopWatch gc_sw(env_, statistics(stats_.get()), BLOB_DB_GC_MICROS);
@@ -142,6 +155,10 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
     std::unique_ptr<BlobGC> blob_gc;
     std::unique_ptr<ColumnFamilyHandle> cfh;
 
+    if (vset_->IsColumnFamilyObsolete(column_family_id)) {
+      return Status::ColumnFamilyDropped(
+          "Column Family has been dropped before GC.");
+    }
     auto bs = vset_->GetBlobStorage(column_family_id).lock().get();
     const auto& cf_options = bs->cf_options();
     std::shared_ptr<BlobGCPicker> blob_gc_picker =
@@ -187,8 +204,9 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
       mutex_.Lock();
     }
 
+    bg_gc_running_--;
     bg_gc_scheduled_--;
-    if (bg_gc_scheduled_ == 0) {
+    if (bg_gc_scheduled_ == 0 || bg_gc_running_ == 0) {
       bg_cv_.SignalAll();
     }
   }

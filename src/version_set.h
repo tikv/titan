@@ -75,6 +75,11 @@ class VersionSet {
     }
   }
 
+  // REQUIRES: mutex is held
+  bool IsColumnFamilyObsolete(uint32_t cf_id) {
+    return obsolete_columns_.count(cf_id) > 0;
+  }
+
  private:
   friend class BlobFileSizeCollectorTest;
   friend class VersionTest;
