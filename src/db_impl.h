@@ -5,7 +5,7 @@
 #include "util/repeatable_thread.h"
 
 #include "blob_file_manager.h"
-#include "blob_set.h"
+#include "blob_file_set.h"
 #include "table_factory.h"
 #include "titan/db.h"
 #include "titan_stats.h"
@@ -243,7 +243,7 @@ class TitanDBImpl : public TitanDB {
   // handle for dump internal stats at fixed intervals.
   std::unique_ptr<RepeatableThread> thread_dump_stats_;
 
-  std::unique_ptr<BlobSet> blob_set_;
+  std::unique_ptr<BlobFileSet> blob_file_set_;
   std::set<uint64_t> pending_outputs_;
   std::shared_ptr<BlobFileManager> blob_manager_;
 

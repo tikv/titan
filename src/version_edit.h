@@ -34,7 +34,7 @@ class VersionEdit {
   friend bool operator==(const VersionEdit& lhs, const VersionEdit& rhs);
 
  private:
-  friend class BlobSet;
+  friend class BlobFileSet;
   friend class EditCollector;
 
   bool has_next_file_number_{false};

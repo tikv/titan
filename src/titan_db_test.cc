@@ -102,7 +102,7 @@ class TitanDBTest : public testing::Test {
   }
 
   Status LogAndApply(VersionEdit& edit) {
-    return db_impl_->blob_set_->LogAndApply(edit);
+    return db_impl_->blob_file_set_->LogAndApply(edit);
   }
 
   void Put(uint64_t k, std::map<std::string, std::string>* data = nullptr) {
@@ -132,7 +132,7 @@ class TitanDBTest : public testing::Test {
       cf_handle = db_->DefaultColumnFamily();
     }
     MutexLock l(&db_impl_->mutex_);
-    return db_impl_->blob_set_->GetBlobStorage(cf_handle->GetID());
+    return db_impl_->blob_file_set_->GetBlobStorage(cf_handle->GetID());
   }
 
   void VerifyDB(const std::map<std::string, std::string>& data,
@@ -924,7 +924,7 @@ TEST_F(TitanDBTest, BackgroundErrorTrigger) {
   }
   Flush();
   ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
-  SyncPoint::GetInstance()->SetCallBack("BlobSet::LogAndApply", [&](void*) {
+  SyncPoint::GetInstance()->SetCallBack("VersionSet::LogAndApply", [&](void*) {
     mock_env->SetFilesystemActive(false, Status::IOError("Injected error"));
   });
   SyncPoint::GetInstance()->EnableProcessing();

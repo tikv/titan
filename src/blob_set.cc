@@ -1,4 +1,4 @@
-#include "blob_set.h"
+#include "blob_file_set.h"
 
 #include <inttypes.h>
 
@@ -11,7 +11,7 @@ namespace titandb {
 
 const size_t kMaxFileCacheSize = 1024 * 1024;
 
-BlobSet::BlobSet(const TitanDBOptions& options, TitanStats* stats)
+BlobFileSet::BlobFileSet(const TitanDBOptions& options, TitanStats* stats)
     : dirname_(options.dirname),
       env_(options.env),
       env_options_(options),
@@ -24,7 +24,7 @@ BlobSet::BlobSet(const TitanDBOptions& options, TitanStats* stats)
   file_cache_ = NewLRUCache(file_cache_size);
 }
 
-Status BlobSet::Open(
+Status BlobFileSet::Open(
     const std::map<uint32_t, TitanCFOptions>& column_families) {
   // Sets up initial column families.
   AddColumnFamilies(column_families);
@@ -39,7 +39,7 @@ Status BlobSet::Open(
   return OpenManifest(NewFileNumber());
 }
 
-Status BlobSet::Recover() {
+Status BlobFileSet::Recover() {
   struct LogReporter : public log::Reader::Reporter {
     Status* status;
     void Corruption(size_t, const Status& s) override {
@@ -145,7 +145,7 @@ Status BlobSet::Recover() {
   return Status::OK();
 }
 
-Status BlobSet::OpenManifest(uint64_t file_number) {
+Status BlobFileSet::OpenManifest(uint64_t file_number) {
   Status s;
 
   auto file_name = DescriptorFileName(dirname_, file_number);
@@ -177,7 +177,7 @@ Status BlobSet::OpenManifest(uint64_t file_number) {
   return s;
 }
 
-Status BlobSet::WriteSnapshot(log::Writer* log) {
+Status BlobFileSet::WriteSnapshot(log::Writer* log) {
   Status s;
   // Saves global information
   {
@@ -207,8 +207,8 @@ Status BlobSet::WriteSnapshot(log::Writer* log) {
   return s;
 }
 
-Status BlobSet::LogAndApply(VersionEdit& edit) {
-  TEST_SYNC_POINT("BlobSet::LogAndApply");
+Status BlobFileSet::LogAndApply(VersionEdit& edit) {
+  TEST_SYNC_POINT("BlobFileSet::LogAndApply");
   // TODO(@huachao): write manifest file unlocked
   std::string record;
   edit.SetNextFileNumber(next_file_number_.load());
@@ -228,7 +228,7 @@ Status BlobSet::LogAndApply(VersionEdit& edit) {
   return collector.Apply(*this);
 }
 
-void BlobSet::AddColumnFamilies(
+void BlobFileSet::AddColumnFamilies(
     const std::map<uint32_t, TitanCFOptions>& column_families) {
   for (auto& cf : column_families) {
     auto file_cache = std::make_shared<BlobFileCache>(db_options_, cf.second,
@@ -239,8 +239,9 @@ void BlobSet::AddColumnFamilies(
   }
 }
 
-Status BlobSet::DropColumnFamilies(const std::vector<uint32_t>& column_families,
-                                   SequenceNumber obsolete_sequence) {
+Status BlobFileSet::DropColumnFamilies(
+    const std::vector<uint32_t>& column_families,
+    SequenceNumber obsolete_sequence) {
   Status s;
   for (auto& cf_id : column_families) {
     auto it = column_families_.find(cf_id);
@@ -265,7 +266,7 @@ Status BlobSet::DropColumnFamilies(const std::vector<uint32_t>& column_families,
   return s;
 }
 
-Status BlobSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
+Status BlobFileSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
   obsolete_columns_.erase(cf_id);
   auto it = column_families_.find(cf_id);
   if (it != column_families_.end()) {
@@ -280,8 +281,8 @@ Status BlobSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
   return Status::NotFound("invalid column family");
 }
 
-void BlobSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
-                               SequenceNumber oldest_sequence) {
+void BlobFileSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
+                                   SequenceNumber oldest_sequence) {
   for (auto it = column_families_.begin(); it != column_families_.end();) {
     auto& cf_id = it->first;
     auto& blob_storage = it->second;

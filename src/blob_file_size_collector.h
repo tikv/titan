@@ -1,6 +1,6 @@
 #pragma once
 
-#include "blob_set.h"
+#include "blob_file_set.h"
 #include "db_impl.h"
 #include "rocksdb/listener.h"
 #include "rocksdb/table_properties.h"

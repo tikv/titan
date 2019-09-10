@@ -3,8 +3,8 @@
 #include "blob_file_builder.h"
 #include "blob_file_iterator.h"
 #include "blob_file_manager.h"
+#include "blob_file_set.h"
 #include "blob_gc.h"
-#include "blob_set.h"
 #include "db/db_impl/db_impl.h"
 #include "rocksdb/statistics.h"
 #include "rocksdb/status.h"
@@ -20,7 +20,7 @@ class BlobGCJob {
   BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
             const TitanDBOptions& titan_db_options, Env* env,
             const EnvOptions& env_options, BlobFileManager* blob_file_manager,
-            BlobSet* blob_set, LogBuffer* log_buffer,
+            BlobFileSet* blob_file_set, LogBuffer* log_buffer,
             std::atomic_bool* shuting_down, TitanStats* stats);
 
   // No copying allowed
@@ -50,7 +50,7 @@ class BlobGCJob {
   Env* env_;
   EnvOptions env_options_;
   BlobFileManager* blob_file_manager_;
-  BlobSet* blob_set_;
+  BlobFileSet* blob_file_set_;
   LogBuffer* log_buffer_{nullptr};
 
   std::vector<std::pair<std::unique_ptr<BlobFileHandle>,

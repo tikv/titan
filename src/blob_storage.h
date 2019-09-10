@@ -101,7 +101,7 @@ class BlobStorage {
                         SequenceNumber obsolete_sequence);
 
  private:
-  friend class BlobSet;
+  friend class BlobFileSet;
   friend class VersionTest;
   friend class BlobGCPickerTest;
   friend class BlobGCJobTest;

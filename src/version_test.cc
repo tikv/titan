@@ -1,7 +1,7 @@
 #include "file/filename.h"
 #include "test_util/testharness.h"
 
-#include "blob_set.h"
+#include "blob_file_set.h"
 #include "edit_collector.h"
 #include "testutil.h"
 #include "util.h"
@@ -29,7 +29,7 @@ class VersionTest : public testing::Test {
   TitanCFOptions cf_options_;
   std::shared_ptr<BlobFileCache> file_cache_;
   std::map<uint32_t, std::shared_ptr<BlobStorage>> column_families_;
-  std::unique_ptr<BlobSet> blob_set_;
+  std::unique_ptr<BlobFileSet> blob_file_set_;
   port::Mutex mutex_;
   std::string dbname_;
   Env* env_;
@@ -49,8 +49,8 @@ class VersionTest : public testing::Test {
     DeleteDir(env_, db_options_.dirname);
     env_->CreateDirIfMissing(db_options_.dirname);
 
-    blob_set_.reset(new BlobSet(db_options_, nullptr));
-    ASSERT_OK(blob_set_->Open({}));
+    blob_file_set_.reset(new BlobFileSet(db_options_, nullptr));
+    ASSERT_OK(blob_file_set_->Open({}));
     column_families_.clear();
     // Sets up some column families.
     for (uint32_t id = 0; id < 10; id++) {
@@ -60,7 +60,7 @@ class VersionTest : public testing::Test {
       column_families_.emplace(id, storage);
       storage.reset(
           new BlobStorage(db_options_, cf_options_, id, file_cache_, nullptr));
-      blob_set_->column_families_.emplace(id, storage);
+      blob_file_set_->column_families_.emplace(id, storage);
     }
   }
 
@@ -84,9 +84,9 @@ class VersionTest : public testing::Test {
     for (auto& edit : edits) {
       ASSERT_OK(collector.AddEdit(edit));
     }
-    ASSERT_OK(collector.Seal(*blob_set_.get()));
-    ASSERT_OK(collector.Apply(*blob_set_.get()));
-    for (auto& it : blob_set_->column_families_) {
+    ASSERT_OK(collector.Seal(*blob_file_set_.get()));
+    ASSERT_OK(collector.Apply(*blob_file_set_.get()));
+    for (auto& it : blob_file_set_->column_families_) {
       auto& storage = column_families_[it.first];
       // ignore obsolete file
       auto size = 0;
@@ -105,7 +105,7 @@ class VersionTest : public testing::Test {
   }
 
   void CheckColumnFamiliesSize(uint64_t size) {
-    ASSERT_EQ(blob_set_->column_families_.size(), size);
+    ASSERT_EQ(blob_file_set_->column_families_.size(), size);
   }
 };
 
@@ -149,8 +149,8 @@ TEST_F(VersionTest, InvalidEdit) {
     auto add1_0_4 = AddBlobFilesEdit(1, 0, 4);
     EditCollector collector;
     ASSERT_OK(collector.AddEdit(add1_0_4));
-    ASSERT_OK(collector.Seal(*blob_set_.get()));
-    ASSERT_OK(collector.Apply(*blob_set_.get()));
+    ASSERT_OK(collector.Seal(*blob_file_set_.get()));
+    ASSERT_OK(collector.Apply(*blob_file_set_.get()));
   }
 
   // delete nonexistent blobs
@@ -158,8 +158,8 @@ TEST_F(VersionTest, InvalidEdit) {
     auto del1_4_6 = DeleteBlobFilesEdit(1, 4, 6);
     EditCollector collector;
     ASSERT_OK(collector.AddEdit(del1_4_6));
-    ASSERT_NOK(collector.Seal(*blob_set_.get()));
-    ASSERT_NOK(collector.Apply(*blob_set_.get()));
+    ASSERT_NOK(collector.Seal(*blob_file_set_.get()));
+    ASSERT_NOK(collector.Apply(*blob_file_set_.get()));
   }
 
   // add already existing blobs
@@ -167,8 +167,8 @@ TEST_F(VersionTest, InvalidEdit) {
     auto add1_1_3 = AddBlobFilesEdit(1, 1, 3);
     EditCollector collector;
     ASSERT_OK(collector.AddEdit(add1_1_3));
-    ASSERT_NOK(collector.Seal(*blob_set_.get()));
-    ASSERT_NOK(collector.Apply(*blob_set_.get()));
+    ASSERT_NOK(collector.Seal(*blob_file_set_.get()));
+    ASSERT_NOK(collector.Apply(*blob_file_set_.get()));
   }
 
   // add same blobs
@@ -178,8 +178,8 @@ TEST_F(VersionTest, InvalidEdit) {
     EditCollector collector;
     ASSERT_OK(collector.AddEdit(add1_4_5_1));
     ASSERT_NOK(collector.AddEdit(add1_4_5_2));
-    ASSERT_NOK(collector.Seal(*blob_set_.get()));
-    ASSERT_NOK(collector.Apply(*blob_set_.get()));
+    ASSERT_NOK(collector.Seal(*blob_file_set_.get()));
+    ASSERT_NOK(collector.Apply(*blob_file_set_.get()));
   }
 
   // delete same blobs
@@ -189,8 +189,8 @@ TEST_F(VersionTest, InvalidEdit) {
     EditCollector collector;
     ASSERT_OK(collector.AddEdit(del1_3_4_1));
     ASSERT_NOK(collector.AddEdit(del1_3_4_2));
-    ASSERT_NOK(collector.Seal(*blob_set_.get()));
-    ASSERT_NOK(collector.Apply(*blob_set_.get()));
+    ASSERT_NOK(collector.Seal(*blob_file_set_.get()));
+    ASSERT_NOK(collector.Apply(*blob_file_set_.get()));
   }
 }
 
@@ -237,35 +237,35 @@ TEST_F(VersionTest, ObsoleteFiles) {
   std::map<uint32_t, TitanCFOptions> m;
   m.insert({1, TitanCFOptions()});
   m.insert({2, TitanCFOptions()});
-  blob_set_->AddColumnFamilies(m);
+  blob_file_set_->AddColumnFamilies(m);
   {
     auto add1_1_5 = AddBlobFilesEdit(1, 1, 5);
     MutexLock l(&mutex_);
-    blob_set_->LogAndApply(add1_1_5);
+    blob_file_set_->LogAndApply(add1_1_5);
   }
   std::vector<std::string> of;
-  blob_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
+  blob_file_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
   ASSERT_EQ(of.size(), 0);
   {
     auto del1_4_5 = DeleteBlobFilesEdit(1, 4, 5);
     MutexLock l(&mutex_);
-    blob_set_->LogAndApply(del1_4_5);
+    blob_file_set_->LogAndApply(del1_4_5);
   }
-  blob_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
+  blob_file_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
   ASSERT_EQ(of.size(), 1);
 
   std::vector<uint32_t> cfs = {1};
-  ASSERT_OK(blob_set_->DropColumnFamilies(cfs, 0));
-  blob_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
+  ASSERT_OK(blob_file_set_->DropColumnFamilies(cfs, 0));
+  blob_file_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
   ASSERT_EQ(of.size(), 1);
   CheckColumnFamiliesSize(10);
 
-  ASSERT_OK(blob_set_->MaybeDestroyColumnFamily(1));
-  blob_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
+  ASSERT_OK(blob_file_set_->MaybeDestroyColumnFamily(1));
+  blob_file_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
   ASSERT_EQ(of.size(), 4);
   CheckColumnFamiliesSize(9);
 
-  ASSERT_OK(blob_set_->MaybeDestroyColumnFamily(2));
+  ASSERT_OK(blob_file_set_->MaybeDestroyColumnFamily(2));
   CheckColumnFamiliesSize(8);
 }
 

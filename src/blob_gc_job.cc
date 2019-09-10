@@ -75,9 +75,9 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
 BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
                      const TitanDBOptions& titan_db_options, Env* env,
                      const EnvOptions& env_options,
-                     BlobFileManager* blob_file_manager, BlobSet* blob_set,
-                     LogBuffer* log_buffer, std::atomic_bool* shuting_down,
-                     TitanStats* stats)
+                     BlobFileManager* blob_file_manager,
+                     BlobFileSet* blob_file_set, LogBuffer* log_buffer,
+                     std::atomic_bool* shuting_down, TitanStats* stats)
     : blob_gc_(blob_gc),
       base_db_(db),
       base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)),
@@ -86,7 +86,7 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
       env_(env),
       env_options_(env_options),
       blob_file_manager_(blob_file_manager),
-      blob_set_(blob_set),
+      blob_file_set_(blob_file_set),
       log_buffer_(log_buffer),
       shuting_down_(shuting_down),
       stats_(stats) {}
@@ -579,7 +579,7 @@ Status BlobGCJob::DeleteInputBlobFiles() {
     metrics_.blob_db_gc_num_files++;
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
   }
-  s = blob_set_->LogAndApply(edit);
+  s = blob_file_set_->LogAndApply(edit);
   // TODO(@DorianZheng) Purge pending outputs
   // base_db_->pending_outputs_.erase(handle->GetNumber());
   return s;

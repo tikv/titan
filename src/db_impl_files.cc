@@ -9,7 +9,7 @@ Status TitanDBImpl::PurgeObsoleteFilesImpl() {
   auto oldest_sequence = GetOldestSnapshotSequence();
   {
     MutexLock l(&mutex_);
-    blob_set_->GetObsoleteFiles(&candidate_files, oldest_sequence);
+    blob_file_set_->GetObsoleteFiles(&candidate_files, oldest_sequence);
   }
 
   // dedup state.inputs so we don't try to delete the same

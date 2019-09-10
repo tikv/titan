@@ -5,7 +5,7 @@
 
 #include "blob_file_manager.h"
 #include "blob_file_reader.h"
-#include "blob_set.h"
+#include "blob_file_set.h"
 #include "table_factory.h"
 
 namespace rocksdb {
@@ -81,11 +81,11 @@ class TableBuilderTest : public testing::Test {
         blob_name_(BlobFileName(tmpdir_, kTestFileNumber)) {
     db_options_.dirname = tmpdir_;
     cf_options_.min_blob_size = kMinBlobSize;
-    blob_set_.reset(new BlobSet(db_options_, nullptr));
+    blob_file_set_.reset(new BlobFileSet(db_options_, nullptr));
     blob_manager_.reset(new FileManager(db_options_));
     table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
                                                blob_manager_, &mutex_,
-                                               blob_set_.get(), nullptr));
+                                               blob_file_set_.get(), nullptr));
   }
 
   ~TableBuilderTest() {
@@ -172,7 +172,7 @@ class TableBuilderTest : public testing::Test {
   std::string blob_name_;
   std::unique_ptr<TableFactory> table_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
-  std::unique_ptr<BlobSet> blob_set_;
+  std::unique_ptr<BlobFileSet> blob_file_set_;
 };
 
 TEST_F(TableBuilderTest, Basic) {

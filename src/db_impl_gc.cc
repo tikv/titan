@@ -67,7 +67,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   Status s;
   if (!gc_queue_.empty()) {
     uint32_t column_family_id = PopFirstFromGCQueue();
-    auto bs = blob_set_->GetBlobStorage(column_family_id).lock().get();
+    auto bs = blob_file_set_->GetBlobStorage(column_family_id).lock().get();
 
     if (bs) {
       const auto& cf_options = bs->cf_options();
@@ -90,8 +90,9 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
     ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
-                          env_options_, blob_manager_.get(), blob_set_.get(),
-                          log_buffer, &shuting_down_, stats_.get());
+                          env_options_, blob_manager_.get(),
+                          blob_file_set_.get(), log_buffer, &shuting_down_,
+                          stats_.get());
     s = blob_gc_job.Prepare();
     if (s.ok()) {
       mutex_.Unlock();
@@ -142,7 +143,7 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
     std::unique_ptr<BlobGC> blob_gc;
     std::unique_ptr<ColumnFamilyHandle> cfh;
 
-    auto bs = blob_set_->GetBlobStorage(column_family_id).lock().get();
+    auto bs = blob_file_set_->GetBlobStorage(column_family_id).lock().get();
     const auto& cf_options = bs->cf_options();
     std::shared_ptr<BlobGCPicker> blob_gc_picker =
         std::make_shared<BasicBlobGCPicker>(db_options_, cf_options);
@@ -158,8 +159,9 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
       ROCKS_LOG_BUFFER(&log_buffer, "Titan GC nothing to do");
     } else {
       BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
-                            env_options_, blob_manager_.get(), blob_set_.get(),
-                            &log_buffer, &shuting_down_, stats_.get());
+                            env_options_, blob_manager_.get(),
+                            blob_file_set_.get(), &log_buffer, &shuting_down_,
+                            stats_.get());
       s = blob_gc_job.Prepare();
 
       if (s.ok()) {
