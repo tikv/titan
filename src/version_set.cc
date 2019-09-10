@@ -249,7 +249,7 @@ Status VersionSet::DropColumnFamilies(
       VersionEdit edit;
       edit.SetColumnFamilyID(it->first);
       for (auto& file : it->second->files_) {
-        if (!file->is_obsolete()) {
+        if (!file.second->is_obsolete()) {
           ROCKS_LOG_INFO(db_options_.info_log,
                          "Titan add obsolete file [%" PRIu64 "]",
                          file.second->file_number());
