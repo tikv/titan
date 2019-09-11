@@ -924,7 +924,7 @@ TEST_F(TitanDBTest, BackgroundErrorTrigger) {
   }
   Flush();
   ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
-  SyncPoint::GetInstance()->SetCallBack("VersionSet::LogAndApply", [&](void*) {
+  SyncPoint::GetInstance()->SetCallBack("BlobFileSet::LogAndApply", [&](void*) {
     mock_env->SetFilesystemActive(false, Status::IOError("Injected error"));
   });
   SyncPoint::GetInstance()->EnableProcessing();
