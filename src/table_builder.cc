@@ -150,8 +150,8 @@ void TitanTableBuilder::FinishBlob() {
                      "Titan table builder finish output file %" PRIu64 ".",
                      blob_handle_->GetNumber());
       std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
-          blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(),
-          blob_builder_->NumEntries(), target_level_);
+          blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(), blob_builder_->NumEntries(),
+              target_level_, blob_builder_->GetSmallestKey(), blob_builder_->GetLargestKey());
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
       finished_blobs_.push_back({file, std::move(blob_handle_)});
       blob_builder_.reset();
