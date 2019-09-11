@@ -428,19 +428,37 @@ TEST_F(TableBuilderTest, LevelMerge) {
       ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
       false /*skip_filters*/, TableReaderCaller::kUncategorized));
 
-  // make sure value address has changed after compaction
+  // compare key, index and blob records after level merge
   first_iter->SeekToFirst();
   second_iter->SeekToFirst();
+  auto storage = vset_->GetBlobStorage(0).lock();
   for (unsigned char i = 0; i < n; i++) {
     ASSERT_TRUE(first_iter->Valid());
     ASSERT_TRUE(second_iter->Valid());
+
+    // compare sst key
     ParsedInternalKey first_ikey, second_ikey;
     ASSERT_TRUE(ParseInternalKey(first_iter->key(), &first_ikey));
     ASSERT_TRUE(ParseInternalKey(first_iter->key(), &second_ikey));
     ASSERT_EQ(first_ikey.type, kTypeBlobIndex);
     ASSERT_EQ(second_ikey.type, kTypeBlobIndex);
     ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
-    ASSERT_NE(first_iter->value(), second_iter->value());
+
+    // compare blob record
+    Slice first_value = first_iter->value();
+    Slice second_value = second_iter->value();
+    BlobIndex first_index, second_index;
+    BlobRecord first_record, second_record;
+    PinnableSlice first_buffer, second_buffer;
+    ASSERT_OK(first_index.DecodeFrom(&first_value));
+    ASSERT_OK(second_index.DecodeFrom(&second_value));
+    ASSERT_FALSE(first_index == second_index);
+    ASSERT_OK(
+        storage->Get(ReadOptions(), first_index, &first_record, &first_buffer));
+    ASSERT_OK(storage->Get(ReadOptions(), second_index, &second_record,
+                           &second_buffer));
+    ASSERT_EQ(first_record.key, second_record.key);
+    ASSERT_EQ(first_record.value, second_record.value);
 
     first_iter->Next();
     second_iter->Next();
