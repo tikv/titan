@@ -26,8 +26,8 @@ const std::string TitanDB::Properties::kLiveBlobFileSize =
 const std::string TitanDB::Properties::kObsoleteBlobFileSize =
     titandb_prefix + obsolete_blob_file_size;
 
-const std::unordered_map<std::string, TitanInternalStats::StatsType>
-    TitanInternalStats::stats_type_string_map = {
+const std::unordered_map<std::string, TitanInternalStats::TickerType>
+    TitanInternalStats::ticker_type_string_map = {
         {TitanDB::Properties::kLiveBlobSize,
          TitanInternalStats::LIVE_BLOB_SIZE},
         {TitanDB::Properties::kNumLiveBlobFile,
@@ -39,6 +39,9 @@ const std::unordered_map<std::string, TitanInternalStats::StatsType>
         {TitanDB::Properties::kObsoleteBlobFileSize,
          TitanInternalStats::OBSOLETE_BLOB_FILE_SIZE},
 };
+
+const std::unordered_map<std::string, TitanInternalStats::HistogramType>
+    TitanInternalStats::histogram_type_string_map = {};
 
 const std::array<std::string,
                  static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
