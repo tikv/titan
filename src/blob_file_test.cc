@@ -4,6 +4,8 @@
 #include "util/filename.h"
 #include "util/testharness.h"
 
+#include <cinttypes>
+
 namespace rocksdb {
 namespace titandb {
 
@@ -17,6 +19,14 @@ class BlobFileTest : public testing::Test {
     env_->DeleteFile(file_name_);
     env_->DeleteDir(dirname_);
   }
+
+  std::string GenKey(uint64_t i) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "k-%08" PRIu64, i);
+    return buf;
+  }
+
+  std::string GenValue(uint64_t i) { return std::string(1024, i); }
 
   void TestBlobFilePrefetcher(TitanOptions options) {
     options.dirname = dirname_;
@@ -38,8 +48,8 @@ class BlobFileTest : public testing::Test {
         new BlobFileBuilder(db_options, cf_options, file.get()));
 
     for (int i = 0; i < n; i++) {
-      auto key = std::to_string(i);
-      auto value = std::string(1024, i);
+      auto key = GenKey(i);
+      auto value = GenValue(i);
       BlobRecord record;
       record.key = key;
       record.value = value;
@@ -56,8 +66,8 @@ class BlobFileTest : public testing::Test {
     std::unique_ptr<BlobFilePrefetcher> prefetcher;
     ASSERT_OK(cache.NewPrefetcher(file_number_, file_size, &prefetcher));
     for (int i = 0; i < n; i++) {
-      auto key = std::to_string(i);
-      auto value = std::string(1024, i);
+      auto key = GenKey(i);
+      auto value = GenValue(i);
       BlobRecord expect;
       expect.key = key;
       expect.value = value;
@@ -99,8 +109,8 @@ class BlobFileTest : public testing::Test {
         new BlobFileBuilder(db_options, cf_options, file.get()));
 
     for (int i = 0; i < n; i++) {
-      auto key = std::to_string(i);
-      auto value = std::string(1024, i);
+      auto key = GenKey(i);
+      auto value = GenValue(i);
       BlobRecord record;
       record.key = key;
       record.value = value;
@@ -122,8 +132,8 @@ class BlobFileTest : public testing::Test {
                                    std::move(random_access_file_reader),
                                    file_size, &blob_file_reader, nullptr));
     for (int i = 0; i < n; i++) {
-      auto key = std::to_string(i);
-      auto value = std::string(1024, i);
+      auto key = GenKey(i);
+      auto value = GenValue(i);
       BlobRecord expect;
       expect.key = key;
       expect.value = value;

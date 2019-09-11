@@ -30,7 +30,8 @@ class BlobGCPickerTest : public testing::Test {
 
   void AddBlobFile(uint64_t file_number, uint64_t file_size,
                    uint64_t discardable_size, bool being_gc = false) {
-    auto f = std::make_shared<BlobFileMeta>(file_number, file_size);
+    auto f =
+        std::make_shared<BlobFileMeta>(file_number, file_size, 0, 0, "", "");
     f->AddDiscardableSize(discardable_size);
     f->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
     if (being_gc) {
