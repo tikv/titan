@@ -252,10 +252,17 @@ class TitanDBTest : public testing::Test {
   }
 
   void CallGC() {
-    db_impl_->bg_gc_scheduled_++;
+    {
+      MutexLock l(&db_impl_->mutex_);
+      db_impl_->bg_gc_scheduled_++;
+    }
     db_impl_->BackgroundCallGC();
-    while (db_impl_->bg_gc_scheduled_)
-      ;
+    {
+      MutexLock l(&db_impl_->mutex_);
+      while (db_impl_->bg_gc_scheduled_) {
+        db_impl_->bg_cv_.Wait();
+      }
+    }
   }
 
   // Make db ignore first bg_error
@@ -932,6 +939,89 @@ TEST_F(TitanDBTest, BackgroundErrorTrigger) {
   mock_env->SetFilesystemActive(true);
   // Still failed for bg error
   ASSERT_TRUE(db_impl_->Put(WriteOptions(), "key", "val").IsIOError());
+  Close();
+}
+
+// Make sure DropColumnFamilies() will wait if there's running GC job.
+TEST_F(TitanDBTest, DropCFWhileGC) {
+  options_.min_blob_size = 0;
+  options_.blob_file_discardable_ratio = 0.1;
+  options_.disable_background_gc = false;
+  Open();
+
+  // Create CF.
+  std::vector<TitanCFDescriptor> descs = {{"new_cf", options_}};
+  std::vector<ColumnFamilyHandle*> handles;
+  ASSERT_OK(db_->CreateColumnFamilies(descs, &handles));
+  ASSERT_EQ(1, handles.size());
+  auto* cfh = handles[0];
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBImpl::BackgroundCallGC:BeforeBackgroundGC",
+        "TitanDBImpl::DropColumnFamilies:Begin"}});
+  SyncPoint::GetInstance()->SetCallBack(
+      "TitanDBImpl::DropColumnFamilies:BeforeBaseDBDropCF",
+      [&](void*) { ASSERT_EQ(0, db_impl_->TEST_bg_gc_running()); });
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  // Create two blob files, and trigger GC of the first one.
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "foo", "v1"));
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "bar", "v1"));
+  ASSERT_OK(db_->Flush(FlushOptions(), cfh));
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "foo", "v2"));
+  ASSERT_OK(db_->Flush(FlushOptions(), cfh));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), cfh, nullptr, nullptr));
+
+  // Verify no GC job is running while we drop the CF.
+  ASSERT_OK(db_->DropColumnFamilies(handles));
+
+  // Cleanup.
+  ASSERT_OK(db_->DestroyColumnFamilyHandle(cfh));
+  Close();
+}
+
+// Make sure GC job will not run on a dropped CF.
+TEST_F(TitanDBTest, GCAfterDropCF) {
+  options_.min_blob_size = 0;
+  options_.blob_file_discardable_ratio = 0.1;
+  options_.disable_background_gc = false;
+  Open();
+
+  // Create CF.
+  std::vector<TitanCFDescriptor> descs = {{"new_cf", options_}};
+  std::vector<ColumnFamilyHandle*> handles;
+  ASSERT_OK(db_->CreateColumnFamilies(descs, &handles));
+  ASSERT_EQ(1, handles.size());
+  auto* cfh = handles[0];
+
+  std::atomic<int> skip_dropped_cf_count{0};
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBTest::GCAfterDropCF:AfterDropCF",
+        "TitanDBImpl::BackgroundCallGC:BeforeGCRunning"},
+       {"TitanDBImpl::BackgroundGC:Finish",
+        "TitanDBTest::GCAfterDropCF:WaitGC"}});
+  SyncPoint::GetInstance()->SetCallBack(
+      "TitanDBImpl::BackgroundGC:CFDropped",
+      [&](void*) { skip_dropped_cf_count++; });
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  // Create two blob files, and trigger GC of the first one.
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "foo", "v1"));
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "bar", "v1"));
+  ASSERT_OK(db_->Flush(FlushOptions(), cfh));
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "foo", "v2"));
+  ASSERT_OK(db_->Flush(FlushOptions(), cfh));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), cfh, nullptr, nullptr));
+
+  // Drop CF before GC runs. Check if GC job skip the dropped CF.
+  ASSERT_OK(db_->DropColumnFamilies(handles));
+  TEST_SYNC_POINT("TitanDBTest::GCAfterDropCF:AfterDropCF");
+  TEST_SYNC_POINT("TitanDBTest::GCAfterDropCF:WaitGC");
+  ASSERT_EQ(1, skip_dropped_cf_count.load());
+
+  // Cleanup.
+  ASSERT_OK(db_->DestroyColumnFamilyHandle(cfh));
   Close();
 }
 

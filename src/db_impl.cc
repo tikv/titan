@@ -391,6 +391,7 @@ Status TitanDBImpl::CreateColumnFamilies(
 
 Status TitanDBImpl::DropColumnFamilies(
     const std::vector<ColumnFamilyHandle*>& handles) {
+  TEST_SYNC_POINT("TitanDBImpl::DropColumnFamilies:Begin");
   std::vector<uint32_t> column_families;
   std::string column_families_str;
   for (auto& handle : handles) {
@@ -408,6 +409,8 @@ Status TitanDBImpl::DropColumnFamilies(
       bg_cv_.Wait();
     }
   }
+  TEST_SYNC_POINT_CALLBACK("TitanDBImpl::DropColumnFamilies:BeforeBaseDBDropCF",
+                           nullptr);
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
     MutexLock l(&mutex_);

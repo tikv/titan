@@ -137,6 +137,11 @@ class TitanDBImpl : public TitanDB {
   Status TEST_StartGC(uint32_t column_family_id);
   Status TEST_PurgeObsoleteFiles();
 
+  int TEST_bg_gc_running() {
+    MutexLock l(&mutex_);
+    return bg_gc_running_;
+  }
+
  private:
   class FileManager;
   friend class FileManager;

@@ -1,5 +1,7 @@
 #include "db_impl.h"
 
+#include "test_util/sync_point.h"
+
 #include "blob_file_iterator.h"
 #include "blob_gc_job.h"
 #include "blob_gc_picker.h"
@@ -28,6 +30,7 @@ void TitanDBImpl::BGWorkGC(void* db) {
 
 void TitanDBImpl::BackgroundCallGC() {
   LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
+  TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeGCRunning");
 
   {
     MutexLock l(&mutex_);
@@ -37,6 +40,7 @@ void TitanDBImpl::BackgroundCallGC() {
     }
     bg_gc_running_++;
 
+    TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeBackgroundGC");
     BackgroundGC(&log_buffer);
 
     {
@@ -77,6 +81,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
     if (!vset_->IsColumnFamilyObsolete(column_family_id)) {
       blob_storage = vset_->GetBlobStorage(column_family_id).lock();
     } else {
+      TEST_SYNC_POINT_CALLBACK("TitanDBImpl::BackgroundGC:CFDropped", nullptr);
       ROCKS_LOG_BUFFER(log_buffer, "GC skip dropped colum family [%s].",
                        cf_info_[column_family_id].name.c_str());
     }
@@ -132,6 +137,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
                    s.ToString().c_str());
   }
 
+  TEST_SYNC_POINT("TitanDBImpl::BackgroundGC:Finish");
   return s;
 }
 
