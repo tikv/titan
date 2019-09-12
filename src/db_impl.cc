@@ -1097,9 +1097,9 @@ void TitanDBImpl::OnCompactionCompleted(
     char blob_file_name_str[16];
     char blob_discardable_size_str[16];
     for (const auto f : outputs) {
-      sprintf(blob_file_name_str, "%015llu", f);
+      sprintf(blob_file_name_str, "%015" PRIu64, f);
       blob_file_name_str[15] = 0;
-      sprintf(blob_discardable_size_str, "%015llu", 0LL);
+      sprintf(blob_discardable_size_str, "%015" PRIu64, 0LL);
       blob_discardable_size_str[15] = 0;
       new_blob.Put(persist_cf_handle, Slice(blob_file_name_str), Slice(blob_discardable_size_str));
     }
@@ -1137,9 +1137,9 @@ void TitanDBImpl::OnCompactionCompleted(
       }
       // update discardable_size
       file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
-      sprintf(blob_file_name_str, "%015llu", file->file_number());
+      sprintf(blob_file_name_str, "%015" PRIu64, file->file_number());
       blob_file_name_str[15] = 0;
-      sprintf(blob_discardable_size_str, "%015llu", file->discardable_size());
+      sprintf(blob_discardable_size_str, "%015" PRIu64, file->discardable_size());
       blob_discardable_size_str[15] = 0;
       new_blob.Put(persist_cf_handle, Slice(blob_file_name_str), Slice(blob_discardable_size_str));
     }

@@ -505,9 +505,9 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       char file_number_str[16];
       char discardable_size_str[16];
       for (auto& file : files) {
-        sprintf(file_number_str, "%015llu", file.first->file_number());
+        sprintf(file_number_str, "%015" PRIu64, file.first->file_number());
         file_number_str[15] = 0;
-        sprintf(discardable_size_str, "%015llu", 0LL);
+        sprintf(discardable_size_str, "%015" PRIu64, 0LL);
         discardable_size_str[15] = 0;
         stats_batch_.Put(persist_cf_handle, Slice(file_number_str), Slice(discardable_size_str));
         blob_gc_->AddOutputFile(file.first.get());
@@ -595,7 +595,7 @@ Status BlobGCJob::DeleteInputBlobFiles() {
                    file->file_number());
     metrics_.blob_db_gc_num_files++;
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
-    sprintf(file_number_str, "%015llu", file->file_number());
+    sprintf(file_number_str, "%015" PRIu64, file->file_number());
     file_number_str[15] = 0;
     // delete obsoleted file
     stats_batch_.Delete(persist_cf_handle, Slice(file_number_str));
