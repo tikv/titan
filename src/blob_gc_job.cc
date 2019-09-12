@@ -143,7 +143,7 @@ Status BlobGCJob::Run() {
                    blob_gc_->column_family_handle()->GetName().c_str(),
                    tmp.c_str(), tmp2.c_str());*/
   std::vector<BlobFileMeta*> files;
-  for (auto f : blob_gc_->inputs()){
+  for (auto f : blob_gc_->inputs()) {
     files.push_back(f);
   }
   blob_gc_->set_sampled_inputs(std::move(files));
@@ -501,7 +501,8 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     s = this->blob_file_manager_->BatchFinishFiles(
         blob_gc_->column_family_handle()->GetID(), files);
     if (s.ok()) {
-      ColumnFamilyHandle* persist_cf_handle = base_db_impl_->PersistentStatsColumnFamily();
+      ColumnFamilyHandle* persist_cf_handle =
+          base_db_impl_->PersistentStatsColumnFamily();
       char file_number_str[16];
       char discardable_size_str[16];
       for (auto& file : files) {
@@ -509,7 +510,8 @@ Status BlobGCJob::InstallOutputBlobFiles() {
         file_number_str[15] = 0;
         sprintf(discardable_size_str, "%015" PRIu64, 0LL);
         discardable_size_str[15] = 0;
-        stats_batch_.Put(persist_cf_handle, Slice(file_number_str), Slice(discardable_size_str));
+        stats_batch_.Put(persist_cf_handle, Slice(file_number_str),
+                         Slice(discardable_size_str));
         blob_gc_->AddOutputFile(file.first.get());
       }
     }
@@ -587,7 +589,8 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   Status s;
   VersionEdit edit;
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
-  ColumnFamilyHandle* persist_cf_handle = base_db_impl_->PersistentStatsColumnFamily();
+  ColumnFamilyHandle* persist_cf_handle =
+      base_db_impl_->PersistentStatsColumnFamily();
   char file_number_str[16];
   for (const auto& file : blob_gc_->sampled_inputs()) {
     ROCKS_LOG_INFO(db_options_.info_log,
