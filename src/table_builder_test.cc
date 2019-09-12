@@ -66,6 +66,8 @@ class FileManager : public BlobFileManager {
     return env_->DeleteFile(handle->GetName());
   }
 
+  uint64_t LastBlobNumber() { return number_.load() - 1; }
+
  private:
   class FileHandle : public BlobFileHandle {
    public:
@@ -114,8 +116,12 @@ class TableBuilderTest : public testing::Test {
   }
 
   ~TableBuilderTest() {
+    uint64_t last_blob_number =
+        reinterpret_cast<FileManager*>(blob_manager_.get())->LastBlobNumber();
+    for (uint64_t i = kTestFileNumber; i <= last_blob_number; i++) {
+      env_->DeleteFile(BlobFileName(tmpdir_, i));
+    }
     env_->DeleteFile(base_name_);
-    env_->DeleteFile(blob_name_);
     env_->DeleteDir(tmpdir_);
   }
 
@@ -159,9 +165,10 @@ class TableBuilderTest : public testing::Test {
                                    result, nullptr));
   }
 
-  void NewTableReader(std::unique_ptr<TableReader>* result) {
+  void NewTableReader(const std::string& fname,
+                      std::unique_ptr<TableReader>* result) {
     std::unique_ptr<RandomAccessFileReader> file;
-    NewBaseFileReader(&file);
+    NewFileReader(fname, &file);
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file->file_name(), &file_size));
     TableReaderOptions options(cf_ioptions_, nullptr, env_options_,
@@ -225,7 +232,7 @@ TEST_F(TableBuilderTest, Basic) {
   ASSERT_OK(base_file->Close());
 
   std::unique_ptr<TableReader> base_reader;
-  NewTableReader(&base_reader);
+  NewTableReader(base_name_, &base_reader);
   std::unique_ptr<BlobFileReader> blob_reader;
   NewBlobFileReader(&blob_reader);
 
@@ -278,7 +285,7 @@ TEST_F(TableBuilderTest, NoBlob) {
   BlobFileExists(false);
 
   std::unique_ptr<TableReader> base_reader;
-  NewTableReader(&base_reader);
+  NewTableReader(base_name_, &base_reader);
 
   ReadOptions ro;
   std::unique_ptr<InternalIterator> iter;
@@ -344,7 +351,8 @@ TEST_F(TableBuilderTest, NumEntries) {
   ASSERT_OK(table_builder->Finish());
 }
 
-TEST_F(TableBuilderTest, TargeSize) {
+// To test size of each blob file is around blob_file_target_size after building
+TEST_F(TableBuilderTest, TargetSize) {
   cf_options_.blob_file_target_size = kTargetBlobFileSize;
   table_factory_.reset(new TitanTableFactory(
       db_options_, cf_options_, blob_manager_, &mutex_, vset_.get(), nullptr));
@@ -360,14 +368,21 @@ TEST_F(TableBuilderTest, TargeSize) {
     table_builder->Add(ikey.Encode(), value);
   }
   ASSERT_OK(table_builder->Finish());
-  uint64_t file_size = 0;
-  ASSERT_OK(env_->GetFileSize(blob_name_, &file_size));
-  ASSERT_TRUE(file_size < kTargetBlobFileSize + 1 + kMinBlobSize);
-  ASSERT_TRUE(file_size > kTargetBlobFileSize - 1 - kMinBlobSize);
+  uint64_t last_file_number =
+      reinterpret_cast<FileManager*>(blob_manager_.get())->LastBlobNumber();
+  for (uint64_t i = kTestFileNumber; i <= last_file_number; i++) {
+    uint64_t file_size = 0;
+    ASSERT_OK(env_->GetFileSize(BlobFileName(tmpdir_, i), &file_size));
+    ASSERT_TRUE(file_size < kTargetBlobFileSize + 1 + kMinBlobSize);
+    if (i < last_file_number) {
+      ASSERT_TRUE(file_size > kTargetBlobFileSize - 1 - kMinBlobSize);
+    }
+  }
 }
 
+// Compact a level 0 file to last level, to test level merge is functional and
+// correct
 TEST_F(TableBuilderTest, LevelMerge) {
-  cf_options_.blob_file_target_size = kTargetBlobFileSize;
   cf_options_.level_merge = true;
   table_factory_.reset(new TitanTableFactory(
       db_options_, cf_options_, blob_manager_, &mutex_, vset_.get(), nullptr));
@@ -376,7 +391,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
   std::unique_ptr<TableBuilder> table_builder;
   NewTableBuilder(base_file.get(), &table_builder, 0 /* target_level */);
 
-  // generate a level 0 sst with blob file
+  // Generate a level 0 sst with blob file
   const int n = 255;
   for (unsigned char i = 0; i < n; i++) {
     std::string key(1, i);
@@ -389,21 +404,20 @@ TEST_F(TableBuilderTest, LevelMerge) {
   ASSERT_OK(base_file->Close());
 
   std::unique_ptr<TableReader> base_reader;
-  NewTableReader(&base_reader);
-
-  std::string first_base_name = base_name_;
-  base_name_ = base_name_ + "second";
-  NewBaseFileWriter(&base_file);
-  NewTableBuilder(base_file.get(), &table_builder, cf_options_.num_levels - 1);
-
+  NewTableReader(base_name_, &base_reader);
   ReadOptions ro;
   std::unique_ptr<InternalIterator> first_iter;
   first_iter.reset(base_reader->NewIterator(
       ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
       false /*skip_filters*/, TableReaderCaller::kUncategorized));
 
-  // compact level0 sst to last level, values will be merge to another blob file
+  // Base file of last level sst
+  std::string second_base_name = base_name_ + "second";
+  NewFileWriter(second_base_name, &base_file);
+  NewTableBuilder(base_file.get(), &table_builder, cf_options_.num_levels - 1);
+
   first_iter->SeekToFirst();
+  // Compact level0 sst to last level, values will be merge to another blob file
   for (unsigned char i = 0; i < n; i++) {
     ASSERT_TRUE(first_iter->Valid());
     table_builder->Add(first_iter->key(), first_iter->value());
@@ -414,13 +428,13 @@ TEST_F(TableBuilderTest, LevelMerge) {
   ASSERT_OK(base_file->Close());
 
   std::unique_ptr<TableReader> second_base_reader;
-  NewTableReader(&second_base_reader);
+  NewTableReader(second_base_name, &second_base_reader);
   std::unique_ptr<InternalIterator> second_iter;
   second_iter.reset(second_base_reader->NewIterator(
       ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
       false /*skip_filters*/, TableReaderCaller::kUncategorized));
 
-  // compare key, index and blob records after level merge
+  // Compare key, index and blob records after level merge
   first_iter->SeekToFirst();
   second_iter->SeekToFirst();
   auto storage = vset_->GetBlobStorage(0).lock();
@@ -428,7 +442,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
     ASSERT_TRUE(first_iter->Valid());
     ASSERT_TRUE(second_iter->Valid());
 
-    // compare sst key
+    // Compare sst key
     ParsedInternalKey first_ikey, second_ikey;
     ASSERT_TRUE(ParseInternalKey(first_iter->key(), &first_ikey));
     ASSERT_TRUE(ParseInternalKey(first_iter->key(), &second_ikey));
@@ -436,7 +450,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
     ASSERT_EQ(second_ikey.type, kTypeBlobIndex);
     ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
 
-    // compare blob record
+    // Compare blob records
     Slice first_value = first_iter->value();
     Slice second_value = second_iter->value();
     BlobIndex first_index, second_index;
@@ -456,7 +470,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
     second_iter->Next();
   }
 
-  env_->DeleteFile(first_base_name);
+  env_->DeleteFile(second_base_name);
 }
 
 }  // namespace titandb
