@@ -305,7 +305,7 @@ Status TitanDBImpl::RecoverGCStats(
     for (auto file : files) {
       uint64_t file_number = file.first;
       char file_number_str[16];
-      sprintf(file_number_str, "%015llu", file_number);
+      sprintf(file_number_str, "%015" PRIu64, file_number);
       file_number_str[15] = 0;
       ReadOptions ro;
       PinnableSlice stats_value;
@@ -980,9 +980,9 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
   char blob_discardable_size_str[16];
   for (const auto f : blob_files_size) {
     outputs.insert(f.first);
-    sprintf(blob_file_name_str, "%015llu", f.first);
+    sprintf(blob_file_name_str, "%015" PRIu64 , f.first);
     blob_file_name_str[15] = 0;
-    sprintf(blob_discardable_size_str, "%015llu", 0LL);
+    sprintf(blob_discardable_size_str, "%015" PRIu64 , 0LL);
     blob_discardable_size_str[15] = 0;
     new_blob.Put(db_impl_->PersistentStatsColumnFamily(),
                  Slice(blob_file_name_str), Slice(blob_discardable_size_str));
