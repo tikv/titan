@@ -149,6 +149,7 @@ Status BlobGCJob::Run() {
 }
 
 Status BlobGCJob::SampleCandidateFiles() {
+  TitanStopWatch sw(env_, metrics_.blob_db_gc_sampling_micros);
   std::vector<BlobFileMeta*> result;
   for (const auto& file : blob_gc_->inputs()) {
     bool selected = false;
@@ -398,6 +399,7 @@ Status BlobGCJob::BuildIterator(
 
 Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
                                bool* discardable) {
+  TitanStopWatch sw(env_, metrics_.blob_db_gc_read_lsm_micros);
   assert(discardable != nullptr);
   PinnableSlice index_entry;
   bool is_blob_index = false;
@@ -521,6 +523,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
 }
 
 Status BlobGCJob::RewriteValidKeyToLSM() {
+  TitanStopWatch sw(env_, metrics_.blob_db_gc_update_lsm_micros);
   Status s;
   auto* db_impl = reinterpret_cast<DBImpl*>(this->base_db_);
 
@@ -617,6 +620,12 @@ void BlobGCJob::UpdateInternalOpStats() {
            metrics_.blob_db_gc_num_files);
   AddStats(internal_op_stats, InternalOpStatsType::OUTPUT_FILE_NUM,
            metrics_.blob_db_gc_num_new_files);
+  AddStats(internal_op_stats, InternalOpStatsType::GC_SAMPLING_MICROS,
+           metrics_.blob_db_gc_sampling_micros);
+  AddStats(internal_op_stats, InternalOpStatsType::GC_READ_LSM_MICROS,
+           metrics_.blob_db_gc_read_lsm_micros);
+  AddStats(internal_op_stats, InternalOpStatsType::GC_UPDATE_LSM_MICROS,
+           metrics_.blob_db_gc_update_lsm_micros);
 }
 
 }  // namespace titandb

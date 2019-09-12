@@ -23,6 +23,10 @@ enum class InternalOpStatsType : int {
   IO_BYTES_WRITTEN,
   INPUT_FILE_NUM,
   OUTPUT_FILE_NUM,
+  GC_SAMPLING_MICROS,
+  GC_READ_LSM_MICROS,
+  // Update lsm and write callback
+  GC_UPDATE_LSM_MICROS,
   INTERNAL_OP_STATS_ENUM_MAX,
 };
 
@@ -261,6 +265,19 @@ inline void UpdateIOBytes(uint64_t prev_bytes_read, uint64_t prev_bytes_written,
     *bytes_written += io_stats->bytes_written - prev_bytes_written;
   }
 }
+
+class TitanStopWatch {
+ public:
+  TitanStopWatch(Env* env, uint64_t& stats)
+      : env_(env), stats_(stats), start_(env_->NowMicros()) {}
+
+  ~TitanStopWatch() { stats_ += env_->NowMicros() - start_; }
+
+ private:
+  Env* env_;
+  uint64_t& stats_;
+  uint64_t start_;
+};
 
 }  // namespace titandb
 }  // namespace rocksdb
