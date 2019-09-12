@@ -171,21 +171,15 @@ class TableBuilderTest : public testing::Test {
   }
 
   void NewTableBuilder(WritableFileWriter* file,
-                       std::unique_ptr<TableBuilder>* result) {
+                       std::unique_ptr<TableBuilder>* result,
+                       int target_level = 0) {
     CompressionOptions compression_opts;
     TableBuilderOptions options(cf_ioptions_, cf_moptions_,
                                 cf_ioptions_.internal_comparator, &collectors_,
                                 kNoCompression, 0 /*sample_for_compression*/,
                                 compression_opts, false /*skip_filters*/,
-                                kDefaultColumnFamilyName, 0 /*level*/);
+                                kDefaultColumnFamilyName, target_level);
     result->reset(table_factory_->NewTableBuilder(options, 0, file));
-  }
-
-  void SetBuilderLevel(TitanTableBuilder* builder, int merge_level,
-                       int target_level) {
-    ASSERT_TRUE(builder != nullptr);
-    builder->merge_level_ = merge_level;
-    builder->target_level_ = target_level;
   }
 
   port::Mutex mutex_;
@@ -380,7 +374,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder);
+  NewTableBuilder(base_file.get(), &table_builder, 0 /* target_level */);
 
   // generate a level 0 sst with blob file
   const int n = 255;
@@ -400,9 +394,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
   std::string first_base_name = base_name_;
   base_name_ = base_name_ + "second";
   NewBaseFileWriter(&base_file);
-  NewTableBuilder(base_file.get(), &table_builder);
-  SetBuilderLevel(reinterpret_cast<TitanTableBuilder*>(table_builder.get()),
-                  1 /* merge level */, 1 /* target level */);
+  NewTableBuilder(base_file.get(), &table_builder, cf_options_.num_levels - 1);
 
   ReadOptions ro;
   std::unique_ptr<InternalIterator> first_iter;
@@ -410,7 +402,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
       ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
       false /*skip_filters*/, TableReaderCaller::kUncategorized));
 
-  // compact level0 sst to level1, values will be merge to another blob file
+  // compact level0 sst to last level, values will be merge to another blob file
   first_iter->SeekToFirst();
   for (unsigned char i = 0; i < n; i++) {
     ASSERT_TRUE(first_iter->Valid());
