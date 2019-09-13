@@ -54,6 +54,9 @@ class BlobFileBuilder {
   // REQUIRES: Finish(), Abandon() have not been called.
   void Abandon();
 
+  // Number of calls to Add() so far.
+  uint64_t NumEntries();
+
   const std::string& GetSmallestKey() { return smallest_key_; }
   const std::string& GetLargestKey() { return largest_key_; }
 
@@ -66,6 +69,7 @@ class BlobFileBuilder {
   Status status_;
   BlobEncoder encoder_;
 
+  uint64_t num_entries_{0};
   std::string smallest_key_;
   std::string largest_key_;
 };
