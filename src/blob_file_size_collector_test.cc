@@ -125,13 +125,15 @@ TEST_F(BlobFileSizeCollectorTest, Basic) {
   ASSERT_TRUE(iter != table_properties->user_collected_properties.end());
 
   Slice raw_blob_file_size_prop(iter->second);
-  std::map<uint64_t, uint64_t> result;
+  std::map<uint64_t, BlobFileSize> result;
   BlobFileSizeCollector::Decode(&raw_blob_file_size_prop, &result);
 
   ASSERT_EQ(2, result.size());
 
-  ASSERT_EQ(kNumEntries / 2 * 10, result[0]);
-  ASSERT_EQ(kNumEntries / 2 * 10, result[1]);
+  ASSERT_EQ(kNumEntries / 2 * 10, result[0].size);
+  ASSERT_EQ(kNumEntries / 2 * 10, result[1].size);
+  ASSERT_EQ(kNumEntries / 2, result[0].entries);
+  ASSERT_EQ(kNumEntries / 2, result[1].entries);
 }
 
 }  // namespace titandb
