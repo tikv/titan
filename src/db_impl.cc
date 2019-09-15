@@ -1116,12 +1116,11 @@ void TitanDBImpl::OnCompactionCompleted(
       if (cf_options.level_merge) {
         // After level merge, most entries of merged blob files are written to
         // new blob files. Delete blob files which all entries are discardable.
-        // Mark blob files which discardable size reached gc threshold to merge
-        // in next compaction.
+        // Mark last two level blob files to merge in next compaction if discardable size reached GC threshold
         if (file->Expired()) {
           edit.DeleteBlobFile(file->file_number(),
                               db_impl_->GetLatestSequenceNumber());
-        } else if (file->GetDiscardableRatio() >
+        } else if ((int)file->file_level() >= cf_options.num_levels-2 && file->GetDiscardableRatio() >
                    cf_options.blob_file_discardable_ratio) {
           file->FileStateTransit(BlobFileMeta::FileEvent::kNeedGC);
         }
