@@ -243,7 +243,7 @@ double BlobFileMeta::GetDiscardableRatio() const {
 
 void BlobFileMeta::AddDiscardableEntries(uint64_t _discardable_entries) {
   // for compatibility
-  if(file_entries_==0) return;
+  if (file_entries_ == 0) return;
   assert(_discardable_entries <= file_entries_);
   discardable_entries_ += _discardable_entries;
   assert(discardable_entries_ <= file_entries_);
