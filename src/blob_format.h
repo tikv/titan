@@ -181,6 +181,7 @@ class BlobFileMeta {
   };
 
   BlobFileMeta() = default;
+
   BlobFileMeta(uint64_t _file_number, uint64_t _file_size,
                uint64_t _file_entries, uint32_t _file_level,
                const std::string& _smallest_key,

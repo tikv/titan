@@ -68,6 +68,36 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       AppendInternalKey(&index_key, ikey);
       base_builder_->Add(index_key, index_value);
     }
+  } else if (ikey.type == kTypeBlobIndex && cf_options_.level_merge &&
+             target_level_ >= merge_level_ &&
+             cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
+    // we merge value to new blob file
+    BlobIndex index;
+    Slice copy = value;
+    status_ = index.DecodeFrom(&copy);
+    if (!ok()) {
+      return;
+    }
+    auto storage = blob_storage_.lock();
+    assert(storage != nullptr);
+    auto blob_file = storage->FindFile(index.file_number).lock();
+    if (ShouldMerge(blob_file)) {
+      BlobRecord record;
+      PinnableSlice buffer;
+      Status s = storage->Get(ReadOptions(), index, &record, &buffer);
+      if (s.ok()) {
+        std::string index_value;
+        AddBlob(ikey.user_key, record.value, &index_value);
+        if (ok()) {
+          std::string index_key;
+          ikey.type = kTypeBlobIndex;
+          AppendInternalKey(&index_key, ikey);
+          base_builder_->Add(index_key, index_value);
+          return;
+        }
+      }
+    }
+    base_builder_->Add(key, value);
   } else {
     base_builder_->Add(key, value);
   }
@@ -105,6 +135,34 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
   bytes_written_ += record.size();
   if (ok()) {
     index.EncodeTo(index_value);
+    if (blob_handle_->GetFile()->GetFileSize() >=
+        cf_options_.blob_file_target_size) {
+      FinishBlob();
+    }
+  }
+}
+
+void TitanTableBuilder::FinishBlob() {
+  if (blob_builder_) {
+    blob_builder_->Finish();
+    if (ok()) {
+      ROCKS_LOG_INFO(db_options_.info_log,
+                     "Titan table builder finish output file %" PRIu64 ".",
+                     blob_handle_->GetNumber());
+      std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
+          blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(),
+          blob_builder_->NumEntries(), target_level_,
+          blob_builder_->GetSmallestKey(), blob_builder_->GetLargestKey());
+      file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
+      finished_blobs_.push_back({file, std::move(blob_handle_)});
+      blob_builder_.reset();
+    } else {
+      ROCKS_LOG_WARN(
+          db_options_.info_log,
+          "Titan table builder finish failed. Delete output file %" PRIu64 ".",
+          blob_handle_->GetNumber());
+      status_ = blob_manager_->DeleteFile(std::move(blob_handle_));
+    }
   }
 }
 
@@ -121,26 +179,8 @@ Status TitanTableBuilder::status() const {
 
 Status TitanTableBuilder::Finish() {
   base_builder_->Finish();
-  if (blob_builder_) {
-    blob_builder_->Finish();
-    if (ok()) {
-      ROCKS_LOG_INFO(db_options_.info_log,
-                     "Titan table builder finish output file %" PRIu64 ".",
-                     blob_handle_->GetNumber());
-      std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
-          blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(), 0,
-          0, blob_builder_->GetSmallestKey(), blob_builder_->GetLargestKey());
-      file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
-      status_ =
-          blob_manager_->FinishFile(cf_id_, file, std::move(blob_handle_));
-    } else {
-      ROCKS_LOG_WARN(
-          db_options_.info_log,
-          "Titan table builder finish failed. Delete output file %" PRIu64 ".",
-          blob_handle_->GetNumber());
-      status_ = blob_manager_->DeleteFile(std::move(blob_handle_));
-    }
-  }
+  FinishBlob();
+  status_ = blob_manager_->BatchFinishFiles(cf_id_, finished_blobs_);
   if (!status_.ok()) {
     ROCKS_LOG_ERROR(db_options_.info_log,
                     "Titan table builder failed on finish: %s",
@@ -178,6 +218,11 @@ TableProperties TitanTableBuilder::GetTableProperties() const {
   return base_builder_->GetTableProperties();
 }
 
+bool TitanTableBuilder::ShouldMerge(
+    const std::shared_ptr<rocksdb::titandb::BlobFileMeta>& file) {
+  return file != nullptr && (int)file->file_level() < target_level_;
+}
+
 void TitanTableBuilder::UpdateInternalOpStats() {
   if (stats_ == nullptr) {
     return;
@@ -187,7 +232,7 @@ void TitanTableBuilder::UpdateInternalOpStats() {
     return;
   }
   InternalOpType op_type = InternalOpType::COMPACTION;
-  if (level_ == 0) {
+  if (target_level_ == 0) {
     op_type = InternalOpType::FLUSH;
   }
   InternalOpStats* internal_op_stats =

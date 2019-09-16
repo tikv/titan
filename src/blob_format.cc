@@ -169,7 +169,9 @@ Status BlobFileMeta::DecodeFrom(Slice* src) {
 
 bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs) {
   return (lhs.file_number_ == rhs.file_number_ &&
-          lhs.file_size_ == rhs.file_size_);
+          lhs.file_size_ == rhs.file_size_ &&
+          lhs.file_entries_ == rhs.file_entries_ &&
+          lhs.file_level_ == rhs.file_level_);
 }
 
 void BlobFileMeta::FileStateTransit(const FileEvent& event) {
