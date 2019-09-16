@@ -5,10 +5,10 @@
 #include "util/repeatable_thread.h"
 
 #include "blob_file_manager.h"
+#include "blob_file_set.h"
 #include "table_factory.h"
 #include "titan/db.h"
 #include "titan_stats.h"
-#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -150,7 +150,9 @@ class TitanDBImpl : public TitanDB {
   friend class TitanDBTest;
   friend class TitanThreadSafetyTest;
 
-  Status ValidateOptions() const;
+  Status ValidateOptions(
+      const TitanDBOptions& options,
+      const std::vector<TitanCFDescriptor>& column_families) const;
 
   Status GetImpl(const ReadOptions& options, ColumnFamilyHandle* handle,
                  const Slice& key, PinnableSlice* value);
@@ -253,7 +255,7 @@ class TitanDBImpl : public TitanDB {
   // handle for dump internal stats at fixed intervals.
   std::unique_ptr<RepeatableThread> thread_dump_stats_;
 
-  std::unique_ptr<VersionSet> vset_;
+  std::unique_ptr<BlobFileSet> blob_file_set_;
   std::set<uint64_t> pending_outputs_;
   std::shared_ptr<BlobFileManager> blob_manager_;
 

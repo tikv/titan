@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "logging/log_buffer.h"
+#include "monitoring/histogram.h"
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
 
@@ -23,6 +24,10 @@ enum class InternalOpStatsType : int {
   IO_BYTES_WRITTEN,
   INPUT_FILE_NUM,
   OUTPUT_FILE_NUM,
+  GC_SAMPLING_MICROS,
+  GC_READ_LSM_MICROS,
+  // Update lsm and write callback
+  GC_UPDATE_LSM_MICROS,
   INTERNAL_OP_STATS_ENUM_MAX,
 };
 
@@ -43,21 +48,29 @@ using InternalOpStats =
 // data.
 class TitanInternalStats {
  public:
-  enum StatsType {
+  enum TickerType {
     LIVE_BLOB_SIZE = 0,
     NUM_LIVE_BLOB_FILE,
     NUM_OBSOLETE_BLOB_FILE,
     LIVE_BLOB_FILE_SIZE,
     OBSOLETE_BLOB_FILE_SIZE,
-    INTERNAL_STATS_ENUM_MAX,
+    INTERNAL_TICKER_ENUM_MAX,
+  };
+
+  enum HistogramType {
+    INTERNAL_HISTOGRAM_ENUM_MAX,
   };
 
   TitanInternalStats() { Clear(); }
 
   void Clear() {
-    for (int stat = 0; stat < INTERNAL_STATS_ENUM_MAX; stat++) {
-      stats_[stat].store(0, std::memory_order_relaxed);
+    for (int type = 0; type < INTERNAL_TICKER_ENUM_MAX; type++) {
+      tickers_[type].store(0, std::memory_order_relaxed);
     }
+    for (int type = 0; type < INTERNAL_HISTOGRAM_ENUM_MAX; type++) {
+      histograms_[type].Clear();
+    }
+
     for (int op = 0;
          op < static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX); op++) {
       assert(
@@ -72,24 +85,28 @@ class TitanInternalStats {
     }
   }
 
-  void ResetStats(StatsType type) {
-    stats_[type].store(0, std::memory_order_relaxed);
+  void ResetStats(TickerType type) {
+    tickers_[type].store(0, std::memory_order_relaxed);
   }
 
-  void AddStats(StatsType type, uint64_t value) {
-    auto& v = stats_[type];
+  void AddStats(TickerType type, uint64_t value) {
+    auto& v = tickers_[type];
     v.fetch_add(value, std::memory_order_relaxed);
   }
 
-  void SubStats(StatsType type, uint64_t value) {
-    auto& v = stats_[type];
+  void SubStats(TickerType type, uint64_t value) {
+    auto& v = tickers_[type];
     v.fetch_sub(value, std::memory_order_relaxed);
   }
 
+  void MeasureTime(HistogramType type, uint64_t value) {
+    histograms_[type].Add(value);
+  }
+
   bool GetIntProperty(const Slice& property, uint64_t* value) const {
-    auto p = stats_type_string_map.find(property.ToString());
-    if (p != stats_type_string_map.end()) {
-      *value = stats_[p->second].load(std::memory_order_relaxed);
+    auto p = ticker_type_string_map.find(property.ToString());
+    if (p != ticker_type_string_map.end()) {
+      *value = tickers_[p->second].load(std::memory_order_relaxed);
       return true;
     }
     return false;
@@ -111,15 +128,21 @@ class TitanInternalStats {
   void DumpAndResetInternalOpStats(LogBuffer* log_buffer);
 
  private:
-  static const std::unordered_map<std::string, TitanInternalStats::StatsType>
-      stats_type_string_map;
   static const std::array<
       std::string, static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
       internal_op_names;
-  std::array<std::atomic<uint64_t>, INTERNAL_STATS_ENUM_MAX> stats_;
   std::array<InternalOpStats,
              static_cast<size_t>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
       internal_op_stats_;
+
+  static const std::unordered_map<std::string, TitanInternalStats::TickerType>
+      ticker_type_string_map;
+  std::array<std::atomic<uint64_t>, INTERNAL_TICKER_ENUM_MAX> tickers_;
+
+  static const std::unordered_map<std::string,
+                                  TitanInternalStats::HistogramType>
+      histogram_type_string_map;
+  std::array<HistogramImpl, INTERNAL_HISTOGRAM_ENUM_MAX> histograms_;
 };
 
 class TitanStats {
@@ -128,12 +151,10 @@ class TitanStats {
 
   // TODO: Initialize corresponding internal stats struct for Column families
   // created after DB open.
-  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options,
-                    uint32_t default_cf) {
+  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options) {
     for (auto& opts : cf_options) {
       internal_stats_[opts.first] = NewTitanInternalStats(opts.second);
     }
-    default_cf_ = default_cf;
     return Status::OK();
   }
 
@@ -151,8 +172,8 @@ class TitanStats {
   void DumpInternalOpStats(uint32_t cf_id, const std::string& cf_name);
 
  private:
+  // RocksDB statistics
   Statistics* stats_ = nullptr;
-  uint32_t default_cf_ = 0;
   std::unordered_map<uint32_t, std::shared_ptr<TitanInternalStats>>
       internal_stats_;
   std::shared_ptr<TitanInternalStats> NewTitanInternalStats(
@@ -161,7 +182,7 @@ class TitanStats {
   }
 };
 
-// Utility functions
+// Utility functions for RocksDB stats types
 inline Statistics* statistics(TitanStats* stats) {
   return (stats) ? stats->statistics() : nullptr;
 }
@@ -187,8 +208,9 @@ inline void SetTickerCount(TitanStats* stats, uint32_t ticker_type,
   }
 }
 
+// Utility functions for Titan ticker and histogram stats types
 inline void ResetStats(TitanStats* stats, uint32_t cf_id,
-                       TitanInternalStats::StatsType type) {
+                       TitanInternalStats::TickerType type) {
   if (stats) {
     auto p = stats->internal_stats(cf_id);
     if (p) {
@@ -198,7 +220,7 @@ inline void ResetStats(TitanStats* stats, uint32_t cf_id,
 }
 
 inline void AddStats(TitanStats* stats, uint32_t cf_id,
-                     TitanInternalStats::StatsType type, uint64_t value) {
+                     TitanInternalStats::TickerType type, uint64_t value) {
   if (stats) {
     auto p = stats->internal_stats(cf_id);
     if (p) {
@@ -208,7 +230,7 @@ inline void AddStats(TitanStats* stats, uint32_t cf_id,
 }
 
 inline void SubStats(TitanStats* stats, uint32_t cf_id,
-                     TitanInternalStats::StatsType type, uint64_t value) {
+                     TitanInternalStats::TickerType type, uint64_t value) {
   if (stats) {
     auto p = stats->internal_stats(cf_id);
     if (p) {
@@ -217,6 +239,18 @@ inline void SubStats(TitanStats* stats, uint32_t cf_id,
   }
 }
 
+inline void MeasureTime(TitanStats* stats, uint32_t cf_id,
+                        TitanInternalStats::HistogramType histogram_type,
+                        uint64_t time) {
+  if (stats) {
+    auto p = stats->internal_stats(cf_id);
+    if (p) {
+      p->MeasureTime(histogram_type, time);
+    }
+  }
+}
+
+// Utility functions for Titan internal operation stats type
 inline uint64_t GetAndResetStats(InternalOpStats* stats,
                                  InternalOpStatsType type) {
   if (stats != nullptr) {
@@ -261,6 +295,19 @@ inline void UpdateIOBytes(uint64_t prev_bytes_read, uint64_t prev_bytes_written,
     *bytes_written += io_stats->bytes_written - prev_bytes_written;
   }
 }
+
+class TitanStopWatch {
+ public:
+  TitanStopWatch(Env* env, uint64_t& stats)
+      : env_(env), stats_(stats), start_(env_->NowMicros()) {}
+
+  ~TitanStopWatch() { stats_ += env_->NowMicros() - start_; }
+
+ private:
+  Env* env_;
+  uint64_t& stats_;
+  uint64_t start_;
+};
 
 }  // namespace titandb
 }  // namespace rocksdb
