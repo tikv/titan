@@ -56,7 +56,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
-      RecordTick(statistics(db_->stats_.get()), BLOB_DB_BLOB_FILE_SYNCED);
+      RecordTick(db_->stats_.get(), BLOB_DB_BLOB_FILE_SYNCED);
       {
         StopWatch sync_sw(db_->env_, statistics(db_->stats_.get()),
                           BLOB_DB_BLOB_FILE_SYNC_MICROS);
@@ -278,7 +278,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   if (s.ok()) {
     db_impl_ = reinterpret_cast<DBImpl*>(db_->GetRootDB());
     if (stats_.get()) {
-      stats_->Initialize(column_families, db_->DefaultColumnFamily()->GetID());
+      stats_->Initialize(column_families);
     }
     ROCKS_LOG_INFO(db_options_.info_log, "Titan DB open.");
     ROCKS_LOG_HEADER(db_options_.info_log, "Titan git sha: %s",
@@ -555,8 +555,8 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
     StopWatch read_sw(env_, statistics(stats_.get()),
                       BLOB_DB_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
-    RecordTick(statistics(stats_.get()), BLOB_DB_NUM_KEYS_READ);
-    RecordTick(statistics(stats_.get()), BLOB_DB_BLOB_FILE_BYTES_READ,
+    RecordTick(stats_.get(), BLOB_DB_NUM_KEYS_READ);
+    RecordTick(stats_.get(), BLOB_DB_BLOB_FILE_BYTES_READ,
                index.blob_handle.size);
   }
   if (s.IsCorruption()) {
