@@ -248,19 +248,16 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   s = vset_->Open(column_families);
   if (!s.ok()) return s;
 
-  static bool has_init_background_threads = false;
-  if (!has_init_background_threads) {
+  // Initialize GC thread pool.
+  if (!db_options_.disable_background_gc &&
+      db_options_.max_background_gc > 0) {
     auto bottom_pri_threads_num =
         env_->GetBackgroundThreads(Env::Priority::BOTTOM);
-    if (!db_options_.disable_background_gc &&
-        db_options_.max_background_gc > 0) {
-      env_->IncBackgroundThreadsIfNeeded(
-          db_options_.max_background_gc + bottom_pri_threads_num,
-          Env::Priority::BOTTOM);
-      assert(env_->GetBackgroundThreads(Env::Priority::BOTTOM) ==
-             bottom_pri_threads_num + db_options_.max_background_gc);
-    }
-    has_init_background_threads = true;
+    env_->IncBackgroundThreadsIfNeeded(
+        db_options_.max_background_gc + bottom_pri_threads_num,
+        Env::Priority::BOTTOM);
+    assert(env_->GetBackgroundThreads(Env::Priority::BOTTOM) ==
+           bottom_pri_threads_num + db_options_.max_background_gc);
   }
 
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);

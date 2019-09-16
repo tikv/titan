@@ -45,6 +45,8 @@ class TitanDBTest : public testing::Test {
     Close();
     DeleteDir(env_, options_.dirname);
     DeleteDir(env_, dbname_);
+    SyncPoint::GetInstance()->DisableProcessing();
+    SyncPoint::GetInstance()->ClearAllCallBacks();
   }
 
   void Open() {
