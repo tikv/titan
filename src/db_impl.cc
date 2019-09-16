@@ -4,18 +4,18 @@
 
 #include <inttypes.h>
 
-#include "logging/log_buffer.h"
-#include "port/port.h"
-#include "util/autovector.h"
 #include "base_db_listener.h"
 #include "blob_file_builder.h"
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc.h"
-#include "db_iter.h"
 #include "db_impl.h"
+#include "db_iter.h"
+#include "logging/log_buffer.h"
+#include "port/port.h"
 #include "table_factory.h"
 #include "titan_build_version.h"
+#include "util/autovector.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -978,9 +978,9 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
   char blob_discardable_size_str[16];
   for (const auto f : blob_files_size) {
     outputs.insert(f.first);
-    sprintf(blob_file_name_str, "%015" PRIu64 , f.first);
+    sprintf(blob_file_name_str, "%015" PRIu64, f.first);
     blob_file_name_str[15] = 0;
-    sprintf(blob_discardable_size_str, "%015" PRIu64 , 0ULL);
+    sprintf(blob_discardable_size_str, "%015" PRIu64, 0ULL);
     blob_discardable_size_str[15] = 0;
     new_blob.Put(db_impl_->PersistentStatsColumnFamily(),
                  Slice(blob_file_name_str), Slice(blob_discardable_size_str));
