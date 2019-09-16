@@ -72,6 +72,9 @@ class BlobGCJob {
     uint64_t blob_db_gc_bytes_relocated = 0;
     uint64_t blob_db_gc_num_new_files = 0;
     uint64_t blob_db_gc_num_files = 0;
+    uint64_t blob_db_gc_sampling_micros = 0;
+    uint64_t blob_db_gc_read_lsm_micros = 0;
+    uint64_t blob_db_gc_update_lsm_micros = 0;
   } metrics_;
 
   uint64_t prev_bytes_read_ = 0;

@@ -56,7 +56,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
-      RecordTick(statistics(db_->stats_.get()), BLOB_DB_BLOB_FILE_SYNCED);
+      RecordTick(db_->stats_.get(), BLOB_DB_BLOB_FILE_SYNCED);
       {
         StopWatch sync_sw(db_->env_, statistics(db_->stats_.get()),
                           BLOB_DB_BLOB_FILE_SYNC_MICROS);
@@ -156,17 +156,27 @@ void TitanDBImpl::StartBackgroundTasks() {
   }
 }
 
-Status TitanDBImpl::ValidateOptions() const {
-  if (db_options_.purge_obsolete_files_period_sec == 0) {
+Status TitanDBImpl::ValidateOptions(
+    const TitanDBOptions& options,
+    const std::vector<TitanCFDescriptor>& column_families) const {
+  if (options.purge_obsolete_files_period_sec == 0) {
     return Status::InvalidArgument(
         "Require non-zero purge_obsolete_files_period_sec");
+  }
+  for (const auto& cf : column_families) {
+    if (cf.options.level_merge &&
+        !cf.options.level_compaction_dynamic_level_bytes) {
+      return Status::InvalidArgument(
+          "Require enabling level_compaction_dynamic_level_bytes for "
+          "level_merge");
+    }
   }
   return Status::OK();
 }
 
 Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
                          std::vector<ColumnFamilyHandle*>* handles) {
-  Status s = ValidateOptions();
+  Status s = ValidateOptions(db_options_, descs);
   if (!s.ok()) {
     return s;
   }
@@ -268,7 +278,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   if (s.ok()) {
     db_impl_ = reinterpret_cast<DBImpl*>(db_->GetRootDB());
     if (stats_.get()) {
-      stats_->Initialize(column_families, db_->DefaultColumnFamily()->GetID());
+      stats_->Initialize(column_families);
     }
     ROCKS_LOG_INFO(db_options_.info_log, "Titan DB open.");
     ROCKS_LOG_HEADER(db_options_.info_log, "Titan git sha: %s",
@@ -545,8 +555,8 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
     StopWatch read_sw(env_, statistics(stats_.get()),
                       BLOB_DB_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
-    RecordTick(statistics(stats_.get()), BLOB_DB_NUM_KEYS_READ);
-    RecordTick(statistics(stats_.get()), BLOB_DB_BLOB_FILE_BYTES_READ,
+    RecordTick(stats_.get(), BLOB_DB_NUM_KEYS_READ);
+    RecordTick(stats_.get(), BLOB_DB_BLOB_FILE_BYTES_READ,
                index.blob_handle.size);
   }
   if (s.IsCorruption()) {

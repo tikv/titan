@@ -145,7 +145,9 @@ class TitanDBImpl : public TitanDB {
   friend class TitanDBTest;
   friend class TitanThreadSafetyTest;
 
-  Status ValidateOptions() const;
+  Status ValidateOptions(
+      const TitanDBOptions& options,
+      const std::vector<TitanCFDescriptor>& column_families) const;
 
   Status GetImpl(const ReadOptions& options, ColumnFamilyHandle* handle,
                  const Slice& key, PinnableSlice* value);
