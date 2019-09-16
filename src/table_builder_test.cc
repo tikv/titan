@@ -19,7 +19,9 @@ const uint64_t kTargetBlobFileSize = 4096;
 class FileManager : public BlobFileManager {
  public:
   FileManager(const TitanDBOptions& db_options, BlobFileSet* blob_file_set)
-      : db_options_(db_options), number_(kTestFileNumber), blob_file_set_(blob_file_set) {}
+      : db_options_(db_options),
+        number_(kTestFileNumber),
+        blob_file_set_(blob_file_set) {}
 
   Status NewFile(std::unique_ptr<BlobFileHandle>* handle) override {
     auto number = number_.fetch_add(1);
@@ -354,8 +356,9 @@ TEST_F(TableBuilderTest, NumEntries) {
 // To test size of each blob file is around blob_file_target_size after building
 TEST_F(TableBuilderTest, TargetSize) {
   cf_options_.blob_file_target_size = kTargetBlobFileSize;
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, blob_manager_, &mutex_, blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
@@ -384,8 +387,9 @@ TEST_F(TableBuilderTest, TargetSize) {
 // correct
 TEST_F(TableBuilderTest, LevelMerge) {
   cf_options_.level_merge = true;
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, blob_manager_, &mutex_, blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
