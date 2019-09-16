@@ -13,7 +13,7 @@ namespace rocksdb {
 namespace titandb {
 
 // Provides methods to access the blob storage for a specific
-// column family. The version must be valid when this storage is used.
+// column family.
 class BlobStorage {
  public:
   BlobStorage(const BlobStorage& bs) : destroyed_(false) {
@@ -101,7 +101,7 @@ class BlobStorage {
                         SequenceNumber obsolete_sequence);
 
  private:
-  friend class VersionSet;
+  friend class BlobFileSet;
   friend class VersionTest;
   friend class BlobGCPickerTest;
   friend class BlobGCJobTest;
