@@ -980,7 +980,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
     outputs.insert(f.first);
     sprintf(blob_file_name_str, "%015" PRIu64, f.first);
     blob_file_name_str[15] = 0;
-    sprintf(blob_discardable_size_str, "%015" PRIu64, 0ULL);
+    sprintf(blob_discardable_size_str, "%015" PRIu64, 0UL);
     blob_discardable_size_str[15] = 0;
     new_blob.Put(db_impl_->PersistentStatsColumnFamily(),
                  Slice(blob_file_name_str), Slice(blob_discardable_size_str));
@@ -1102,7 +1102,7 @@ void TitanDBImpl::OnCompactionCompleted(
     for (const auto f : outputs) {
       sprintf(blob_file_name_str, "%015" PRIu64, f);
       blob_file_name_str[15] = 0;
-      sprintf(blob_discardable_size_str, "%015" PRIu64, 0ULL);
+      sprintf(blob_discardable_size_str, "%015" PRIu64, 0UL);
       blob_discardable_size_str[15] = 0;
       new_blob.Put(persist_cf_handle, Slice(blob_file_name_str),
                    Slice(blob_discardable_size_str));
