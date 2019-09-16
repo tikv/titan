@@ -53,6 +53,7 @@ const std::array<std::string,
 
 void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
   constexpr double GB = 1.0 * 1024 * 1024 * 1024;
+  constexpr double SECOND = 1.0 * 1000000;
   LogToBuffer(log_buffer,
               "OP           COUNT READ(GB)  WRITE(GB) IO_READ(GB) IO_WRITE(GB) "
               " FILE_IN FILE_OUT");
@@ -62,7 +63,8 @@ void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
   for (int op = 0; op < static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX);
        op++) {
     LogToBuffer(
-        log_buffer, "%s %5d %10.1f %10.1f  %10.1f   %10.1f %8d %8d",
+        log_buffer,
+        "%s %5d %10.1f %10.1f  %10.1f   %10.1f %8d %8d %10.1f %10.1f %10.1f",
         internal_op_names[op].c_str(),
         GetAndResetStats(&internal_op_stats_[op], InternalOpStatsType::COUNT),
         GetAndResetStats(&internal_op_stats_[op],
@@ -80,7 +82,16 @@ void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
         GetAndResetStats(&internal_op_stats_[op],
                          InternalOpStatsType::INPUT_FILE_NUM),
         GetAndResetStats(&internal_op_stats_[op],
-                         InternalOpStatsType::OUTPUT_FILE_NUM));
+                         InternalOpStatsType::OUTPUT_FILE_NUM),
+        GetAndResetStats(&internal_op_stats_[op],
+                         InternalOpStatsType::GC_SAMPLING_MICROS) /
+            SECOND,
+        GetAndResetStats(&internal_op_stats_[op],
+                         InternalOpStatsType::GC_READ_LSM_MICROS) /
+            SECOND,
+        GetAndResetStats(&internal_op_stats_[op],
+                         InternalOpStatsType::GC_UPDATE_LSM_MICROS) /
+            SECOND);
   }
 }
 
