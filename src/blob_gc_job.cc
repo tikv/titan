@@ -508,7 +508,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       for (auto& file : files) {
         sprintf(file_number_str, "%015" PRIu64 , file.first->file_number());
         file_number_str[15] = 0;
-        sprintf(discardable_size_str, "%015" PRIu64 , 0LL);
+        sprintf(discardable_size_str, "%015" PRIu64 , 0ULL);
         discardable_size_str[15] = 0;
         stats_batch_.Put(persist_cf_handle, Slice(file_number_str),
                          Slice(discardable_size_str));
