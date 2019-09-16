@@ -260,8 +260,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   if (!s.ok()) return s;
 
   // Initialize GC thread pool.
-  if (!db_options_.disable_background_gc &&
-      db_options_.max_background_gc > 0) {
+  if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
     auto bottom_pri_threads_num =
         env_->GetBackgroundThreads(Env::Priority::BOTTOM);
     env_->IncBackgroundThreadsIfNeeded(
