@@ -118,35 +118,38 @@ Status BlobGCJob::Prepare() {
 }
 
 Status BlobGCJob::Run() {
-  /*Status s = SampleCandidateFiles();
-  if (!s.ok()) {
-    return s;
-  }
-
-  std::string tmp;
-  for (const auto& f : blob_gc_->inputs()) {
-    if (!tmp.empty()) {
-      tmp.append(" ");
+  if (db_options_.persist_gc_stats) {
+    std::vector<BlobFileMeta*> files;
+    for (auto f : blob_gc_->inputs()) {
+      files.push_back(f);
     }
-    tmp.append(std::to_string(f->file_number()));
-  }
-
-  std::string tmp2;
-  for (const auto& f : blob_gc_->sampled_inputs()) {
-    if (!tmp2.empty()) {
-      tmp2.append(" ");
+    blob_gc_->set_sampled_inputs(std::move(files));
+  } else {
+    Status s = SampleCandidateFiles();
+    if (!s.ok()) {
+      return s;
     }
-    tmp2.append(std::to_string(f->file_number()));
-  }
 
-  ROCKS_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s] selected[%s]",
-                   blob_gc_->column_family_handle()->GetName().c_str(),
-                   tmp.c_str(), tmp2.c_str());*/
-  std::vector<BlobFileMeta*> files;
-  for (auto f : blob_gc_->inputs()) {
-    files.push_back(f);
+    std::string tmp;
+    for (const auto& f : blob_gc_->inputs()) {
+      if (!tmp.empty()) {
+        tmp.append(" ");
+      }
+      tmp.append(std::to_string(f->file_number()));
+    }
+
+    std::string tmp2;
+    for (const auto& f : blob_gc_->sampled_inputs()) {
+      if (!tmp2.empty()) {
+        tmp2.append(" ");
+      }
+      tmp2.append(std::to_string(f->file_number()));
+    }
+
+    ROCKS_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s] selected[%s]",
+                     blob_gc_->column_family_handle()->GetName().c_str(),
+                     tmp.c_str(), tmp2.c_str());
   }
-  blob_gc_->set_sampled_inputs(std::move(files));
   if (blob_gc_->sampled_inputs().empty()) {
     return Status::OK();
   }
@@ -501,18 +504,20 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     s = this->blob_file_manager_->BatchFinishFiles(
         blob_gc_->column_family_handle()->GetID(), files);
     if (s.ok()) {
-      ColumnFamilyHandle* persist_cf_handle =
-          base_db_impl_->PersistentStatsColumnFamily();
-      char file_number_str[16];
-      char discardable_size_str[16];
       for (auto& file : files) {
-        sprintf(file_number_str, "%015" PRIu64, file.first->file_number());
-        file_number_str[15] = 0;
-        sprintf(discardable_size_str, "%015" PRIu64, 0UL);
-        discardable_size_str[15] = 0;
-        stats_batch_.Put(persist_cf_handle, Slice(file_number_str),
-                         Slice(discardable_size_str));
         blob_gc_->AddOutputFile(file.first.get());
+      }
+      if (db_options_.persist_gc_stats) {
+        char file_number_str[16];
+        char discardable_size_str[16];
+        for (auto& file : files) {
+          sprintf(file_number_str, "%015" PRIu64, file.first->file_number());
+          file_number_str[15] = 0;
+          sprintf(discardable_size_str, "%015" PRIu64, 0UL);
+          discardable_size_str[15] = 0;
+          stats_batch_.Put(base_db_impl_->PersistentStatsColumnFamily(),
+                           Slice(file_number_str), Slice(discardable_size_str));
+        }
       }
     }
   } else {
@@ -589,8 +594,6 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   Status s;
   VersionEdit edit;
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
-  ColumnFamilyHandle* persist_cf_handle =
-      base_db_impl_->PersistentStatsColumnFamily();
   char file_number_str[16];
   for (const auto& file : blob_gc_->sampled_inputs()) {
     ROCKS_LOG_INFO(db_options_.info_log,
@@ -598,10 +601,15 @@ Status BlobGCJob::DeleteInputBlobFiles() {
                    file->file_number());
     metrics_.blob_db_gc_num_files++;
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
-    sprintf(file_number_str, "%015" PRIu64, file->file_number());
-    file_number_str[15] = 0;
-    // delete obsoleted file
-    stats_batch_.Delete(persist_cf_handle, Slice(file_number_str));
+    if (db_options_.persist_gc_stats) {
+      sprintf(file_number_str, "%015" PRIu64, file->file_number());
+      file_number_str[15] = 0;
+      // delete obsoleted file
+      stats_batch_.Delete(base_db_impl_->PersistentStatsColumnFamily(),
+                          Slice(file_number_str));
+    }
+  }
+  if (db_options_.persist_gc_stats) {
     WriteOptions wo;
     wo.low_pri = true;
     wo.sync = true;

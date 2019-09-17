@@ -37,6 +37,12 @@ struct TitanDBOptions : public DBOptions {
   // Default: 600 (10 min)
   uint32_t titan_stats_dump_period_sec{600};
 
+  // If true, GC stats like discardable_size of blob_file will be persist by persist_stats_cf_ of rocksdb
+  // persist_gc_stats.
+  //
+  // Default: false
+  bool persist_gc_stats{false};
+
   TitanDBOptions() = default;
   explicit TitanDBOptions(const DBOptions& options) : DBOptions(options) {}
 
