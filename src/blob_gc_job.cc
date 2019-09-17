@@ -76,7 +76,7 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
                      const TitanDBOptions& titan_db_options, Env* env,
                      const EnvOptions& env_options,
                      BlobFileManager* blob_file_manager,
-                     VersionSet* version_set, LogBuffer* log_buffer,
+                     BlobFileSet* blob_file_set, LogBuffer* log_buffer,
                      std::atomic_bool* shuting_down, TitanStats* stats)
     : blob_gc_(blob_gc),
       base_db_(db),
@@ -86,7 +86,7 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
       env_(env),
       env_options_(env_options),
       blob_file_manager_(blob_file_manager),
-      version_set_(version_set),
+      blob_file_set_(blob_file_set),
       log_buffer_(log_buffer),
       shuting_down_(shuting_down),
       stats_(stats) {}
@@ -152,6 +152,7 @@ Status BlobGCJob::Run() {
 }
 
 Status BlobGCJob::SampleCandidateFiles() {
+  TitanStopWatch sw(env_, metrics_.gc_sampling_micros);
   std::vector<BlobFileMeta*> result;
   for (const auto& file : blob_gc_->inputs()) {
     bool selected = false;
@@ -395,13 +396,16 @@ Status BlobGCJob::BuildIterator(
         blob_gc_->titan_cf_options())));
   }
 
-  if (s.ok()) result->reset(new BlobFileMergeIterator(std::move(list)));
+  if (s.ok())
+    result->reset(new BlobFileMergeIterator(
+        std::move(list), blob_gc_->titan_cf_options().comparator));
 
   return s;
 }
 
 Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
                                bool* discardable) {
+  TitanStopWatch sw(env_, metrics_.gc_read_lsm_micros);
   assert(discardable != nullptr);
   PinnableSlice index_entry;
   bool is_blob_index = false;
@@ -484,7 +488,9 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     std::string tmp;
     for (auto& builder : this->blob_file_builders_) {
       auto file = std::make_shared<BlobFileMeta>(
-          builder.first->GetNumber(), builder.first->GetFile()->GetFileSize());
+          builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(),
+          0, 0, builder.second->GetSmallestKey(),
+          builder.second->GetLargestKey());
       RecordInHistogram(stats_, TitanStats::GC_OUTPUT_FILE_SIZE,
                         file->file_size());
       if (!tmp.empty()) {
@@ -524,6 +530,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
 }
 
 Status BlobGCJob::RewriteValidKeyToLSM() {
+  TitanStopWatch sw(env_, metrics_.gc_update_lsm_micros);
   Status s;
   auto* db_impl = reinterpret_cast<DBImpl*>(this->base_db_);
 
@@ -584,7 +591,7 @@ Status BlobGCJob::DeleteInputBlobFiles() {
                       file->file_size());
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
   }
-  s = version_set_->LogAndApply(edit);
+  s = blob_file_set_->LogAndApply(edit);
   // TODO(@DorianZheng) Purge pending outputs
   // base_db_->pending_outputs_.erase(handle->GetNumber());
   return s;
@@ -621,6 +628,12 @@ void BlobGCJob::UpdateInternalOpStats() {
            metrics_.gc_num_files);
   AddStats(internal_op_stats, InternalOpStatsType::OUTPUT_FILE_NUM,
            metrics_.gc_num_new_files);
+  AddStats(internal_op_stats, InternalOpStatsType::GC_SAMPLING_MICROS,
+           metrics_.gc_sampling_micros);
+  AddStats(internal_op_stats, InternalOpStatsType::GC_READ_LSM_MICROS,
+           metrics_.gc_read_lsm_micros);
+  AddStats(internal_op_stats, InternalOpStatsType::GC_UPDATE_LSM_MICROS,
+           metrics_.gc_update_lsm_micros);
 }
 
 }  // namespace titandb

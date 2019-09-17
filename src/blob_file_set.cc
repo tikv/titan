@@ -1,4 +1,4 @@
-#include "version_set.h"
+#include "blob_file_set.h"
 
 #include <inttypes.h>
 
@@ -9,7 +9,7 @@ namespace titandb {
 
 const size_t kMaxFileCacheSize = 1024 * 1024;
 
-VersionSet::VersionSet(const TitanDBOptions& options, TitanStats* stats)
+BlobFileSet::BlobFileSet(const TitanDBOptions& options, TitanStats* stats)
     : dirname_(options.dirname),
       env_(options.env),
       env_options_(options),
@@ -22,7 +22,7 @@ VersionSet::VersionSet(const TitanDBOptions& options, TitanStats* stats)
   file_cache_ = NewLRUCache(file_cache_size);
 }
 
-Status VersionSet::Open(
+Status BlobFileSet::Open(
     const std::map<uint32_t, TitanCFOptions>& column_families) {
   // Sets up initial column families.
   AddColumnFamilies(column_families);
@@ -37,7 +37,7 @@ Status VersionSet::Open(
   return OpenManifest(NewFileNumber());
 }
 
-Status VersionSet::Recover() {
+Status BlobFileSet::Recover() {
   struct LogReporter : public log::Reader::Reporter {
     Status* status;
     void Corruption(size_t, const Status& s) override {
@@ -143,7 +143,7 @@ Status VersionSet::Recover() {
   return Status::OK();
 }
 
-Status VersionSet::OpenManifest(uint64_t file_number) {
+Status BlobFileSet::OpenManifest(uint64_t file_number) {
   Status s;
 
   auto file_name = DescriptorFileName(dirname_, file_number);
@@ -175,7 +175,7 @@ Status VersionSet::OpenManifest(uint64_t file_number) {
   return s;
 }
 
-Status VersionSet::WriteSnapshot(log::Writer* log) {
+Status BlobFileSet::WriteSnapshot(log::Writer* log) {
   Status s;
   // Saves global information
   {
@@ -205,8 +205,8 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
   return s;
 }
 
-Status VersionSet::LogAndApply(VersionEdit& edit) {
-  TEST_SYNC_POINT("VersionSet::LogAndApply");
+Status BlobFileSet::LogAndApply(VersionEdit& edit) {
+  TEST_SYNC_POINT("BlobFileSet::LogAndApply");
   // TODO(@huachao): write manifest file unlocked
   std::string record;
   edit.SetNextFileNumber(next_file_number_.load());
@@ -226,7 +226,7 @@ Status VersionSet::LogAndApply(VersionEdit& edit) {
   return collector.Apply(*this);
 }
 
-void VersionSet::AddColumnFamilies(
+void BlobFileSet::AddColumnFamilies(
     const std::map<uint32_t, TitanCFOptions>& column_families) {
   for (auto& cf : column_families) {
     auto file_cache = std::make_shared<BlobFileCache>(db_options_, cf.second,
@@ -237,7 +237,7 @@ void VersionSet::AddColumnFamilies(
   }
 }
 
-Status VersionSet::DropColumnFamilies(
+Status BlobFileSet::DropColumnFamilies(
     const std::vector<uint32_t>& column_families,
     SequenceNumber obsolete_sequence) {
   Status s;
@@ -264,7 +264,7 @@ Status VersionSet::DropColumnFamilies(
   return s;
 }
 
-Status VersionSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
+Status BlobFileSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
   obsolete_columns_.erase(cf_id);
   auto it = column_families_.find(cf_id);
   if (it != column_families_.end()) {
@@ -279,8 +279,8 @@ Status VersionSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
   return Status::NotFound("invalid column family");
 }
 
-void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
-                                  SequenceNumber oldest_sequence) {
+void BlobFileSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
+                                   SequenceNumber oldest_sequence) {
   for (auto it = column_families_.begin(); it != column_families_.end();) {
     auto& cf_id = it->first;
     auto& blob_storage = it->second;

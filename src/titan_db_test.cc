@@ -102,7 +102,7 @@ class TitanDBTest : public testing::Test {
   }
 
   Status LogAndApply(VersionEdit& edit) {
-    return db_impl_->vset_->LogAndApply(edit);
+    return db_impl_->blob_file_set_->LogAndApply(edit);
   }
 
   void Put(uint64_t k, std::map<std::string, std::string>* data = nullptr) {
@@ -132,7 +132,7 @@ class TitanDBTest : public testing::Test {
       cf_handle = db_->DefaultColumnFamily();
     }
     MutexLock l(&db_impl_->mutex_);
-    return db_impl_->vset_->GetBlobStorage(cf_handle->GetID());
+    return db_impl_->blob_file_set_->GetBlobStorage(cf_handle->GetID());
   }
 
   void VerifyDB(const std::map<std::string, std::string>& data,
@@ -553,7 +553,7 @@ TEST_F(TitanDBTest, VersionEditError) {
   auto cf_id = db_->DefaultColumnFamily()->GetID();
   VersionEdit edit;
   edit.SetColumnFamilyID(cf_id);
-  edit.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1));
+  edit.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, 0, 0, "", ""));
   ASSERT_OK(LogAndApply(edit));
 
   VerifyDB(data);
@@ -561,7 +561,7 @@ TEST_F(TitanDBTest, VersionEditError) {
   // add same blob file twice
   VersionEdit edit1;
   edit1.SetColumnFamilyID(cf_id);
-  edit1.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1));
+  edit1.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, 0, 0, "", ""));
   ASSERT_NOK(LogAndApply(edit));
 
   Reopen();
@@ -924,7 +924,7 @@ TEST_F(TitanDBTest, BackgroundErrorTrigger) {
   }
   Flush();
   ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
-  SyncPoint::GetInstance()->SetCallBack("VersionSet::LogAndApply", [&](void*) {
+  SyncPoint::GetInstance()->SetCallBack("BlobFileSet::LogAndApply", [&](void*) {
     mock_env->SetFilesystemActive(false, Status::IOError("Injected error"));
   });
   SyncPoint::GetInstance()->EnableProcessing();

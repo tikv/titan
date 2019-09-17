@@ -10,6 +10,15 @@
 namespace rocksdb {
 namespace titandb {
 
+enum Tag {
+  kNextFileNumber = 1,
+  kColumnFamilyID = 10,
+  kAddedBlobFile = 11,
+  kDeletedBlobFile = 12,  // Deprecated, leave here for backward compatibility
+  kAddedBlobFileV2 = 13,  // Comparing to kAddedBlobFile, it newly includes
+                          // smallest_key and largest_key of blob file
+};
+
 class VersionEdit {
  public:
   void SetNextFileNumber(uint64_t v) {
@@ -34,7 +43,8 @@ class VersionEdit {
   friend bool operator==(const VersionEdit& lhs, const VersionEdit& rhs);
 
  private:
-  friend class VersionSet;
+  friend class BlobFileSet;
+  friend class VersionTest;
   friend class EditCollector;
 
   bool has_next_file_number_{false};
