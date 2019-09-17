@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "logging/log_buffer.h"
+#include "monitoring/histogram.h"
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
 
@@ -52,6 +53,10 @@ class TitanInternalStats {
     INTERNAL_STATS_ENUM_MAX,
   };
 
+  enum HistogramType {
+    INTERNAL_HISTOGRAM_ENUM_MAX,
+  };
+
   TitanInternalStats() { Clear(); }
 
   void Clear() {
@@ -84,6 +89,10 @@ class TitanInternalStats {
   void SubStats(StatsType type, uint64_t value) {
     auto& v = stats_[type];
     v.fetch_sub(value, std::memory_order_relaxed);
+  }
+
+  void MeasureTime(HistogramType type, uint64_t value) {
+    histograms_[type].Add(value);
   }
 
   bool GetIntProperty(const Slice& property, uint64_t* value) const {
@@ -128,12 +137,10 @@ class TitanStats {
 
   // TODO: Initialize corresponding internal stats struct for Column families
   // created after DB open.
-  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options,
-                    uint32_t default_cf) {
+  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options) {
     for (auto& opts : cf_options) {
       internal_stats_[opts.first] = NewTitanInternalStats(opts.second);
     }
-    default_cf_ = default_cf;
     return Status::OK();
   }
 
@@ -151,17 +158,20 @@ class TitanStats {
   void DumpInternalOpStats(uint32_t cf_id, const std::string& cf_name);
 
  private:
+  // RocksDB statistics
   Statistics* stats_ = nullptr;
-  uint32_t default_cf_ = 0;
   std::unordered_map<uint32_t, std::shared_ptr<TitanInternalStats>>
       internal_stats_;
+  std::array<std::atomic<uint64_t>, INTERNAL_TICKER_ENUM_MAX> tickers_;
+  std::array<HistogramImpl, INTERNAL_HISTOGRAM_ENUM_MAX> histograms_;
+
   std::shared_ptr<TitanInternalStats> NewTitanInternalStats(
       TitanCFOptions& opts) {
     return std::make_shared<TitanInternalStats>();
   }
 };
 
-// Utility functions
+// Utility functions for RocksDB stats types
 inline Statistics* statistics(TitanStats* stats) {
   return (stats) ? stats->statistics() : nullptr;
 }
@@ -187,6 +197,7 @@ inline void SetTickerCount(TitanStats* stats, uint32_t ticker_type,
   }
 }
 
+// Utility functions for Titan ticker and histogram stats types
 inline void ResetStats(TitanStats* stats, uint32_t cf_id,
                        TitanInternalStats::StatsType type) {
   if (stats) {
@@ -217,6 +228,18 @@ inline void SubStats(TitanStats* stats, uint32_t cf_id,
   }
 }
 
+inline void MeasureTime(TitanStats* stats, uint32_t cf_id,
+                        TitanInternalStats::HistogramType histogram_type,
+                        uint64_t time) {
+  if (stats) {
+    auto p = stats->internal_stats(cf_id);
+    if (p) {
+      p->MeasureTime(histogram_type, time);
+    }
+  }
+}
+
+// Utility functions for Titan internal operation stats type
 inline uint64_t GetAndResetStats(InternalOpStats* stats,
                                  InternalOpStatsType type) {
   if (stats != nullptr) {
