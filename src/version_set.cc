@@ -2,8 +2,6 @@
 
 #include <inttypes.h>
 
-#include "file/filename.h"
-
 #include "edit_collector.h"
 
 namespace rocksdb {
@@ -163,7 +161,7 @@ Status VersionSet::OpenManifest(uint64_t file_number) {
   s = WriteSnapshot(manifest_.get());
   if (s.ok()) {
     ImmutableDBOptions ioptions(db_options_);
-    s = SyncManifest(env_, &ioptions, manifest_->file());
+    s = SyncTitanManifest(env_, stats_, &ioptions, manifest_->file());
   }
   if (s.ok()) {
     // Makes "CURRENT" file that points to the new manifest file.
@@ -223,7 +221,7 @@ Status VersionSet::LogAndApply(VersionEdit& edit) {
   if (!s.ok()) return s;
 
   ImmutableDBOptions ioptions(db_options_);
-  s = SyncManifest(env_, &ioptions, manifest_->file());
+  s = SyncTitanManifest(env_, stats_, &ioptions, manifest_->file());
   if (!s.ok()) return s;
   return collector.Apply(*this);
 }

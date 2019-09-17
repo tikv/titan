@@ -64,14 +64,17 @@ class BlobGCJob {
   TitanStats* stats_;
 
   struct {
-    uint64_t blob_db_bytes_read = 0;
-    uint64_t blob_db_bytes_written = 0;
-    uint64_t blob_db_gc_num_keys_overwritten = 0;
-    uint64_t blob_db_gc_bytes_overwritten = 0;
-    uint64_t blob_db_gc_num_keys_relocated = 0;
-    uint64_t blob_db_gc_bytes_relocated = 0;
-    uint64_t blob_db_gc_num_new_files = 0;
-    uint64_t blob_db_gc_num_files = 0;
+    uint64_t bytes_read = 0;
+    uint64_t bytes_written = 0;
+    uint64_t gc_num_keys_overwritten = 0;
+    uint64_t gc_bytes_overwritten = 0;
+    uint64_t gc_num_keys_relocated = 0;
+    uint64_t gc_bytes_relocated = 0;
+    uint64_t gc_num_new_files = 0;
+    uint64_t gc_num_files = 0;
+    uint64_t gc_small_file = 0;
+    uint64_t gc_discardable = 0;
+    uint64_t gc_sample = 0;
   } metrics_;
 
   uint64_t prev_bytes_read_ = 0;

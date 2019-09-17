@@ -118,7 +118,7 @@ class BlobGCJobTest : public testing::Test {
     std::unique_ptr<BlobGC> blob_gc;
     {
       std::shared_ptr<BlobGCPicker> blob_gc_picker =
-          std::make_shared<BasicBlobGCPicker>(db_options, cf_options);
+          std::make_shared<BasicBlobGCPicker>(db_options, cf_options, nullptr);
       blob_gc = blob_gc_picker->PickBlobGC(
           version_set_->GetBlobStorage(cfh->GetID()).lock().get());
     }

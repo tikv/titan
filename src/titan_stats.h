@@ -50,11 +50,14 @@ class TitanInternalStats {
     NUM_OBSOLETE_BLOB_FILE,
     LIVE_BLOB_FILE_SIZE,
     OBSOLETE_BLOB_FILE_SIZE,
-    INTERNAL_STATS_ENUM_MAX,
-  };
 
-  enum HistogramType {
-    INTERNAL_HISTOGRAM_ENUM_MAX,
+    DISCARDABLE_RATIO_LE0,
+    DISCARDABLE_RATIO_LE20,
+    DISCARDABLE_RATIO_LE50,
+    DISCARDABLE_RATIO_LE80,
+    DISCARDABLE_RATIO_LE100,
+
+    INTERNAL_STATS_ENUM_MAX,
   };
 
   TitanInternalStats() { Clear(); }
@@ -89,10 +92,6 @@ class TitanInternalStats {
   void SubStats(StatsType type, uint64_t value) {
     auto& v = stats_[type];
     v.fetch_sub(value, std::memory_order_relaxed);
-  }
-
-  void MeasureTime(HistogramType type, uint64_t value) {
-    histograms_[type].Add(value);
   }
 
   bool GetIntProperty(const Slice& property, uint64_t* value) const {
@@ -131,8 +130,34 @@ class TitanInternalStats {
       internal_op_stats_;
 };
 
-class TitanStats {
+class TitanStats : public Statistics {
  public:
+  enum TickerType : uint32_t {
+    BLOB_CACHE_HIT = TICKER_ENUM_MAX + 1,
+    BLOB_CACHE_MISS,
+
+    GC_NO_NEED,
+    GC_REMAIN,
+
+    GC_DISCARDABLE,
+    GC_SAMPLE,
+    GC_SMALL_FILE,
+
+    GC_FAIL,
+    GC_SUCCESS,
+    GC_TRIGGER_NEXT,
+
+    INTERNAL_TICKER_ENUM_MAX,
+  };
+
+  enum HistogramType : uint32_t {
+    TITAN_MANIFEST_FILE_SYNC_MICROS = HISTOGRAM_ENUM_MAX + 1,
+    GC_INPUT_FILE_SIZE,
+    GC_OUTPUT_FILE_SIZE,
+
+    INTERNAL_HISTOGRAM_ENUM_MAX,
+  };
+
   TitanStats(Statistics* stats) : stats_(stats) {}
 
   // TODO: Initialize corresponding internal stats struct for Column families
@@ -143,8 +168,6 @@ class TitanStats {
     }
     return Status::OK();
   }
-
-  Statistics* statistics() { return stats_; }
 
   TitanInternalStats* internal_stats(uint32_t cf_id) {
     auto p = internal_stats_.find(cf_id);
@@ -157,45 +180,107 @@ class TitanStats {
 
   void DumpInternalOpStats(uint32_t cf_id, const std::string& cf_name);
 
+  uint64_t getTickerCount(uint32_t tickerType) const {
+    if (stats_ == nullptr) return 0;
+    if (tickerType > TICKER_ENUM_MAX) {
+      return tickers_[tickerType - (TICKER_ENUM_MAX + 1)].load(
+          std::memory_order_relaxed);
+    }
+    return stats_->getTickerCount(tickerType);
+  }
+
+  void histogramData(uint32_t type, HistogramData* const data) const {
+    if (stats_ == nullptr) return;
+    if (type > HISTOGRAM_ENUM_MAX) {
+      return histograms_[type - (HISTOGRAM_ENUM_MAX + 1)].Data(data);
+    }
+    return stats_->histogramData(type, data);
+  }
+
+  std::string getHistogramString(uint32_t type) const {
+    return stats_->getHistogramString(type);
+  }
+
+  void recordTick(uint32_t tickerType, uint64_t count = 0) {
+    if (stats_ == nullptr) return;
+    if (tickerType > TICKER_ENUM_MAX) {
+      tickers_[tickerType - (TICKER_ENUM_MAX + 1)].fetch_add(
+          count, std::memory_order_relaxed);
+    } else {
+      stats_->recordTick(tickerType, count);
+    }
+  }
+
+  void setTickerCount(uint32_t tickerType, uint64_t count) {
+    if (stats_ == nullptr) return;
+    if (tickerType > TICKER_ENUM_MAX) {
+      tickers_[tickerType - (TICKER_ENUM_MAX + 1)].store(
+          count, std::memory_order_relaxed);
+    } else {
+      stats_->setTickerCount(tickerType, count);
+    }
+  }
+
+  uint64_t getAndResetTickerCount(uint32_t tickerType) {
+    if (stats_ == nullptr) return 0;
+
+    if (tickerType > TICKER_ENUM_MAX) {
+      return tickers_[tickerType - (TICKER_ENUM_MAX + 1)].exchange(
+          0, std::memory_order_relaxed);
+    }
+    return stats_->getAndResetTickerCount(tickerType);
+  }
+
+  void measureTime(uint32_t histogramType, uint64_t time) {
+    if (stats_ == nullptr) return;
+
+    if (histogramType > HISTOGRAM_ENUM_MAX) {
+      histograms_[histogramType - (HISTOGRAM_ENUM_MAX + 1)].Add(time);
+    } else {
+      stats_->measureTime(histogramType, time);
+    }
+  }
+
+  // Resets all ticker and histogram stats
+  virtual Status Reset() {
+    for (auto& p : internal_stats_) {
+      p.second->Clear();
+    }
+    for (uint32_t type = TICKER_ENUM_MAX; type < INTERNAL_TICKER_ENUM_MAX;
+         type++) {
+      tickers_[type].store(0, std::memory_order_relaxed);
+    }
+    for (uint32_t type = HISTOGRAM_ENUM_MAX; type < INTERNAL_HISTOGRAM_ENUM_MAX;
+         type++) {
+      histograms_[type].Clear();
+    }
+    return stats_->Reset();
+  }
+
+  // String representation of the statistic object.
+  virtual std::string ToString() const { return stats_->ToString(); }
+
+  // Override this function to disable particular histogram collection
+  virtual bool HistEnabledForType(uint32_t type) const {
+    return type < INTERNAL_HISTOGRAM_ENUM_MAX;
+  }
+
  private:
   // RocksDB statistics
   Statistics* stats_ = nullptr;
   std::unordered_map<uint32_t, std::shared_ptr<TitanInternalStats>>
       internal_stats_;
-  std::array<std::atomic<uint64_t>, INTERNAL_TICKER_ENUM_MAX> tickers_;
-  std::array<HistogramImpl, INTERNAL_HISTOGRAM_ENUM_MAX> histograms_;
+  std::array<std::atomic<uint64_t>,
+             TickerType::INTERNAL_TICKER_ENUM_MAX - TICKER_ENUM_MAX>
+      tickers_;
+  std::array<HistogramImpl, INTERNAL_HISTOGRAM_ENUM_MAX - HISTOGRAM_ENUM_MAX>
+      histograms_;
 
   std::shared_ptr<TitanInternalStats> NewTitanInternalStats(
       TitanCFOptions& opts) {
     return std::make_shared<TitanInternalStats>();
   }
 };
-
-// Utility functions for RocksDB stats types
-inline Statistics* statistics(TitanStats* stats) {
-  return (stats) ? stats->statistics() : nullptr;
-}
-
-inline void RecordTick(TitanStats* stats, uint32_t ticker_type,
-                       uint64_t count = 1) {
-  if (stats && stats->statistics()) {
-    stats->statistics()->recordTick(ticker_type, count);
-  }
-}
-
-inline void MeasureTime(TitanStats* stats, uint32_t histogram_type,
-                        uint64_t time) {
-  if (stats && stats->statistics()) {
-    stats->statistics()->measureTime(histogram_type, time);
-  }
-}
-
-inline void SetTickerCount(TitanStats* stats, uint32_t ticker_type,
-                           uint64_t count) {
-  if (stats && stats->statistics()) {
-    stats->statistics()->setTickerCount(ticker_type, count);
-  }
-}
 
 // Utility functions for Titan ticker and histogram stats types
 inline void ResetStats(TitanStats* stats, uint32_t cf_id,
@@ -224,17 +309,6 @@ inline void SubStats(TitanStats* stats, uint32_t cf_id,
     auto p = stats->internal_stats(cf_id);
     if (p) {
       p->SubStats(type, value);
-    }
-  }
-}
-
-inline void MeasureTime(TitanStats* stats, uint32_t cf_id,
-                        TitanInternalStats::HistogramType histogram_type,
-                        uint64_t time) {
-  if (stats) {
-    auto p = stats->internal_stats(cf_id);
-    if (p) {
-      p->MeasureTime(histogram_type, time);
     }
   }
 }
