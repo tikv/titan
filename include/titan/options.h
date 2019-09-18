@@ -130,6 +130,18 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: kNormal
   TitanBlobRunMode blob_run_mode{TitanBlobRunMode::kNormal};
 
+  // If set true, values in blob file will be merged to a new blob file while
+  // their corresponding keys are compacted to last two level in LSM-Tree.
+  //
+  // With this feature enabled, Titan could get better scan performance, and
+  // better write performance during GC, but will suffer around 1.1 space
+  // amplification and 3 more write amplification if no GC needed (eg. uniformly
+  // distributed keys) under default rocksdb setting.
+  //
+  // Requirement: level_compaction_dynamic_level_base = true
+  // Default: false
+  bool level_merge{false};
+
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}
@@ -157,7 +169,8 @@ struct ImmutableTitanCFOptions {
         min_gc_batch_size(opts.min_gc_batch_size),
         blob_file_discardable_ratio(opts.blob_file_discardable_ratio),
         sample_file_size_ratio(opts.sample_file_size_ratio),
-        merge_small_file_threshold(opts.merge_small_file_threshold) {}
+        merge_small_file_threshold(opts.merge_small_file_threshold),
+        level_merge(opts.level_merge) {}
 
   uint64_t min_blob_size;
 
@@ -176,6 +189,8 @@ struct ImmutableTitanCFOptions {
   double sample_file_size_ratio;
 
   uint64_t merge_small_file_threshold;
+
+  bool level_merge;
 };
 
 struct MutableTitanCFOptions {

@@ -94,8 +94,7 @@ class BlobFileIteratorTest : public testing::Test {
     const int n = 1000;
     std::vector<BlobHandle> handles(n);
     for (int i = 0; i < n; i++) {
-      auto id = std::to_string(i);
-      AddKeyValue(id, id, &handles[i]);
+      AddKeyValue(GenKey(i), GenValue(i), &handles[i]);
     }
 
     FinishBuilder();
@@ -106,9 +105,8 @@ class BlobFileIteratorTest : public testing::Test {
     for (int i = 0; i < n; blob_file_iterator_->Next(), i++) {
       ASSERT_OK(blob_file_iterator_->status());
       ASSERT_EQ(blob_file_iterator_->Valid(), true);
-      auto id = std::to_string(i);
-      ASSERT_EQ(id, blob_file_iterator_->key());
-      ASSERT_EQ(id, blob_file_iterator_->value());
+      ASSERT_EQ(GenKey(i), blob_file_iterator_->key());
+      ASSERT_EQ(GenValue(i), blob_file_iterator_->value());
       BlobIndex blob_index = blob_file_iterator_->GetBlobIndex();
       ASSERT_EQ(handles[i], blob_index.blob_handle);
     }
@@ -125,8 +123,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   const int n = 1000;
   std::vector<BlobHandle> handles(n);
   for (int i = 0; i < n; i++) {
-    auto id = std::to_string(i);
-    AddKeyValue(id, id, &handles[i]);
+    AddKeyValue(GenKey(i), GenValue(i), &handles[i]);
   }
 
   FinishBuilder();
@@ -142,9 +139,8 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
     BlobIndex blob_index;
     blob_index = blob_file_iterator_->GetBlobIndex();
     ASSERT_EQ(handles[i], blob_index.blob_handle);
-    auto id = std::to_string(i);
-    ASSERT_EQ(id, blob_file_iterator_->key());
-    ASSERT_EQ(id, blob_file_iterator_->value());
+    ASSERT_EQ(GenKey(i), blob_file_iterator_->key());
+    ASSERT_EQ(GenValue(i), blob_file_iterator_->value());
   }
 
   auto idx = Random::GetTLSInstance()->Uniform(n);
@@ -207,7 +203,7 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
                     &readable_file_);
   iters.emplace_back(std::unique_ptr<BlobFileIterator>(new BlobFileIterator{
       std::move(readable_file_), file_number_, file_size, TitanCFOptions()}));
-  BlobFileMergeIterator iter(std::move(iters));
+  BlobFileMergeIterator iter(std::move(iters), titan_options_.comparator);
 
   iter.SeekToFirst();
   int i = 1;

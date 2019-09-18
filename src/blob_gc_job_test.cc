@@ -28,7 +28,7 @@ class BlobGCJobTest : public testing::Test {
   TitanDB* db_;
   DBImpl* base_db_;
   TitanDBImpl* tdb_;
-  VersionSet* version_set_;
+  BlobFileSet* blob_file_set_;
   TitanOptions options_;
   port::Mutex* mutex_;
 
@@ -45,7 +45,7 @@ class BlobGCJobTest : public testing::Test {
 
   std::weak_ptr<BlobStorage> GetBlobStorage(uint32_t cf_id) {
     MutexLock l(mutex_);
-    return version_set_->GetBlobStorage(cf_id);
+    return blob_file_set_->GetBlobStorage(cf_id);
   }
 
   void CheckBlobNumber(int expected) {
@@ -75,7 +75,7 @@ class BlobGCJobTest : public testing::Test {
     ClearDir();
     ASSERT_OK(TitanDB::Open(options_, dbname_, &db_));
     tdb_ = reinterpret_cast<TitanDBImpl*>(db_);
-    version_set_ = tdb_->vset_.get();
+    blob_file_set_ = tdb_->blob_file_set_.get();
     mutex_ = &tdb_->mutex_;
     base_db_ = reinterpret_cast<DBImpl*>(tdb_->GetRootDB());
   }
@@ -120,7 +120,7 @@ class BlobGCJobTest : public testing::Test {
       std::shared_ptr<BlobGCPicker> blob_gc_picker =
           std::make_shared<BasicBlobGCPicker>(db_options, cf_options);
       blob_gc = blob_gc_picker->PickBlobGC(
-          version_set_->GetBlobStorage(cfh->GetID()).lock().get());
+          blob_file_set_->GetBlobStorage(cfh->GetID()).lock().get());
     }
 
     if (expected) {
@@ -132,7 +132,7 @@ class BlobGCJobTest : public testing::Test {
 
       BlobGCJob blob_gc_job(blob_gc.get(), base_db_, mutex_, tdb_->db_options_,
                             tdb_->env_, EnvOptions(options_),
-                            tdb_->blob_manager_.get(), version_set_,
+                            tdb_->blob_manager_.get(), blob_file_set_,
                             &log_buffer, nullptr, nullptr);
 
       s = blob_gc_job.Prepare();
@@ -189,7 +189,7 @@ class BlobGCJobTest : public testing::Test {
     BlobGC blob_gc(std::move(tmp), TitanCFOptions(), false /*trigger_next*/);
     blob_gc.SetColumnFamily(cfh);
     BlobGCJob blob_gc_job(&blob_gc, base_db_, mutex_, TitanDBOptions(),
-                          Env::Default(), EnvOptions(), nullptr, version_set_,
+                          Env::Default(), EnvOptions(), nullptr, blob_file_set_,
                           nullptr, nullptr, nullptr);
     bool discardable = false;
     ASSERT_OK(blob_gc_job.DiscardEntry(key, blob_index, &discardable));

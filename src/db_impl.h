@@ -5,10 +5,10 @@
 #include "util/repeatable_thread.h"
 
 #include "blob_file_manager.h"
+#include "blob_file_set.h"
 #include "table_factory.h"
 #include "titan/db.h"
 #include "titan_stats.h"
-#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -137,6 +137,11 @@ class TitanDBImpl : public TitanDB {
   Status TEST_StartGC(uint32_t column_family_id);
   Status TEST_PurgeObsoleteFiles();
 
+  int TEST_bg_gc_running() {
+    MutexLock l(&mutex_);
+    return bg_gc_running_;
+  }
+
  private:
   class FileManager;
   friend class FileManager;
@@ -146,7 +151,9 @@ class TitanDBImpl : public TitanDB {
   friend class TitanThreadSafetyTest;
   friend class PersistGCStatsTest;
 
-  Status ValidateOptions() const;
+  Status ValidateOptions(
+      const TitanDBOptions& options,
+      const std::vector<TitanCFDescriptor>& column_families) const;
 
   Status GetImpl(const ReadOptions& options, ColumnFamilyHandle* handle,
                  const Slice& key, PinnableSlice* value);
@@ -202,6 +209,9 @@ class TitanDBImpl : public TitanDB {
   }
 
   // REQUIRE: mutex_ held
+  bool HasPendingDropCFRequest(uint32_t cf_id);
+
+  // REQUIRE: mutex_ held
   Status SetBGError(const Status& s);
 
   Status GetBGError() {
@@ -220,7 +230,9 @@ class TitanDBImpl : public TitanDB {
   // potential dead lock.
   mutable port::Mutex mutex_;
   // This condition variable is signaled on these conditions:
-  // * whenever bg_gc_scheduled_ goes down to 0
+  // * whenever bg_gc_scheduled_ goes down to 0.
+  // * whenever bg_gc_running_ goes down to 0.
+  // * whenever drop_cf_requests_ goes down to 0.
   port::CondVar bg_cv_;
 
   std::string dbname_;
@@ -246,7 +258,7 @@ class TitanDBImpl : public TitanDB {
   // handle for dump internal stats at fixed intervals.
   std::unique_ptr<RepeatableThread> thread_dump_stats_;
 
-  std::unique_ptr<VersionSet> vset_;
+  std::unique_ptr<BlobFileSet> blob_file_set_;
   std::set<uint64_t> pending_outputs_;
   std::shared_ptr<BlobFileManager> blob_manager_;
 
@@ -254,10 +266,14 @@ class TitanDBImpl : public TitanDB {
   // pending_gc_ hold column families that already on gc_queue_.
   std::deque<uint32_t> gc_queue_;
 
-  // Guarded by mutex_.
-  int bg_gc_scheduled_{0};
-  // REQUIRE: mutex_ held
-  int unscheduled_gc_{0};
+  // REQUIRE: mutex_ held.
+  int bg_gc_scheduled_ = 0;
+  // REQUIRE: mutex_ held.
+  int bg_gc_running_ = 0;
+  // REQUIRE: mutex_ held.
+  int unscheduled_gc_ = 0;
+  // REQUIRE: mutex_ held.
+  int drop_cf_requests_ = 0;
 
   std::atomic_bool shuting_down_{false};
 };
