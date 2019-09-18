@@ -1,5 +1,7 @@
 #include "util.h"
 
+#include "util/stop_watch.h"
+
 namespace rocksdb {
 namespace titandb {
 
@@ -155,6 +157,13 @@ void UnrefCacheHandle(void* arg1, void* arg2) {
   Cache* cache = reinterpret_cast<Cache*>(arg1);
   Cache::Handle* h = reinterpret_cast<Cache::Handle*>(arg2);
   cache->Release(h);
+}
+
+Status SyncTitanManifest(Env* env, TitanStats* stats,
+                         const ImmutableDBOptions* db_options,
+                         WritableFileWriter* file) {
+  StopWatch sw(env, stats, TitanStats::TITAN_MANIFEST_FILE_SYNC_MICROS);
+  return file->Sync(db_options->use_fsync);
 }
 
 }  // namespace titandb
