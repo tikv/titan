@@ -240,7 +240,8 @@ TitanInternalStats::StatsType BlobFileMeta::GetDiscardableRatioLevel() const {
     type = TitanInternalStats::DISCARDABLE_RATIO_LE50;
   } else if (ratio <= 0.8) {
     type = TitanInternalStats::DISCARDABLE_RATIO_LE80;
-  } else if (std::abs(ratio - 1.0) < std::numeric_limits<double>::epsilon()) {
+  } else if (ratio <= 1.0 ||
+             (ratio - 1.0) < std::numeric_limits<double>::epsilon()) {
     type = TitanInternalStats::DISCARDABLE_RATIO_LE100;
   } else {
     fprintf(stderr, "invalid discarable ratio");
