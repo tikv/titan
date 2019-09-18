@@ -487,6 +487,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
           builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(),
           0, 0, builder.second->GetSmallestKey(),
           builder.second->GetLargestKey());
+      file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
 
       if (!tmp.empty()) {
         tmp.append(" ");
