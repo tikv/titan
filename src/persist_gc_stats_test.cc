@@ -114,7 +114,7 @@ class PersistGCStatsTest : public testing::Test {
       cf_handle = db_->DefaultColumnFamily();
     }
     MutexLock l(&db_impl_->mutex_);
-    return db_impl_->vset_->GetBlobStorage(cf_handle->GetID());
+    return db_impl_->blob_file_set_->GetBlobStorage(cf_handle->GetID());
   }
 
   void VerifyDB(const std::map<std::string, std::string>& data,
