@@ -56,7 +56,7 @@ Status BlobDecoder::DecodeHeader(Slice* src) {
   if (!GetFixed32(src, &crc_)) {
     return Status::Corruption("BlobHeader");
   }
-  header_crc_ = crc32c::Value(src->data(), kBlobHeaderSize - 4);
+  header_crc_ = crc32c::Value(src->data(), kRecordHeaderSize - 4);
 
   unsigned char compression;
   if (!GetFixed32(src, &record_size_) || !GetChar(src, &compression)) {
@@ -218,7 +218,7 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
       assert(state_ != FileState::kObsolete);
       state_ = FileState::kObsolete;
       break;
-    case FileEvent::kNeedGC:
+    case FileEvent::kNeedMerge:
       if (state_ == FileState::kToMerge) {
         break;
       }
@@ -239,14 +239,6 @@ void BlobFileMeta::AddDiscardableSize(uint64_t _discardable_size) {
 double BlobFileMeta::GetDiscardableRatio() const {
   return static_cast<double>(discardable_size_) /
          static_cast<double>(file_size_);
-}
-
-void BlobFileMeta::AddDiscardableEntries(uint64_t _discardable_entries) {
-  // for compatibility
-  if(file_entries_==0) return;
-  assert(_discardable_entries <= file_entries_);
-  discardable_entries_ += _discardable_entries;
-  assert(discardable_entries_ <= file_entries_);
 }
 
 void BlobFileHeader::EncodeTo(std::string* dst) const {

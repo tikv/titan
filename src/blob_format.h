@@ -12,10 +12,10 @@ namespace titandb {
 // Blob file overall format:
 //
 // [blob file header]
-// [blob head + record 1]
-// [blob head + record 2]
+// [record head + record 1]
+// [record head + record 2]
 // ...
-// [blob head + record N]
+// [record head + record N]
 // [meta block 1]
 // [meta block 2]
 // ...
@@ -31,7 +31,9 @@ namespace titandb {
 //    | Fixed32 | Fixed32 |    char     |
 //    +---------+---------+-------------+
 //
-const uint64_t kBlobHeaderSize = 9;
+const uint64_t kBlobHeaderSize = 8;
+const uint64_t kRecordHeaderSize = 9;
+const uint64_t kBlobFooterSize = BlockHandle::kMaxEncodedLength + 8 + 4;
 
 // Format of blob record (not fixed size):
 //
@@ -69,7 +71,7 @@ class BlobEncoder {
   size_t GetEncodedSize() const { return sizeof(header_) + record_.size(); }
 
  private:
-  char header_[kBlobHeaderSize];
+  char header_[kRecordHeaderSize];
   Slice record_;
   std::string record_buffer_;
   std::string compressed_buffer_;
@@ -169,7 +171,7 @@ class BlobFileMeta {
     kFlushOrCompactionOutput,
     kDbRestart,
     kDelete,
-    kNeedGC,
+    kNeedMerge,
   };
 
   enum class FileState {
@@ -219,9 +221,8 @@ class BlobFileMeta {
 
   void AddDiscardableSize(uint64_t _discardable_size);
   double GetDiscardableRatio() const;
-  void AddDiscardableEntries(uint64_t _discardable_entries);
-  bool Expired() {
-    return file_entries_ > 0 && discardable_entries_ == file_entries_;
+  bool NoLiveData() {
+    return discardable_size_ == file_size_ - kBlobHeaderSize - kBlobFooterSize;
   }
 
  private:
@@ -240,7 +241,6 @@ class BlobFileMeta {
   FileState state_{FileState::kInit};
 
   uint64_t discardable_size_{0};
-  uint64_t discardable_entries_{0};
   // gc_mark is set to true when this file is recovered from re-opening the DB
   // that means this file needs to be checked for GC
   bool gc_mark_{false};
@@ -281,7 +281,7 @@ struct BlobFileHeader {
 struct BlobFileFooter {
   // The first 64bits from $(echo titandb/blob | sha1sum).
   static const uint64_t kFooterMagicNumber{0x2be0a6148e39edc6ull};
-  static const uint64_t kEncodedLength{BlockHandle::kMaxEncodedLength + 8 + 4};
+  static const uint64_t kEncodedLength{kBlobFooterSize};
 
   BlockHandle meta_index_handle{BlockHandle::NullBlockHandle()};
 
