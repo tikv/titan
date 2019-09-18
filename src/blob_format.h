@@ -210,6 +210,7 @@ class BlobFileMeta {
 
   void AddDiscardableSize(uint64_t _discardable_size);
   double GetDiscardableRatio() const;
+  TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
 
  private:
   // Persistent field

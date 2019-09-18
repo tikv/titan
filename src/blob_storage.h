@@ -68,6 +68,8 @@ class BlobStorage {
     for (auto& file : files_) {
       file.second->set_gc_mark(true);
       file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
+      auto level = file.second->GetDiscardableRatioLevel();
+      AddStats(stats_, cf_id_, level, 1);
     }
   }
 

@@ -158,6 +158,21 @@ class TitanDB : public StackableDB {
     //  "rocksdb.titandb.obsolete-blob-file-size" - returns size of obsolete
     //      blob files.
     static const std::string kObsoleteBlobFileSize;
+    //  "rocksdb.titandb.discardable_ratio_le0_file_num" - returns count of
+    //  file whose discardable ratio is less or equal to 0%.
+    static const std::string kNumDiscardableRatioLE0File;
+    //  "rocksdb.titandb.discardable_ratio_le20_file_num" - returns count of
+    //  file whose discardable ratio is less or equal to 20%.
+    static const std::string kNumDiscardableRatioLE20File;
+    //  "rocksdb.titandb.discardable_ratio_le50_file_num" - returns count of
+    //  file whose discardable ratio is less or equal to 50%.
+    static const std::string kNumDiscardableRatioLE50File;
+    //  "rocksdb.titandb.discardable_ratio_le80_file_num" - returns count of
+    //  file whose discardable ratio is less or equal to 80%.
+    static const std::string kNumDiscardableRatioLE80File;
+    //  "rocksdb.titandb.discardable_ratio_le100_file_num" - returns count of
+    //  file whose discardable ratio is less or equal to 100%.
+    static const std::string kNumDiscardableRatioLE100File;
   };
 
   bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,

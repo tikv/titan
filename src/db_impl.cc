@@ -58,7 +58,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     for (auto& file : files) {
       RecordTick(db_->stats_.get(), BLOB_DB_BLOB_FILE_SYNCED);
       {
-        StopWatch sync_sw(db_->env_, statistics(db_->stats_.get()),
+        StopWatch sync_sw(db_->env_, db_->stats_.get(),
                           BLOB_DB_BLOB_FILE_SYNC_MICROS);
         s = file.second->GetFile()->Sync(false);
       }
@@ -535,7 +535,8 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                         nullptr /*read_callback*/, &is_blob_index);
   if (!s.ok() || !is_blob_index) return s;
 
-  StopWatch get_sw(env_, statistics(stats_.get()), BLOB_DB_GET_MICROS);
+  StopWatch get_sw(env_, stats_.get(), BLOB_DB_GET_MICROS);
+  RecordTick(stats_.get(), BLOB_DB_NUM_GET);
 
   BlobIndex index;
   s = index.DecodeFrom(value);
@@ -550,8 +551,7 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   mutex_.Unlock();
 
   {
-    StopWatch read_sw(env_, statistics(stats_.get()),
-                      BLOB_DB_BLOB_FILE_READ_MICROS);
+    StopWatch read_sw(env_, stats_.get(), BLOB_DB_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
     RecordTick(stats_.get(), BLOB_DB_NUM_KEYS_READ);
     RecordTick(stats_.get(), BLOB_DB_BLOB_FILE_BYTES_READ,
@@ -794,7 +794,13 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     if (!file->is_obsolete()) {
       delta += bfs.second;
     }
+    auto before = file->GetDiscardableRatioLevel();
     file->AddDiscardableSize(static_cast<uint64_t>(bfs.second));
+    auto after = file->GetDiscardableRatioLevel();
+    if (before != after) {
+      AddStats(stats_.get(), cf_id, after, 1);
+      SubStats(stats_.get(), cf_id, before, 1);
+    }
   }
   SubStats(stats_.get(), cf_id, TitanInternalStats::LIVE_BLOB_SIZE, delta);
   bs->ComputeGCScore();
@@ -1082,7 +1088,13 @@ void TitanDBImpl::OnCompactionCompleted(
       if (!file->is_obsolete()) {
         delta += -bfs.second;
       }
+      auto before = file->GetDiscardableRatioLevel();
       file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
+      auto after = file->GetDiscardableRatioLevel();
+      if (before != after) {
+        AddStats(stats_.get(), compaction_job_info.cf_id, after, 1);
+        SubStats(stats_.get(), compaction_job_info.cf_id, before, 1);
+      }
     }
     SubStats(stats_.get(), compaction_job_info.cf_id,
              TitanInternalStats::LIVE_BLOB_SIZE, delta);
