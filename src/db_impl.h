@@ -144,6 +144,7 @@ class TitanDBImpl : public TitanDB {
   friend class BaseDbListener;
   friend class TitanDBTest;
   friend class TitanThreadSafetyTest;
+  friend class PersistGCStatsTest;
 
   Status ValidateOptions() const;
 
