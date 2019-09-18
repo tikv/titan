@@ -4,6 +4,7 @@
 
 #include "blob_file_iterator.h"
 #include "blob_file_reader.h"
+#include "blob_file_size_collector.h"
 #include "db_impl.h"
 #include "db_iter.h"
 #include "rocksdb/utilities/debug.h"
@@ -436,6 +437,17 @@ TEST_F(TitanDBTest, IngestExternalFiles) {
     bf++;
     VerifyBlob(bf->first, ingested_data);
   }
+}
+
+TEST_F(TitanDBTest, NewColumnFamilyHasBlobFileSizeCollector) {
+  Open();
+  AddCF("new_cf");
+  Options opt = db_->GetOptions(cf_handles_.back());
+  ASSERT_EQ(1, opt.table_properties_collector_factories.size());
+  std::unique_ptr<BlobFileSizeCollectorFactory> prop_collector_factory(
+      new BlobFileSizeCollectorFactory());
+  ASSERT_EQ(std::string(prop_collector_factory->Name()),
+            std::string(opt.table_properties_collector_factories[0]->Name()));
 }
 
 TEST_F(TitanDBTest, DropColumnFamily) {
