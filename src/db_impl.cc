@@ -305,7 +305,7 @@ Status TitanDBImpl::RecoverGCStats(
   Status s;
   for (auto cf_id : column_families) {
     std::map<uint64_t, std::weak_ptr<BlobFileMeta>> files;
-    auto blob_storage = vset_->GetBlobStorage(cf_id).lock();
+    auto blob_storage = blob_file_set_->GetBlobStorage(cf_id).lock();
     assert(blob_storage != nullptr);
     blob_storage->ExportBlobFiles(files);
     for (auto file : files) {
@@ -315,7 +315,7 @@ Status TitanDBImpl::RecoverGCStats(
       file_number_str[15] = 0;
       ReadOptions ro;
       PinnableSlice stats_value;
-      s = db_->Get(ro, persist_cf_handle, file_number_str, &stats_value);
+      s = db_->Get(ro, persist_cf_handle, Slice(file_number_str), &stats_value);
       if (!s.ok()) {
         ROCKS_LOG_ERROR(db_options_.info_log,
                         "GC stats not found for file %" PRIu64 ".",
