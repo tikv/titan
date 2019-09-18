@@ -259,19 +259,10 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   s = blob_file_set_->Open(column_families);
   if (!s.ok()) return s;
 
-  static bool has_init_background_threads = false;
-  if (!has_init_background_threads) {
-    auto bottom_pri_threads_num =
-        env_->GetBackgroundThreads(Env::Priority::BOTTOM);
-    if (!db_options_.disable_background_gc &&
-        db_options_.max_background_gc > 0) {
-      env_->IncBackgroundThreadsIfNeeded(
-          db_options_.max_background_gc + bottom_pri_threads_num,
-          Env::Priority::BOTTOM);
-      assert(env_->GetBackgroundThreads(Env::Priority::BOTTOM) ==
-             bottom_pri_threads_num + db_options_.max_background_gc);
-    }
-    has_init_background_threads = true;
+  // Initialize GC thread pool.
+  if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
+    env_->IncBackgroundThreadsIfNeeded(db_options_.max_background_gc,
+                                       Env::Priority::BOTTOM);
   }
 
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
@@ -404,17 +395,35 @@ Status TitanDBImpl::CreateColumnFamilies(
 
 Status TitanDBImpl::DropColumnFamilies(
     const std::vector<ColumnFamilyHandle*>& handles) {
+  TEST_SYNC_POINT("TitanDBImpl::DropColumnFamilies:Begin");
   std::vector<uint32_t> column_families;
   std::string column_families_str;
   for (auto& handle : handles) {
     column_families.emplace_back(handle->GetID());
     column_families_str += "[" + handle->GetName() + "]";
   }
+  {
+    MutexLock l(&mutex_);
+    drop_cf_requests_++;
+
+    // Has to wait till no GC job is running before proceed, otherwise GC jobs
+    // can fail and set background error.
+    // TODO(yiwu): only wait for GC jobs of CFs being dropped.
+    while (bg_gc_running_ > 0) {
+      bg_cv_.Wait();
+    }
+  }
+  TEST_SYNC_POINT_CALLBACK("TitanDBImpl::DropColumnFamilies:BeforeBaseDBDropCF",
+                           nullptr);
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
     MutexLock l(&mutex_);
     SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
     s = blob_file_set_->DropColumnFamilies(column_families, obsolete_sequence);
+    drop_cf_requests_--;
+    if (drop_cf_requests_ == 0) {
+      bg_cv_.SignalAll();
+    }
   }
   if (s.ok()) {
     ROCKS_LOG_INFO(db_options_.info_log, "Dropped column families: %s",
