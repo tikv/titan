@@ -760,9 +760,20 @@ DEFINE_uint64(blob_db_min_blob_size, 0,
 // Titan Options
 DEFINE_bool(use_titan, true, "Open a Titan instance.");
 
-DEFINE_uint64(titan_db_min_blob_size, 0,
+DEFINE_uint64(titan_min_blob_size, 0,
               "Smallest blob to store in a file. Blobs smaller than this "
               "will be inlined with the key in the LSM tree.");
+
+DEFINE_bool(titan_disable_background_gc,
+            rocksdb::titandb::TitanOptions().disable_background_gc,
+            "Disable Titan background GC");
+
+DEFINE_int32(titan_max_background_gc,
+             rocksdb::titandb::TitanOptions().max_background_gc,
+             "Titan max background GC threads.");
+
+DEFINE_int64(titan_blob_cache_size, 0,
+             "Size of Titan blob cache. Disabled by default.");
 
 DEFINE_uint64(blob_db_bytes_per_sync, 0, "Bytes to sync blob file at.");
 
@@ -3813,9 +3824,14 @@ class Benchmark {
     }
 
     options.listeners.emplace_back(listener_);
-    opts->min_blob_size = FLAGS_titan_db_min_blob_size;
+    opts->min_blob_size = FLAGS_titan_min_blob_size;
+    opts->disable_background_gc = FLAGS_titan_disable_background_gc;
+    opts->max_background_gc = FLAGS_titan_max_background_gc;
     opts->min_gc_batch_size = 128 << 20;
     opts->blob_file_compression = FLAGS_compression_type_e;
+    if (FLAGS_titan_blob_cache_size > 0) {
+      opts->blob_cache = NewLRUCache(FLAGS_titan_blob_cache_size);
+    }
     if (FLAGS_num_multi_db <= 1) {
       OpenDb(options, FLAGS_db, &db_);
     } else {
