@@ -183,7 +183,7 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
       // normal state after flush completed.
       assert(state_ == FileState::kPendingLSM ||
              state_ == FileState::kPendingGC || state_ == FileState::kNormal ||
-             state_ == FileState::kBeingGC);
+             state_ == FileState::kBeingGC || state_ == FileState::kObsolete);
       if (state_ == FileState::kPendingLSM) state_ = FileState::kNormal;
       break;
     case FileEvent::kGCCompleted:
