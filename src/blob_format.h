@@ -16,11 +16,6 @@ namespace titandb {
 // [record head + record 2]
 // ...
 // [record head + record N]
-// [meta block 1]
-// [meta block 2]
-// ...
-// [meta block K]
-// [meta index block]
 // [blob file footer]
 
 // Format of blob head (9 bytes):

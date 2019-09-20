@@ -1144,7 +1144,7 @@ void TitanDBImpl::OnCompactionCompleted(
     }
     SubStats(stats_.get(), compaction_job_info.cf_id,
              TitanInternalStats::LIVE_BLOB_SIZE, delta);
-    // If level merge is enabled, expired blob files will be deleted by live
+    // If level merge is enabled, blob files will be deleted by live
     // data based GC, so we don't need to trigger regular GC anymore
     if (cf_options.level_merge) {
       blob_file_set_->LogAndApply(edit);
