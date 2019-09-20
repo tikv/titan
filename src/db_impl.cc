@@ -741,7 +741,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
 
   auto cf_id = column_family->GetID();
   // Discardable size and entries
-  std::map<uint64_t, std::pair<uint64_t, uint64_t>> blob_files_discardable_size;
+  std::map<uint64_t, uint64_t> blob_files_discardable_size;
   for (auto& collection : props) {
     auto& prop = collection.second;
     auto ucp_iter = prop->user_collected_properties.find(
@@ -750,7 +750,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     if (ucp_iter == prop->user_collected_properties.end()) {
       continue;
     }
-    std::map<uint64_t, BlobFileSize> sst_blob_files_size;
+    std::map<uint64_t, uint64_t> sst_blob_files_size;
     std::string str = ucp_iter->second;
     Slice slice{str};
     if (!BlobFileSizeCollector::Decode(&slice, &sst_blob_files_size)) {
@@ -764,8 +764,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     }
 
     for (auto& it : sst_blob_files_size) {
-      blob_files_discardable_size[it.first].first += it.second.size;
-      blob_files_discardable_size[it.first].second += it.second.entries;
+      blob_files_discardable_size[it.first] += it.second;
     }
   }
 
@@ -788,8 +787,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
                             " not Found.");
   }
 
-  uint64_t size_delta = 0;
-  uint64_t entries_delta = 0;
+  uint64_t delta = 0;
   VersionEdit edit;
   auto cf_options = bs->cf_options();
   for (const auto& bfs : blob_files_discardable_size) {
@@ -799,22 +797,20 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
       continue;
     }
     if (!file->is_obsolete()) {
-      size_delta += bfs.second.first;
-      entries_delta += bfs.second.second;
+      delta += bfs.second;
     }
-    file->AddDiscardableSize(bfs.second.first);
-    file->AddDiscardableEntries(bfs.second.second);
+    file->AddDiscardableSize(bfs.second);
     if (cf_options.level_merge) {
-      if (file->Expired()) {
+      if (file->NoLiveData()) {
         edit.DeleteBlobFile(file->file_number(),
                             db_impl_->GetLatestSequenceNumber());
       } else if (file->GetDiscardableRatio() >
                  cf_options.blob_file_discardable_ratio) {
-        file->FileStateTransit(BlobFileMeta::FileEvent::kNeedGC);
+        file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
       }
     }
   }
-  SubStats(stats_.get(), cf_id, TitanInternalStats::LIVE_BLOB_SIZE, size_delta);
+  SubStats(stats_.get(), cf_id, TitanInternalStats::LIVE_BLOB_SIZE, delta);
   if (cf_options.level_merge) {
     vset_->LogAndApply(edit);
   } else {
@@ -956,7 +952,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
   if (ucp_iter == tps.user_collected_properties.end()) {
     return;
   }
-  std::map<uint64_t, BlobFileSize> blob_files_size;
+  std::map<uint64_t, uint64_t> blob_files_size;
   Slice src{ucp_iter->second};
   if (!BlobFileSizeCollector::Decode(&src, &blob_files_size)) {
     // TODO: Should treat it as background error and make DB read-only.
@@ -1005,7 +1001,7 @@ void TitanDBImpl::OnCompactionCompleted(
     return;
   }
   // difference of blob file valid size and entries after compaction
-  std::map<uint64_t, std::pair<int64_t, int64_t>> blob_files_size_diff;
+  std::map<uint64_t, int64_t> blob_files_size_diff;
   std::set<uint64_t> outputs;
   std::set<uint64_t> inputs;
   auto calc_bfs = [&](const std::vector<std::string>& files, int coefficient,
@@ -1027,7 +1023,7 @@ void TitanDBImpl::OnCompactionCompleted(
       if (ucp_iter == tp_iter->second->user_collected_properties.end()) {
         continue;
       }
-      std::map<uint64_t, BlobFileSize> input_blob_files_size;
+      std::map<uint64_t, uint64_t> input_blob_files_size;
       std::string s = ucp_iter->second;
       Slice slice{s};
       if (!BlobFileSizeCollector::Decode(&slice, &input_blob_files_size)) {
@@ -1050,12 +1046,10 @@ void TitanDBImpl::OnCompactionCompleted(
         }
         auto bfs_iter = blob_files_size_diff.find(input_bfs.first);
         if (bfs_iter == blob_files_size_diff.end()) {
-          blob_files_size_diff[input_bfs.first] = {
-              coefficient * input_bfs.second.size,
-              coefficient * input_bfs.second.entries};
+          blob_files_size_diff[input_bfs.first] =
+              coefficient * input_bfs.second;
         } else {
-          bfs_iter->second.first += coefficient * input_bfs.second.size;
-          bfs_iter->second.second += coefficient * input_bfs.second.entries;
+          bfs_iter->second += coefficient * input_bfs.second;
         }
       }
     }
@@ -1093,13 +1087,12 @@ void TitanDBImpl::OnCompactionCompleted(
       file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
     }
 
-    uint64_t size_delta = 0;
-    uint64_t entries_delta = 0;
+    uint64_t delta = 0;
     VersionEdit edit;
     auto cf_options = bs->cf_options();
     for (const auto& bfs : blob_files_size_diff) {
       // blob file size < 0 means discardable size > 0
-      if (bfs.second.first >= 0) {
+      if (bfs.second >= 0) {
         continue;
       }
       auto file = bs->FindFile(bfs.first).lock();
@@ -1108,28 +1101,27 @@ void TitanDBImpl::OnCompactionCompleted(
         continue;
       }
       if (!file->is_obsolete()) {
-        size_delta += -bfs.second.first;
-        entries_delta += -bfs.second.second;
+        delta += -bfs.second;
       }
-      file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second.first));
-      file->AddDiscardableEntries(static_cast<uint64_t>(-bfs.second.second));
+      file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
       if (cf_options.level_merge) {
         // After level merge, most entries of merged blob files are written to
         // new blob files. Delete blob files which all entries are discardable.
         // Mark last two level blob files to merge in next compaction if
         // discardable size reached GC threshold
-        if (file->Expired()) {
+        if (file->NoLiveData()) {
           edit.DeleteBlobFile(file->file_number(),
                               db_impl_->GetLatestSequenceNumber());
-        } else if ((int)file->file_level() >= cf_options.num_levels - 2 &&
+        } else if (static_cast<int>(file->file_level()) >=
+                       cf_options.num_levels - 2 &&
                    file->GetDiscardableRatio() >
                        cf_options.blob_file_discardable_ratio) {
-          file->FileStateTransit(BlobFileMeta::FileEvent::kNeedGC);
+          file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
         }
       }
     }
     SubStats(stats_.get(), compaction_job_info.cf_id,
-             TitanInternalStats::LIVE_BLOB_SIZE, size_delta);
+             TitanInternalStats::LIVE_BLOB_SIZE, delta);
     // If level merge is enabled, expired blob files will be deleted by entries
     // based GC, so we don't need to trigger regular GC anymore
     if (cf_options.level_merge) {
