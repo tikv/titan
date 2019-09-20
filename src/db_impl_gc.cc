@@ -1,5 +1,7 @@
 #include "db_impl.h"
 
+#include "test_util/sync_point.h"
+
 #include "blob_file_iterator.h"
 #include "blob_gc_job.h"
 #include "blob_gc_picker.h"
@@ -28,11 +30,17 @@ void TitanDBImpl::BGWorkGC(void* db) {
 
 void TitanDBImpl::BackgroundCallGC() {
   LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
+  TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeGCRunning");
 
   {
     MutexLock l(&mutex_);
     assert(bg_gc_scheduled_ > 0);
+    while (drop_cf_requests_ > 0) {
+      bg_cv_.Wait();
+    }
+    bg_gc_running_++;
 
+    TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeBackgroundGC");
     BackgroundGC(&log_buffer);
 
     {
@@ -42,13 +50,14 @@ void TitanDBImpl::BackgroundCallGC() {
       mutex_.Lock();
     }
 
+    bg_gc_running_--;
     bg_gc_scheduled_--;
     MaybeScheduleGC();
-    if (bg_gc_scheduled_ == 0) {
-      // signal if
-      // * bg_gc_scheduled_ == 0 -- need to wakeup ~TitanDBImpl
+    if (bg_gc_scheduled_ == 0 || bg_gc_running_ == 0) {
+      // Signal DB destructor if bg_gc_scheduled_ drop to 0.
+      // Signal drop CF requests if bg_gc_running_ drop to 0.
       // If none of this is true, there is no need to signal since nobody is
-      // waiting for it
+      // waiting for it.
       bg_cv_.SignalAll();
     }
     // IMPORTANT: there should be no code after calling SignalAll. This call may
@@ -60,20 +69,28 @@ void TitanDBImpl::BackgroundCallGC() {
 
 Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   mutex_.AssertHeld();
-  StopWatch gc_sw(env_, statistics(stats_.get()), BLOB_DB_GC_MICROS);
+  StopWatch gc_sw(env_, stats_.get(), BLOB_DB_GC_MICROS);
 
   std::unique_ptr<BlobGC> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;
   Status s;
   if (!gc_queue_.empty()) {
     uint32_t column_family_id = PopFirstFromGCQueue();
-    auto bs = vset_->GetBlobStorage(column_family_id).lock().get();
-
-    if (bs) {
-      const auto& cf_options = bs->cf_options();
+    std::shared_ptr<BlobStorage> blob_storage;
+    // Skip CFs that have been dropped.
+    if (!blob_file_set_->IsColumnFamilyObsolete(column_family_id)) {
+      blob_storage = blob_file_set_->GetBlobStorage(column_family_id).lock();
+    } else {
+      TEST_SYNC_POINT_CALLBACK("TitanDBImpl::BackgroundGC:CFDropped", nullptr);
+      ROCKS_LOG_BUFFER(log_buffer, "GC skip dropped colum family [%s].",
+                       cf_info_[column_family_id].name.c_str());
+    }
+    if (blob_storage != nullptr) {
+      const auto& cf_options = blob_storage->cf_options();
       std::shared_ptr<BlobGCPicker> blob_gc_picker =
-          std::make_shared<BasicBlobGCPicker>(db_options_, cf_options);
-      blob_gc = blob_gc_picker->PickBlobGC(bs);
+          std::make_shared<BasicBlobGCPicker>(db_options_, cf_options,
+                                              stats_.get());
+      blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get());
 
       if (blob_gc) {
         cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
@@ -90,8 +107,9 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
     ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
-                          env_options_, blob_manager_.get(), vset_.get(),
-                          log_buffer, &shuting_down_, stats_.get());
+                          env_options_, blob_manager_.get(),
+                          blob_file_set_.get(), log_buffer, &shuting_down_,
+                          stats_.get());
     s = blob_gc_job.Prepare();
     if (s.ok()) {
       mutex_.Unlock();
@@ -106,6 +124,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
     if (blob_gc->trigger_next() &&
         (bg_gc_scheduled_ - 1 + gc_queue_.size() <
          2 * static_cast<uint32_t>(db_options_.max_background_gc))) {
+      RecordTick(stats_.get(), TitanStats::GC_TRIGGER_NEXT, 1);
       // There is still data remained to be GCed
       // and the queue is not overwhelmed
       // then put this cf to GC queue for next GC
@@ -114,38 +133,47 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   }
 
   if (s.ok()) {
+    RecordTick(stats_.get(), TitanStats::GC_SUCCESS, 1);
     // Done
   } else {
     SetBGError(s);
+    RecordTick(stats_.get(), TitanStats::GC_FAIL, 1);
     ROCKS_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
                    s.ToString().c_str());
   }
 
+  TEST_SYNC_POINT("TitanDBImpl::BackgroundGC:Finish");
   return s;
 }
 
+// TODO(yiwu): merge with BackgroundGC().
 Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
-  {
-    MutexLock l(&mutex_);
-    bg_gc_scheduled_++;
-  }
   // BackgroundCallGC
   Status s;
   LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
   {
     MutexLock l(&mutex_);
-    assert(bg_gc_scheduled_ > 0);
+    // Prevent CF being dropped while GC is running.
+    while (drop_cf_requests_ > 0) {
+      bg_cv_.Wait();
+    }
+    bg_gc_running_++;
+    bg_gc_scheduled_++;
 
     // BackgroudGC
-    StopWatch gc_sw(env_, statistics(stats_.get()), BLOB_DB_GC_MICROS);
+    StopWatch gc_sw(env_, stats_.get(), BLOB_DB_GC_MICROS);
 
     std::unique_ptr<BlobGC> blob_gc;
     std::unique_ptr<ColumnFamilyHandle> cfh;
 
-    auto bs = vset_->GetBlobStorage(column_family_id).lock().get();
+    if (blob_file_set_->IsColumnFamilyObsolete(column_family_id)) {
+      return Status::ColumnFamilyDropped(
+          "Column Family has been dropped before GC.");
+    }
+    auto bs = blob_file_set_->GetBlobStorage(column_family_id).lock().get();
     const auto& cf_options = bs->cf_options();
     std::shared_ptr<BlobGCPicker> blob_gc_picker =
-        std::make_shared<BasicBlobGCPicker>(db_options_, cf_options);
+        std::make_shared<BasicBlobGCPicker>(db_options_, cf_options, nullptr);
     blob_gc = blob_gc_picker->PickBlobGC(bs);
 
     if (blob_gc) {
@@ -158,8 +186,9 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
       ROCKS_LOG_BUFFER(&log_buffer, "Titan GC nothing to do");
     } else {
       BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
-                            env_options_, blob_manager_.get(), vset_.get(),
-                            &log_buffer, &shuting_down_, stats_.get());
+                            env_options_, blob_manager_.get(),
+                            blob_file_set_.get(), &log_buffer, &shuting_down_,
+                            stats_.get());
       s = blob_gc_job.Prepare();
 
       if (s.ok()) {
@@ -187,8 +216,9 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
       mutex_.Lock();
     }
 
+    bg_gc_running_--;
     bg_gc_scheduled_--;
-    if (bg_gc_scheduled_ == 0) {
+    if (bg_gc_scheduled_ == 0 || bg_gc_running_ == 0) {
       bg_cv_.SignalAll();
     }
   }

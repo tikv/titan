@@ -10,8 +10,9 @@ namespace rocksdb {
 namespace titandb {
 
 BasicBlobGCPicker::BasicBlobGCPicker(TitanDBOptions db_options,
-                                     TitanCFOptions cf_options)
-    : db_options_(db_options), cf_options_(cf_options) {}
+                                     TitanCFOptions cf_options,
+                                     TitanStats* stats)
+    : db_options_(db_options), cf_options_(cf_options), stats_(stats) {}
 
 BasicBlobGCPicker::~BasicBlobGCPicker() {}
 
@@ -27,14 +28,11 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   uint64_t next_gc_size = 0;
   for (auto& gc_score : blob_storage->gc_score()) {
     auto blob_file = blob_storage->FindFile(gc_score.file_number).lock();
-    if (!blob_file ||
-        blob_file->file_state() == BlobFileMeta::FileState::kBeingGC) {
+    if (!CheckBlobFile(blob_file.get())) {
+      RecordTick(stats_, TitanStats::GC_NO_NEED, 1);
       // Skip this file id this file is being GCed
       // or this file had been GCed
-      continue;
-    }
-    if (!CheckBlobFile(blob_file.get())) {
-      ROCKS_LOG_INFO(db_options_.info_log, "Blob file %" PRIu64 "  no need gc",
+      ROCKS_LOG_INFO(db_options_.info_log, "Blob file %" PRIu64 " no need gc",
                      blob_file->file_number());
       continue;
     }
@@ -57,6 +55,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
         next_gc_size += blob_file->file_size();
         if (next_gc_size > cf_options_.min_gc_batch_size) {
           maybe_continue_next_time = true;
+          RecordTick(stats_, TitanStats::GC_REMAIN, 1);
           ROCKS_LOG_INFO(db_options_.info_log,
                          "remain more than %" PRIu64
                          " bytes to be gc and trigger after this gc",
@@ -80,8 +79,11 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
 }
 
 bool BasicBlobGCPicker::CheckBlobFile(BlobFileMeta* blob_file) const {
-  assert(blob_file->file_state() != BlobFileMeta::FileState::kInit);
-  if (blob_file->file_state() != BlobFileMeta::FileState::kNormal) return false;
+  assert(blob_file != nullptr &&
+         blob_file->file_state() != BlobFileMeta::FileState::kInit);
+  if (blob_file != nullptr &&
+      blob_file->file_state() != BlobFileMeta::FileState::kNormal)
+    return false;
 
   return true;
 }

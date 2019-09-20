@@ -26,7 +26,7 @@ class BlobGCPickerTest : public testing::Test {
     blob_storage_.reset(new BlobStorage(titan_db_options, titan_cf_options, 0,
                                         blob_file_cache, nullptr));
     basic_blob_gc_picker_.reset(
-        new BasicBlobGCPicker(titan_db_options, titan_cf_options));
+        new BasicBlobGCPicker(titan_db_options, titan_cf_options, nullptr));
   }
 
   void AddBlobFile(uint64_t file_number, uint64_t file_size,

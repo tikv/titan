@@ -224,6 +224,7 @@ class BlobFileMeta {
   bool NoLiveData() {
     return discardable_size_ == file_size_ - kBlobHeaderSize - kBlobFooterSize;
   }
+  TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
 
  private:
   // Persistent field

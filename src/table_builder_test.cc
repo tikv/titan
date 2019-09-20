@@ -5,9 +5,9 @@
 
 #include "blob_file_manager.h"
 #include "blob_file_reader.h"
+#include "blob_file_set.h"
 #include "table_builder.h"
 #include "table_factory.h"
-#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -18,8 +18,10 @@ const uint64_t kTargetBlobFileSize = 4096;
 
 class FileManager : public BlobFileManager {
  public:
-  FileManager(const TitanDBOptions& db_options, VersionSet* vset)
-      : db_options_(db_options), number_(kTestFileNumber), vset_(vset) {}
+  FileManager(const TitanDBOptions& db_options, BlobFileSet* blob_file_set)
+      : db_options_(db_options),
+        number_(kTestFileNumber),
+        blob_file_set_(blob_file_set) {}
 
   Status NewFile(std::unique_ptr<BlobFileHandle>* handle) override {
     auto number = number_.fetch_add(1);
@@ -41,7 +43,7 @@ class FileManager : public BlobFileManager {
     Status s = handle->GetFile()->Sync(true);
     if (s.ok()) {
       s = handle->GetFile()->Close();
-      auto storage = vset_->GetBlobStorage(0).lock();
+      auto storage = blob_file_set_->GetBlobStorage(0).lock();
       storage->AddBlobFile(file);
     }
     return s;
@@ -93,7 +95,7 @@ class FileManager : public BlobFileManager {
   EnvOptions env_options_;
   TitanDBOptions db_options_;
   std::atomic<uint64_t> number_{0};
-  VersionSet* vset_;
+  BlobFileSet* blob_file_set_;
 };
 
 class TableBuilderTest : public testing::Test {
@@ -106,13 +108,13 @@ class TableBuilderTest : public testing::Test {
         blob_name_(BlobFileName(tmpdir_, kTestFileNumber)) {
     db_options_.dirname = tmpdir_;
     cf_options_.min_blob_size = kMinBlobSize;
-    vset_.reset(new VersionSet(db_options_, nullptr));
+    blob_file_set_.reset(new BlobFileSet(db_options_, nullptr));
     std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
-    vset_->AddColumnFamilies(cfs);
-    blob_manager_.reset(new FileManager(db_options_, vset_.get()));
+    blob_file_set_->AddColumnFamilies(cfs);
+    blob_manager_.reset(new FileManager(db_options_, blob_file_set_.get()));
     table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
                                                blob_manager_, &mutex_,
-                                               vset_.get(), nullptr));
+                                               blob_file_set_.get(), nullptr));
   }
 
   ~TableBuilderTest() {
@@ -205,7 +207,7 @@ class TableBuilderTest : public testing::Test {
   std::string blob_name_;
   std::unique_ptr<TableFactory> table_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
-  std::unique_ptr<VersionSet> vset_;
+  std::unique_ptr<BlobFileSet> blob_file_set_;
 };
 
 TEST_F(TableBuilderTest, Basic) {
@@ -354,8 +356,9 @@ TEST_F(TableBuilderTest, NumEntries) {
 // To test size of each blob file is around blob_file_target_size after building
 TEST_F(TableBuilderTest, TargetSize) {
   cf_options_.blob_file_target_size = kTargetBlobFileSize;
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, blob_manager_, &mutex_, vset_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
@@ -384,8 +387,9 @@ TEST_F(TableBuilderTest, TargetSize) {
 // correct
 TEST_F(TableBuilderTest, LevelMerge) {
   cf_options_.level_merge = true;
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, blob_manager_, &mutex_, vset_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
@@ -437,7 +441,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
   // Compare key, index and blob records after level merge
   first_iter->SeekToFirst();
   second_iter->SeekToFirst();
-  auto storage = vset_->GetBlobStorage(0).lock();
+  auto storage = blob_file_set_->GetBlobStorage(0).lock();
   for (unsigned char i = 0; i < n; i++) {
     ASSERT_TRUE(first_iter->Valid());
     ASSERT_TRUE(second_iter->Valid());

@@ -14,6 +14,16 @@ static const std::string num_live_blob_file = "num-live-blob-file";
 static const std::string num_obsolete_blob_file = "num-obsolete-blob-file";
 static const std::string live_blob_file_size = "live-blob-file-size";
 static const std::string obsolete_blob_file_size = "obsolete-blob-file-size";
+static const std::string num_discardable_ratio_le0_file =
+    "num-discardable-ratio-le0-file";
+static const std::string num_discardable_ratio_le20_file =
+    "num-discardable-ratio-le20-file";
+static const std::string num_discardable_ratio_le50_file =
+    "num-discardable-ratio-le50-file";
+static const std::string num_discardable_ratio_le80_file =
+    "num-discardable-ratio-le80-file";
+static const std::string num_discardable_ratio_le100_file =
+    "num-discardable-ratio-le100-file";
 
 const std::string TitanDB::Properties::kLiveBlobSize =
     titandb_prefix + live_blob_size;
@@ -25,9 +35,19 @@ const std::string TitanDB::Properties::kLiveBlobFileSize =
     titandb_prefix + live_blob_file_size;
 const std::string TitanDB::Properties::kObsoleteBlobFileSize =
     titandb_prefix + obsolete_blob_file_size;
+const std::string TitanDB::Properties::kNumDiscardableRatioLE0File =
+    titandb_prefix + num_discardable_ratio_le0_file;
+const std::string TitanDB::Properties::kNumDiscardableRatioLE20File =
+    titandb_prefix + num_discardable_ratio_le20_file;
+const std::string TitanDB::Properties::kNumDiscardableRatioLE50File =
+    titandb_prefix + num_discardable_ratio_le50_file;
+const std::string TitanDB::Properties::kNumDiscardableRatioLE80File =
+    titandb_prefix + num_discardable_ratio_le80_file;
+const std::string TitanDB::Properties::kNumDiscardableRatioLE100File =
+    titandb_prefix + num_discardable_ratio_le100_file;
 
-const std::unordered_map<std::string, TitanInternalStats::TickerType>
-    TitanInternalStats::ticker_type_string_map = {
+const std::unordered_map<std::string, TitanInternalStats::StatsType>
+    TitanInternalStats::stats_type_string_map = {
         {TitanDB::Properties::kLiveBlobSize,
          TitanInternalStats::LIVE_BLOB_SIZE},
         {TitanDB::Properties::kNumLiveBlobFile,
@@ -38,10 +58,17 @@ const std::unordered_map<std::string, TitanInternalStats::TickerType>
          TitanInternalStats::LIVE_BLOB_FILE_SIZE},
         {TitanDB::Properties::kObsoleteBlobFileSize,
          TitanInternalStats::OBSOLETE_BLOB_FILE_SIZE},
+        {TitanDB::Properties::kNumDiscardableRatioLE0File,
+         TitanInternalStats::NUM_DISCARDABLE_RATIO_LE0},
+        {TitanDB::Properties::kNumDiscardableRatioLE20File,
+         TitanInternalStats::NUM_DISCARDABLE_RATIO_LE20},
+        {TitanDB::Properties::kNumDiscardableRatioLE50File,
+         TitanInternalStats::NUM_DISCARDABLE_RATIO_LE50},
+        {TitanDB::Properties::kNumDiscardableRatioLE80File,
+         TitanInternalStats::NUM_DISCARDABLE_RATIO_LE80},
+        {TitanDB::Properties::kNumDiscardableRatioLE100File,
+         TitanInternalStats::NUM_DISCARDABLE_RATIO_LE100},
 };
-
-const std::unordered_map<std::string, TitanInternalStats::HistogramType>
-    TitanInternalStats::histogram_type_string_map = {};
 
 const std::array<std::string,
                  static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
