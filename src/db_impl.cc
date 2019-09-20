@@ -810,35 +810,26 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     if (!file->is_obsolete()) {
       delta += bfs.second;
     }
-    if (cf_options.level_merge) {
-      if (file->NoLiveData()) {
-        edit.DeleteBlobFile(file->file_number(),
-                            db_impl_->GetLatestSequenceNumber());
-      } else if (file->GetDiscardableRatio() >
-          cf_options.blob_file_discardable_ratio) {
-        file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
-      }
-    }
     auto before = file->GetDiscardableRatioLevel();
     file->AddDiscardableSize(static_cast<uint64_t>(bfs.second));
-    if (cf_options.level_merge) {
-      if (file->NoLiveData()) {
-        edit.DeleteBlobFile(file->file_number(),
-                            db_impl_->GetLatestSequenceNumber());
-      } else if (file->GetDiscardableRatio() >
-          cf_options.blob_file_discardable_ratio) {
-        file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
-      }
-    }
     auto after = file->GetDiscardableRatioLevel();
     if (before != after) {
       AddStats(stats_.get(), cf_id, after, 1);
       SubStats(stats_.get(), cf_id, before, 1);
     }
+    if (cf_options.level_merge) {
+      if (file->NoLiveData()) {
+        edit.DeleteBlobFile(file->file_number(),
+                            db_impl_->GetLatestSequenceNumber());
+      } else if (file->GetDiscardableRatio() >
+          cf_options.blob_file_discardable_ratio) {
+        file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
+      }
+    }
   }
   SubStats(stats_.get(), cf_id, TitanInternalStats::LIVE_BLOB_SIZE, delta);
   if (cf_options.level_merge) {
-    vset_->LogAndApply(edit);
+    blob_file_set_->LogAndApply(edit);
   } else {
     bs->ComputeGCScore();
 
@@ -1132,6 +1123,11 @@ void TitanDBImpl::OnCompactionCompleted(
       }
       auto before = file->GetDiscardableRatioLevel();
       file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
+      auto after = file->GetDiscardableRatioLevel();
+      if (before != after) {
+        AddStats(stats_.get(), compaction_job_info.cf_id, after, 1);
+        SubStats(stats_.get(), compaction_job_info.cf_id, before, 1);
+      }
       if (cf_options.level_merge) {
         // After level merge, most entries of merged blob files are written to
         // new blob files. Delete blob files which all entries are discardable.
@@ -1141,15 +1137,11 @@ void TitanDBImpl::OnCompactionCompleted(
           edit.DeleteBlobFile(file->file_number(),
                               db_impl_->GetLatestSequenceNumber());
         } else if (static_cast<int>(file->file_level()) >=
-                       cf_options.num_levels - 2 &&
-                   file->GetDiscardableRatio() >
-                       cf_options.blob_file_discardable_ratio) {
+            cf_options.num_levels - 2 &&
+            file->GetDiscardableRatio() >
+                cf_options.blob_file_discardable_ratio) {
           file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
         }
-      auto after = file->GetDiscardableRatioLevel();
-      if (before != after) {
-        AddStats(stats_.get(), compaction_job_info.cf_id, after, 1);
-        SubStats(stats_.get(), compaction_job_info.cf_id, before, 1);
       }
     }
     SubStats(stats_.get(), compaction_job_info.cf_id,
@@ -1157,7 +1149,7 @@ void TitanDBImpl::OnCompactionCompleted(
     // If level merge is enabled, expired blob files will be deleted by entries
     // based GC, so we don't need to trigger regular GC anymore
     if (cf_options.level_merge) {
-      vset_->LogAndApply(edit);
+      blob_file_set_->LogAndApply(edit);
     } else {
       bs->ComputeGCScore();
 
