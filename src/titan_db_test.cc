@@ -13,6 +13,7 @@
 #include "blob_file_size_collector.h"
 #include "db_impl.h"
 #include "db_iter.h"
+#include "monitoring/statistics.h"
 #include "titan/db.h"
 #include "titan_fault_injection_test_env.h"
 
@@ -38,6 +39,7 @@ class TitanDBTest : public testing::Test {
     options_.merge_small_file_threshold = 0;
     options_.disable_background_gc = true;
     options_.blob_file_compression = CompressionType::kLZ4Compression;
+    options_.statistics = CreateDBStatistics();
     DeleteDir(env_, options_.dirname);
     DeleteDir(env_, dbname_);
   }
@@ -127,6 +129,10 @@ class TitanDBTest : public testing::Test {
     for (auto& handle : cf_handles_) {
       ASSERT_OK(db_->Flush(fopts, handle));
     }
+  }
+
+  bool GetIntProperty(const Slice& property, uint64_t* value) {
+    return db_->GetIntProperty(property, value);
   }
 
   std::weak_ptr<BlobStorage> GetBlobStorage(
@@ -365,6 +371,20 @@ TEST_F(TitanDBTest, DBIterSeek) {
     ASSERT_EQ(it.first, iter->key());
     ASSERT_EQ(it.second, iter->value());
   }
+}
+
+TEST_F(TitanDBTest, GetProperty) {
+  Open();
+  for (uint64_t k = 1; k <= 100; k++) {
+    Put(k);
+  }
+  Flush();
+  uint64_t value;
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumLiveBlobFile, &value));
+  ASSERT_EQ(value, 1);
+  Reopen();
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumLiveBlobFile, &value));
+  ASSERT_EQ(value, 1);
 }
 
 TEST_F(TitanDBTest, Snapshot) {
