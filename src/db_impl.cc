@@ -245,6 +245,10 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   }
   if (!s.ok()) return s;
 
+  if (stats_.get()) {
+    stats_->Initialize(column_families);
+  }
+
   s = blob_file_set_->Open(column_families);
   if (!s.ok()) return s;
 
@@ -257,9 +261,6 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
   if (s.ok()) {
     db_impl_ = reinterpret_cast<DBImpl*>(db_->GetRootDB());
-    if (stats_.get()) {
-      stats_->Initialize(column_families);
-    }
     ROCKS_LOG_INFO(db_options_.info_log, "Titan DB open.");
     ROCKS_LOG_HEADER(db_options_.info_log, "Titan git sha: %s",
                      titan_build_git_sha);
