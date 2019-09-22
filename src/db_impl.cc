@@ -350,6 +350,8 @@ Status TitanDBImpl::CreateColumnFamilies(
         db_options_, desc.options, blob_manager_, &mutex_, blob_file_set_.get(),
         stats_.get()));
     options.table_factory = titan_table_factory.back();
+    options.table_properties_collector_factories.emplace_back(
+        std::make_shared<BlobFileSizeCollectorFactory>());
     base_descs.emplace_back(desc.name, options);
   }
 

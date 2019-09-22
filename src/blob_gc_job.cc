@@ -486,11 +486,12 @@ Status BlobGCJob::InstallOutputBlobFiles() {
                           std::unique_ptr<BlobFileHandle>>>
         files;
     std::string tmp;
-    for (auto& builder : this->blob_file_builders_) {
+    for (auto& builder : blob_file_builders_) {
       auto file = std::make_shared<BlobFileMeta>(
           builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(),
           0, 0, builder.second->GetSmallestKey(),
           builder.second->GetLargestKey());
+      file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
       RecordInHistogram(stats_, TitanStats::GC_OUTPUT_FILE_SIZE,
                         file->file_size());
       if (!tmp.empty()) {
@@ -502,7 +503,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
                      blob_gc_->column_family_handle()->GetName().c_str(),
                      tmp.c_str());
-    s = this->blob_file_manager_->BatchFinishFiles(
+    s = blob_file_manager_->BatchFinishFiles(
         blob_gc_->column_family_handle()->GetID(), files);
     if (s.ok()) {
       for (auto& file : files) {
@@ -512,7 +513,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
   } else {
     std::vector<std::unique_ptr<BlobFileHandle>> handles;
     std::string to_delete_files;
-    for (auto& builder : this->blob_file_builders_) {
+    for (auto& builder : blob_file_builders_) {
       if (!to_delete_files.empty()) {
         to_delete_files.append(" ");
       }
@@ -524,7 +525,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
         "[%s] InstallOutputBlobFiles failed. Delete GC output files: %s",
         blob_gc_->column_family_handle()->GetName().c_str(),
         to_delete_files.c_str());
-    s = this->blob_file_manager_->BatchDeleteFiles(handles);
+    s = blob_file_manager_->BatchDeleteFiles(handles);
   }
   return s;
 }
@@ -532,12 +533,12 @@ Status BlobGCJob::InstallOutputBlobFiles() {
 Status BlobGCJob::RewriteValidKeyToLSM() {
   TitanStopWatch sw(env_, metrics_.gc_update_lsm_micros);
   Status s;
-  auto* db_impl = reinterpret_cast<DBImpl*>(this->base_db_);
+  auto* db_impl = reinterpret_cast<DBImpl*>(base_db_);
 
   WriteOptions wo;
   wo.low_pri = true;
   wo.ignore_missing_column_families = true;
-  for (auto& write_batch : this->rewrite_batches_) {
+  for (auto& write_batch : rewrite_batches_) {
     if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
       s = Status::Aborted("Column family drop");
       break;
