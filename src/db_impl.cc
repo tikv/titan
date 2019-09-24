@@ -143,7 +143,8 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
 TitanDBImpl::~TitanDBImpl() { Close(); }
 
 void TitanDBImpl::StartBackgroundTasks() {
-  if (thread_purge_obsolete_ == nullptr) {
+  if (thread_purge_obsolete_ == nullptr &&
+      db_options_.purge_obsolete_files_period_sec > 0) {
     thread_purge_obsolete_.reset(new rocksdb::RepeatableThread(
         [this]() { TitanDBImpl::PurgeObsoleteFiles(); }, "titanbg", env_,
         db_options_.purge_obsolete_files_period_sec * 1000 * 1000));

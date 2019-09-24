@@ -468,6 +468,7 @@ TEST_F(BlobGCJobTest, LevelMergeGC) {
   options_.level_merge = true;
   options_.level_compaction_dynamic_level_bytes = true;
   options_.blob_file_discardable_ratio = 0.5;
+  options_.purge_obsolete_files_period_sec = 0;
   NewDB();
   ColumnFamilyMetaData cf_meta;
   std::vector<std::string> to_compact;
