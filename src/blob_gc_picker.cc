@@ -24,6 +24,9 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   bool maybe_continue_next_time = false;
   uint64_t next_gc_size = 0;
   for (auto& gc_score : blob_storage->gc_score()) {
+    if (gc_score.score < cf_options_.blob_file_discardable_ratio) {
+      break;
+    }
     auto blob_file = blob_storage->FindFile(gc_score.file_number).lock();
     if (!CheckBlobFile(blob_file.get())) {
       RecordTick(stats_, TitanStats::GC_NO_NEED, 1);
@@ -46,21 +49,14 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
         stop_picking = true;
       }
     } else {
-      if (blob_file->file_size() <= cf_options_.merge_small_file_threshold ||
-          blob_file->gc_mark() ||
-          blob_file->GetDiscardableRatio() >=
-              cf_options_.blob_file_discardable_ratio) {
-        next_gc_size += blob_file->file_size();
-        if (next_gc_size > cf_options_.min_gc_batch_size) {
-          maybe_continue_next_time = true;
-          RecordTick(stats_, TitanStats::GC_REMAIN, 1);
-          ROCKS_LOG_INFO(db_options_.info_log,
-                         "remain more than %" PRIu64
-                         " bytes to be gc and trigger after this gc",
-                         next_gc_size);
-          break;
-        }
-      } else {
+      next_gc_size += blob_file->file_size();
+      if (next_gc_size > cf_options_.min_gc_batch_size) {
+        maybe_continue_next_time = true;
+        RecordTick(stats_, TitanStats::GC_REMAIN, 1);
+        ROCKS_LOG_INFO(db_options_.info_log,
+                       "remain more than %" PRIu64
+                       " bytes to be gc and trigger after this gc",
+                       next_gc_size);
         break;
       }
     }
@@ -69,8 +65,17 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
                   "got batch size %" PRIu64 ", estimate output %" PRIu64
                   " bytes",
                   batch_size, estimate_output_size);
-  if (blob_files.empty() || batch_size < cf_options_.min_gc_batch_size)
+  if (blob_files.empty() || batch_size < cf_options_.min_gc_batch_size) {
     return nullptr;
+  }
+  // if there is only one small file to merge, no need to perform
+  if (blob_files.size() == 1 &&
+      blob_files[0]->file_size() <= cf_options_.merge_small_file_threshold &&
+      blob_files[0]->gc_mark() == false &&
+      blob_files[0]->GetDiscardableRatio() <
+          cf_options_.blob_file_discardable_ratio) {
+    return nullptr;
+  }
 
   return std::unique_ptr<BlobGC>(new BlobGC(
       std::move(blob_files), std::move(cf_options_), maybe_continue_next_time));
