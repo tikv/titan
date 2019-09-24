@@ -155,7 +155,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
 
   while ((idx = Random::GetTLSInstance()->Uniform(n)) == 0)
     ;
-  blob_file_iterator_->IterateForPrev(handles[idx].offset - kBlobHeaderSize -
+  blob_file_iterator_->IterateForPrev(handles[idx].offset - kRecordHeaderSize -
                                       1);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();

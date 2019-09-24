@@ -26,7 +26,8 @@ struct TitanDBOptions : public DBOptions {
   // Default: 1
   int32_t max_background_gc{1};
 
-  // How often to schedule delete obsolete blob files periods
+  // How often to schedule delete obsolete blob files periods.
+  // If set zero, obsolete blob files won't be deleted.
   //
   // Default: 10
   uint32_t purge_obsolete_files_period_sec{10};  // 10s

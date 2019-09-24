@@ -220,7 +220,10 @@ TableProperties TitanTableBuilder::GetTableProperties() const {
 
 bool TitanTableBuilder::ShouldMerge(
     const std::shared_ptr<rocksdb::titandb::BlobFileMeta>& file) {
-  return file != nullptr && (int)file->file_level() < target_level_;
+  assert(cf_options_.level_merge);
+  return file != nullptr &&
+         (static_cast<int>(file->file_level()) < target_level_ ||
+          file->file_state() == BlobFileMeta::FileState::kToMerge);
 }
 
 void TitanTableBuilder::UpdateInternalOpStats() {

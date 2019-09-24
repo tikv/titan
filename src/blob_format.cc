@@ -56,7 +56,7 @@ Status BlobDecoder::DecodeHeader(Slice* src) {
   if (!GetFixed32(src, &crc_)) {
     return Status::Corruption("BlobHeader");
   }
-  header_crc_ = crc32c::Value(src->data(), kBlobHeaderSize - 4);
+  header_crc_ = crc32c::Value(src->data(), kRecordHeaderSize - 4);
 
   unsigned char compression;
   if (!GetFixed32(src, &record_size_) || !GetChar(src, &compression)) {
@@ -217,6 +217,13 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
     case FileEvent::kDelete:
       assert(state_ != FileState::kObsolete);
       state_ = FileState::kObsolete;
+      break;
+    case FileEvent::kNeedMerge:
+      if (state_ == FileState::kToMerge) {
+        break;
+      }
+      assert(state_ == FileState::kNormal);
+      state_ = FileState::kToMerge;
       break;
     default:
       assert(false);
