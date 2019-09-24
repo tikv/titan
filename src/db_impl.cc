@@ -160,10 +160,6 @@ void TitanDBImpl::StartBackgroundTasks() {
 Status TitanDBImpl::ValidateOptions(
     const TitanDBOptions& options,
     const std::vector<TitanCFDescriptor>& column_families) const {
-  if (options.purge_obsolete_files_period_sec == 0) {
-    return Status::InvalidArgument(
-        "Require non-zero purge_obsolete_files_period_sec");
-  }
   for (const auto& cf : column_families) {
     if (cf.options.level_merge &&
         !cf.options.level_compaction_dynamic_level_bytes) {
