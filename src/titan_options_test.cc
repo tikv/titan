@@ -63,11 +63,9 @@ class TitanOptionsTest : public testing::Test {
 
 TEST_F(TitanOptionsTest, LevelMerge) {
   titan_options_.level_merge = true;
+  titan_options_.level_compaction_dynamic_level_bytes = false;
   Status s = Open();
   ASSERT_TRUE(s.IsInvalidArgument());
-  titan_options_.level_compaction_dynamic_level_bytes = true;
-  s = Open();
-  ASSERT_OK(s);
 }
 
 }  // namespace titandb
