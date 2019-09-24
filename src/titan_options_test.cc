@@ -61,10 +61,13 @@ class TitanOptionsTest : public testing::Test {
   TitanDB* titan_db = nullptr;
 };
 
-TEST_F(TitanOptionsTest, PurgeObsoleteFilesPeriodSec) {
-  titan_options_.purge_obsolete_files_period_sec = 0;
+TEST_F(TitanOptionsTest, LevelMerge) {
+  titan_options_.level_merge = true;
   Status s = Open();
   ASSERT_TRUE(s.IsInvalidArgument());
+  titan_options_.level_compaction_dynamic_level_bytes = true;
+  s = Open();
+  ASSERT_OK(s);
 }
 
 }  // namespace titandb
