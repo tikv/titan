@@ -94,6 +94,12 @@ Status BlobFileSet::Recover() {
                    "Next blob file number is %" PRIu64 ".", next_file_number);
   }
 
+  // Make sure perform gc on all files at the beginning
+  MarkAllFilesForGC();
+  for (auto& cf : column_families_) {
+    cf.second->ComputeGCScore();
+  }
+
   auto new_manifest_file_number = NewFileNumber();
   s = OpenManifest(new_manifest_file_number);
   if (!s.ok()) return s;
@@ -136,9 +142,6 @@ Status BlobFileSet::Recover() {
                    "Titan recovery delete obsolete file %s.", f.c_str());
     env_->DeleteFile(dirname_ + "/" + f);
   }
-
-  // Make sure perform gc on all files at the beginning
-  MarkAllFilesForGC();
 
   return Status::OK();
 }

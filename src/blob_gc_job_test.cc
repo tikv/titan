@@ -43,6 +43,8 @@ class BlobGCJobTest : public testing::Test {
   }
   ~BlobGCJobTest() {}
 
+  void DisableMergeSmall() { options_.merge_small_file_threshold = 0; }
+
   std::weak_ptr<BlobStorage> GetBlobStorage(uint32_t cf_id) {
     MutexLock l(mutex_);
     return blob_file_set_->GetBlobStorage(cf_id);
@@ -73,11 +75,20 @@ class BlobGCJobTest : public testing::Test {
 
   void NewDB() {
     ClearDir();
+    Open();
+  }
+
+  void Open() {
     ASSERT_OK(TitanDB::Open(options_, dbname_, &db_));
     tdb_ = reinterpret_cast<TitanDBImpl*>(db_);
     blob_file_set_ = tdb_->blob_file_set_.get();
     mutex_ = &tdb_->mutex_;
     base_db_ = reinterpret_cast<DBImpl*>(tdb_->GetRootDB());
+  }
+
+  void Reopen() {
+    DestroyDB();
+    Open();
   }
 
   void Flush() {
@@ -95,6 +106,11 @@ class BlobGCJobTest : public testing::Test {
     ASSERT_OK(db_->CompactRange(compact_opts, nullptr, nullptr));
   }
 
+  void ReComputeGCScore() {
+    auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
+    b->ComputeGCScore();
+  }
+
   void DestroyDB() {
     Status s __attribute__((__unused__)) = db_->Close();
     assert(s.ok());
@@ -102,7 +118,7 @@ class BlobGCJobTest : public testing::Test {
     db_ = nullptr;
   }
 
-  void RunGC(bool expected = false) {
+  void RunGC(bool expected, bool disable_merge_small = false) {
     MutexLock l(mutex_);
     Status s;
     auto* cfh = base_db_->DefaultColumnFamily();
@@ -112,6 +128,9 @@ class BlobGCJobTest : public testing::Test {
     TitanCFOptions cf_options;
     LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options.info_log.get());
     cf_options.min_gc_batch_size = 0;
+    if (disable_merge_small) {
+      cf_options.merge_small_file_threshold = 0;
+    }
     cf_options.blob_file_discardable_ratio = 0.4;
     cf_options.sample_file_size_ratio = 1;
 
@@ -123,9 +142,7 @@ class BlobGCJobTest : public testing::Test {
           blob_file_set_->GetBlobStorage(cfh->GetID()).lock().get());
     }
 
-    if (expected) {
-      ASSERT_TRUE(blob_gc != nullptr);
-    }
+    ASSERT_TRUE((blob_gc != nullptr) == expected);
 
     if (blob_gc) {
       blob_gc->SetColumnFamily(cfh);
@@ -151,6 +168,7 @@ class BlobGCJobTest : public testing::Test {
         s = blob_gc_job.Finish();
         ASSERT_OK(s);
       }
+      blob_gc->ReleaseGcFiles();
     }
 
     mutex_->Unlock();
@@ -205,16 +223,14 @@ class BlobGCJobTest : public testing::Test {
     Flush();
     std::string result;
     for (int i = 0; i < MAX_KEY_NUM; i++) {
-      if (i % 2 != 0) continue;
+      if (i % 3 == 0) continue;
       db_->Delete(WriteOptions(), GenKey(i));
     }
     Flush();
+    CompactAll();
     auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
     ASSERT_EQ(b->files_.size(), 1);
     auto old = b->files_.begin()->first;
-    //    for (auto& f : b->files_) {
-    //      f.second->marked_for_sample = false;
-    //    }
     std::unique_ptr<BlobFileIterator> iter;
     ASSERT_OK(NewIterator(b->files_.begin()->second->file_number(),
                           b->files_.begin()->second->file_size(), &iter));
@@ -224,7 +240,7 @@ class BlobGCJobTest : public testing::Test {
       ASSERT_TRUE(iter->Valid());
       ASSERT_TRUE(iter->key().compare(Slice(GenKey(i))) == 0);
     }
-    RunGC();
+    RunGC(true);
     b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
     ASSERT_EQ(b->files_.size(), 1);
     auto new1 = b->files_.begin()->first;
@@ -235,7 +251,7 @@ class BlobGCJobTest : public testing::Test {
     auto* db_iter = db_->NewIterator(ReadOptions(), db_->DefaultColumnFamily());
     db_iter->SeekToFirst();
     for (int i = 0; i < MAX_KEY_NUM; i++) {
-      if (i % 2 == 0) continue;
+      if (i % 3 != 0) continue;
       ASSERT_OK(iter->status());
       ASSERT_TRUE(iter->Valid());
       ASSERT_TRUE(iter->key().compare(Slice(GenKey(i))) == 0);
@@ -327,7 +343,7 @@ TEST_F(BlobGCJobTest, GCLimiter) {
   NewDB();
   PutAndUpdate();
   test_limiter->Reset();
-  RunGC();
+  RunGC(true);
   ASSERT_TRUE(test_limiter->WriteRequested());
   ASSERT_FALSE(test_limiter->ReadRequested());
   DestroyDB();
@@ -337,7 +353,7 @@ TEST_F(BlobGCJobTest, GCLimiter) {
   NewDB();
   PutAndUpdate();
   test_limiter->Reset();
-  RunGC();
+  RunGC(true);
   ASSERT_FALSE(test_limiter->WriteRequested());
   ASSERT_TRUE(test_limiter->ReadRequested());
   DestroyDB();
@@ -347,9 +363,33 @@ TEST_F(BlobGCJobTest, GCLimiter) {
   NewDB();
   PutAndUpdate();
   test_limiter->Reset();
-  RunGC();
+  RunGC(true);
   ASSERT_TRUE(test_limiter->WriteRequested());
   ASSERT_TRUE(test_limiter->ReadRequested());
+  DestroyDB();
+}
+
+TEST_F(BlobGCJobTest, Reopen) {
+  DisableMergeSmall();
+  NewDB();
+
+  for (int i = 0; i < 10; i++) {
+    db_->Put(WriteOptions(), GenKey(i), GenValue(i));
+  }
+  Flush();
+  CheckBlobNumber(1);
+
+  Reopen();
+
+  RunGC(true, true);
+  CheckBlobNumber(1);
+
+  // trigger compute gc score
+  ReComputeGCScore();
+
+  RunGC(false, true);
+  CheckBlobNumber(1);
+
   DestroyDB();
 }
 
@@ -375,34 +415,38 @@ TEST_F(BlobGCJobTest, PurgeBlobs) {
   CheckBlobNumber(1);
   auto snap4 = db_->GetSnapshot();
 
-  RunGC();
-  CheckBlobNumber(1);
-
   for (int i = 10; i < 20; i++) {
     db_->Put(WriteOptions(), GenKey(i), GenValue(i));
   }
   Flush();
-  auto snap5 = db_->GetSnapshot();
   CheckBlobNumber(2);
 
+  // merge two blob files into one
+  CompactAll();
+  RunGC(true);
+  CheckBlobNumber(3);
+
+  auto snap5 = db_->GetSnapshot();
+
   db_->ReleaseSnapshot(snap2);
-  RunGC();
+  RunGC(false);
   CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap3);
-  RunGC();
+  RunGC(false);
   CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap1);
-  RunGC();
+  RunGC(false);
   CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap4);
-  RunGC();
-  CheckBlobNumber(2);
+  RunGC(false);
+  CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap5);
-  RunGC();
+
+  RunGC(false);
   CheckBlobNumber(1);
 
   DestroyDB();
@@ -413,9 +457,26 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
 
   ASSERT_OK(db_->Put(WriteOptions(), GenKey(2), GenValue(21)));
   ASSERT_OK(db_->Put(WriteOptions(), GenKey(4), GenValue(4)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(5), GenValue(5)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(6), GenValue(5)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(7), GenValue(5)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(8), GenValue(5)));
+  ASSERT_OK(db_->Put(WriteOptions(), GenKey(9), GenValue(5)));
   Flush();
   CompactAll();
   std::string value;
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
+  ASSERT_EQ(value, "0");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_EQ(value, "1");
+
+  ASSERT_OK(db_->Delete(WriteOptions(), GenKey(5)));
+  ASSERT_OK(db_->Delete(WriteOptions(), GenKey(6)));
+  ASSERT_OK(db_->Delete(WriteOptions(), GenKey(7)));
+  ASSERT_OK(db_->Delete(WriteOptions(), GenKey(8)));
+  ASSERT_OK(db_->Delete(WriteOptions(), GenKey(9)));
+  CompactAll();
+
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
   ASSERT_EQ(value, "0");
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
@@ -434,6 +495,8 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   ASSERT_EQ(value, "1");
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
   ASSERT_EQ(value, "1");
+
+  CheckBlobNumber(1);
 
   RunGC(true);
 
