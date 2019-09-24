@@ -76,7 +76,7 @@ const std::array<std::string,
         "Flush     ",
         "Compaction",
         "GC        ",
-}};
+    }};
 
 void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
   constexpr double GB = 1.0 * 1024 * 1024 * 1024;
