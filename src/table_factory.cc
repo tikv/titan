@@ -25,11 +25,11 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
   std::weak_ptr<BlobStorage> blob_storage;
   {
     MutexLock l(db_mutex_);
-    blob_storage = vset_->GetBlobStorage(column_family_id);
+    blob_storage = blob_file_set_->GetBlobStorage(column_family_id);
   }
   return new TitanTableBuilder(column_family_id, db_options_, cf_options,
                                std::move(base_builder), blob_manager_,
-                               blob_storage, stats_);
+                               blob_storage, options.level, stats_);
 }
 
 std::string TitanTableFactory::GetPrintableTableOptions() const {

@@ -144,8 +144,10 @@ void BlobFileIterator::PrefetchAndGet() {
 }
 
 BlobFileMergeIterator::BlobFileMergeIterator(
-    std::vector<std::unique_ptr<BlobFileIterator>>&& blob_file_iterators)
-    : blob_file_iterators_(std::move(blob_file_iterators)) {}
+    std::vector<std::unique_ptr<BlobFileIterator>>&& blob_file_iterators,
+    const Comparator* comparator)
+    : blob_file_iterators_(std::move(blob_file_iterators)),
+      min_heap_(BlobFileIterComparator(comparator)) {}
 
 bool BlobFileMergeIterator::Valid() const {
   if (current_ == nullptr) return false;

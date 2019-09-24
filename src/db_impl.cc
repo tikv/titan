@@ -7,6 +7,8 @@
 #include <inttypes.h>
 
 #include "port/port.h"
+#include "util/autovector.h"
+#include "util/log_buffer.h"
 
 #include "base_db_listener.h"
 #include "blob_file_builder.h"
@@ -25,7 +27,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
   FileManager(TitanDBImpl* db) : db_(db) {}
 
   Status NewFile(std::unique_ptr<BlobFileHandle>* handle) override {
-    auto number = db_->vset_->NewFileNumber();
+    auto number = db_->blob_file_set_->NewFileNumber();
     auto name = BlobFileName(db_->dirname_, number);
 
     Status s;
@@ -54,9 +56,9 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
-      RecordTick(statistics(db_->stats_.get()), BLOB_DB_BLOB_FILE_SYNCED);
+      RecordTick(db_->stats_.get(), BLOB_DB_BLOB_FILE_SYNCED);
       {
-        StopWatch sync_sw(db_->env_, statistics(db_->stats_.get()),
+        StopWatch sync_sw(db_->env_, db_->stats_.get(),
                           BLOB_DB_BLOB_FILE_SYNC_MICROS);
         s = file.second->GetFile()->Sync(false);
       }
@@ -72,7 +74,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
 
     {
       MutexLock l(&db_->mutex_);
-      s = db_->vset_->LogAndApply(edit);
+      s = db_->blob_file_set_->LogAndApply(edit);
       if (!s.ok()) {
         db_->SetBGError(s);
       }
@@ -140,17 +142,35 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
 TitanDBImpl::~TitanDBImpl() { Close(); }
 
 void TitanDBImpl::StartBackgroundTasks() {
-  if (!thread_purge_obsolete_) {
+  if (thread_purge_obsolete_ == nullptr) {
     thread_purge_obsolete_.reset(new rocksdb::RepeatableThread(
         [this]() { TitanDBImpl::PurgeObsoleteFiles(); }, "titanbg", env_,
-        db_options_.purge_obsolete_files_period * 1000 * 1000));
+        db_options_.purge_obsolete_files_period_sec * 1000 * 1000));
   }
+  if (thread_dump_stats_ == nullptr &&
+      db_options_.titan_stats_dump_period_sec > 0) {
+    thread_dump_stats_.reset(new rocksdb::RepeatableThread(
+        [this]() { TitanDBImpl::DumpStats(); }, "titanst", env_,
+        db_options_.titan_stats_dump_period_sec * 1000 * 1000));
+  }
+}
+
+Status TitanDBImpl::ValidateOptions() const {
+  if (db_options_.purge_obsolete_files_period_sec == 0) {
+    return Status::InvalidArgument(
+        "Require non-zero purge_obsolete_files_period_sec");
+  }
+  return Status::OK();
 }
 
 Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
                          std::vector<ColumnFamilyHandle*>* handles) {
+  Status s = ValidateOptions();
+  if (!s.ok()) {
+    return s;
+  }
   // Sets up directories for base DB and Titan.
-  Status s = env_->CreateDirIfMissing(dbname_);
+  s = env_->CreateDirIfMissing(dbname_);
   if (!s.ok()) return s;
   if (!db_options_.info_log) {
     s = CreateLoggerFromOptions(dbname_, db_options_, &db_options_.info_log);
@@ -189,30 +209,31 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   // Add EventListener to collect statistics for GC
   db_options_.listeners.emplace_back(std::make_shared<BaseDbListener>(this));
   // Note that info log is initialized after `CreateLoggerFromOptions`,
-  // so new `VersionSet` here but not in constructor is to get a proper info
+  // so new `BlobFileSet` here but not in constructor is to get a proper info
   // log.
-  vset_.reset(new VersionSet(db_options_, stats_.get()));
+  blob_file_set_.reset(new BlobFileSet(db_options_, stats_.get()));
 
   s = DB::Open(db_options_, dbname_, init_descs, handles, &db_);
   if (s.ok()) {
     for (size_t i = 0; i < descs.size(); i++) {
       auto handle = (*handles)[i];
       uint32_t cf_id = handle->GetID();
+      std::string cf_name = handle->GetName();
       column_families.emplace(cf_id, descs[i].options);
       db_->DestroyColumnFamilyHandle(handle);
       // Replaces the provided table factory with TitanTableFactory.
       // While we need to preserve original table_factory for GetOptions.
       auto& base_table_factory = base_descs[i].options.table_factory;
       assert(base_table_factory != nullptr);
-      immutable_cf_options_.emplace(cf_id,
-                                    ImmutableTitanCFOptions(descs[i].options));
-      mutable_cf_options_.emplace(cf_id,
-                                  MutableTitanCFOptions(descs[i].options));
-      base_table_factory_[cf_id] = base_table_factory;
-      titan_table_factory_[cf_id] = std::make_shared<TitanTableFactory>(
-          db_options_, descs[i].options, blob_manager_, &mutex_, vset_.get(),
-          stats_.get());
-      base_descs[i].options.table_factory = titan_table_factory_[cf_id];
+      auto titan_table_factory = std::make_shared<TitanTableFactory>(
+          db_options_, descs[i].options, blob_manager_, &mutex_,
+          blob_file_set_.get(), stats_.get());
+      cf_info_.emplace(cf_id,
+                       TitanColumnFamilyInfo(
+                           {cf_name, ImmutableTitanCFOptions(descs[i].options),
+                            MutableTitanCFOptions(descs[i].options),
+                            base_table_factory, titan_table_factory}));
+      base_descs[i].options.table_factory = titan_table_factory;
       // Add TableProperties for collecting statistics GC
       base_descs[i].options.table_properties_collector_factories.emplace_back(
           std::make_shared<BlobFileSizeCollectorFactory>());
@@ -220,33 +241,26 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
     handles->clear();
     s = db_->Close();
     delete db_;
+    db_ = nullptr;
   }
   if (!s.ok()) return s;
 
-  s = vset_->Open(column_families);
+  if (stats_.get()) {
+    stats_->Initialize(column_families);
+  }
+
+  s = blob_file_set_->Open(column_families);
   if (!s.ok()) return s;
 
-  static bool has_init_background_threads = false;
-  if (!has_init_background_threads) {
-    auto bottom_pri_threads_num =
-        env_->GetBackgroundThreads(Env::Priority::BOTTOM);
-    if (!db_options_.disable_background_gc &&
-        db_options_.max_background_gc > 0) {
-      env_->IncBackgroundThreadsIfNeeded(
-          db_options_.max_background_gc + bottom_pri_threads_num,
-          Env::Priority::BOTTOM);
-      assert(env_->GetBackgroundThreads(Env::Priority::BOTTOM) ==
-             bottom_pri_threads_num + db_options_.max_background_gc);
-    }
-    has_init_background_threads = true;
+  // Initialize GC thread pool.
+  if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
+    env_->IncBackgroundThreadsIfNeeded(db_options_.max_background_gc,
+                                       Env::Priority::BOTTOM);
   }
 
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
   if (s.ok()) {
     db_impl_ = reinterpret_cast<DBImpl*>(db_->GetRootDB());
-    if (stats_.get()) {
-      stats_->Initialize(column_families, db_->DefaultColumnFamily()->GetID());
-    }
     ROCKS_LOG_INFO(db_options_.info_log, "Titan DB open.");
     ROCKS_LOG_HEADER(db_options_.info_log, "Titan git sha: %s",
                      titan_build_git_sha);
@@ -322,9 +336,11 @@ Status TitanDBImpl::CreateColumnFamilies(
     // Replaces the provided table factory with TitanTableFactory.
     base_table_factory.emplace_back(options.table_factory);
     titan_table_factory.emplace_back(std::make_shared<TitanTableFactory>(
-        db_options_, desc.options, blob_manager_, &mutex_, vset_.get(),
+        db_options_, desc.options, blob_manager_, &mutex_, blob_file_set_.get(),
         stats_.get()));
     options.table_factory = titan_table_factory.back();
+    options.table_properties_collector_factories.emplace_back(
+        std::make_shared<BlobFileSizeCollectorFactory>());
     base_descs.emplace_back(desc.name, options);
   }
 
@@ -336,16 +352,17 @@ Status TitanDBImpl::CreateColumnFamilies(
     {
       MutexLock l(&mutex_);
       for (size_t i = 0; i < descs.size(); i++) {
-        uint32_t cf_id = (*handles)[i]->GetID();
+        ColumnFamilyHandle* handle = (*handles)[i];
+        uint32_t cf_id = handle->GetID();
         column_families.emplace(cf_id, descs[i].options);
-        immutable_cf_options_.emplace(
-            cf_id, ImmutableTitanCFOptions(descs[i].options));
-        mutable_cf_options_.emplace(cf_id,
-                                    MutableTitanCFOptions(descs[i].options));
-        base_table_factory_[cf_id] = base_table_factory[i];
-        titan_table_factory_[cf_id] = titan_table_factory[i];
+        cf_info_.emplace(
+            cf_id,
+            TitanColumnFamilyInfo(
+                {handle->GetName(), ImmutableTitanCFOptions(descs[i].options),
+                 MutableTitanCFOptions(descs[i].options), base_table_factory[i],
+                 titan_table_factory[i]}));
       }
-      vset_->AddColumnFamilies(column_families);
+      blob_file_set_->AddColumnFamilies(column_families);
     }
   }
   if (s.ok()) {
@@ -368,21 +385,35 @@ Status TitanDBImpl::CreateColumnFamilies(
 
 Status TitanDBImpl::DropColumnFamilies(
     const std::vector<ColumnFamilyHandle*>& handles) {
+  TEST_SYNC_POINT("TitanDBImpl::DropColumnFamilies:Begin");
   std::vector<uint32_t> column_families;
   std::string column_families_str;
   for (auto& handle : handles) {
     column_families.emplace_back(handle->GetID());
     column_families_str += "[" + handle->GetName() + "]";
   }
+  {
+    MutexLock l(&mutex_);
+    drop_cf_requests_++;
+
+    // Has to wait till no GC job is running before proceed, otherwise GC jobs
+    // can fail and set background error.
+    // TODO(yiwu): only wait for GC jobs of CFs being dropped.
+    while (bg_gc_running_ > 0) {
+      bg_cv_.Wait();
+    }
+  }
+  TEST_SYNC_POINT_CALLBACK("TitanDBImpl::DropColumnFamilies:BeforeBaseDBDropCF",
+                           nullptr);
   Status s = db_impl_->DropColumnFamilies(handles);
   if (s.ok()) {
     MutexLock l(&mutex_);
-    for (auto cf_id : column_families) {
-      base_table_factory_.erase(cf_id);
-      titan_table_factory_.erase(cf_id);
-    }
     SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
-    s = vset_->DropColumnFamilies(column_families, obsolete_sequence);
+    s = blob_file_set_->DropColumnFamilies(column_families, obsolete_sequence);
+    drop_cf_requests_--;
+    if (drop_cf_requests_ == 0) {
+      bg_cv_.SignalAll();
+    }
   }
   if (s.ok()) {
     ROCKS_LOG_INFO(db_options_.info_log, "Dropped column families: %s",
@@ -407,7 +438,12 @@ Status TitanDBImpl::DestroyColumnFamilyHandle(
   if (s.ok()) {
     MutexLock l(&mutex_);
     // it just changes some marks and doesn't delete blob files physically.
-    vset_->DestroyColumnFamily(cf_id);
+    Status destroy_status = blob_file_set_->MaybeDestroyColumnFamily(cf_id);
+    // BlobFileSet will return NotFound status if the cf is not destroyed.
+    if (destroy_status.ok()) {
+      assert(cf_info_.count(cf_id) > 0);
+      cf_info_.erase(cf_id);
+    }
   }
   if (s.ok()) {
     ROCKS_LOG_INFO(db_options_.info_log, "Destroyed column family handle [%s].",
@@ -502,7 +538,8 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                         nullptr /*read_callback*/, &is_blob_index);
   if (!s.ok() || !is_blob_index) return s;
 
-  StopWatch get_sw(env_, statistics(stats_.get()), BLOB_DB_GET_MICROS);
+  StopWatch get_sw(env_, stats_.get(), BLOB_DB_GET_MICROS);
+  RecordTick(stats_.get(), BLOB_DB_NUM_GET);
 
   BlobIndex index;
   s = index.DecodeFrom(value);
@@ -513,15 +550,14 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   PinnableSlice buffer;
 
   mutex_.Lock();
-  auto storage = vset_->GetBlobStorage(handle->GetID()).lock();
+  auto storage = blob_file_set_->GetBlobStorage(handle->GetID()).lock();
   mutex_.Unlock();
 
   {
-    StopWatch read_sw(env_, statistics(stats_.get()),
-                      BLOB_DB_BLOB_FILE_READ_MICROS);
+    StopWatch read_sw(env_, stats_.get(), BLOB_DB_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
-    RecordTick(statistics(stats_.get()), BLOB_DB_NUM_KEYS_READ);
-    RecordTick(statistics(stats_.get()), BLOB_DB_BLOB_FILE_BYTES_READ,
+    RecordTick(stats_.get(), BLOB_DB_NUM_KEYS_READ);
+    RecordTick(stats_.get(), BLOB_DB_BLOB_FILE_BYTES_READ,
                index.blob_handle.size);
   }
   if (s.IsCorruption()) {
@@ -589,7 +625,7 @@ Iterator* TitanDBImpl::NewIteratorImpl(
   auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
 
   mutex_.Lock();
-  auto storage = vset_->GetBlobStorage(handle->GetID());
+  auto storage = blob_file_set_->GetBlobStorage(handle->GetID());
   mutex_.Unlock();
 
   std::unique_ptr<ArenaWrappedDBIter> iter(db_impl_->NewIteratorImpl(
@@ -742,7 +778,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   if (!s.ok()) return s;
 
   MutexLock l(&mutex_);
-  auto bs = vset_->GetBlobStorage(cf_id).lock();
+  auto bs = blob_file_set_->GetBlobStorage(cf_id).lock();
   if (!bs) {
     // TODO: Should treat it as background error and make DB read-only.
     ROCKS_LOG_ERROR(db_options_.info_log,
@@ -761,7 +797,13 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     if (!file->is_obsolete()) {
       delta += bfs.second;
     }
+    auto before = file->GetDiscardableRatioLevel();
     file->AddDiscardableSize(static_cast<uint64_t>(bfs.second));
+    auto after = file->GetDiscardableRatioLevel();
+    if (before != after) {
+      AddStats(stats_.get(), cf_id, after, 1);
+      SubStats(stats_.get(), cf_id, before, 1);
+    }
   }
   SubStats(stats_.get(), cf_id, TitanInternalStats::LIVE_BLOB_SIZE, delta);
   bs->ComputeGCScore();
@@ -778,8 +820,8 @@ Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
   uint32_t cf_id = column_family->GetID();
 
   MutexLock l(&mutex_);
-  if (base_table_factory_.count(cf_id) > 0) {
-    options.table_factory = base_table_factory_.at(cf_id);
+  if (cf_info_.count(cf_id) > 0) {
+    options.table_factory = cf_info_.at(cf_id).base_table_factory;
   } else {
     ROCKS_LOG_ERROR(
         db_options_.info_log,
@@ -823,9 +865,10 @@ Status TitanDBImpl::SetOptions(
     uint32_t cf_id = column_family->GetID();
     {
       MutexLock l(&mutex_);
-      auto& table_factory = titan_table_factory_[cf_id];
-      table_factory->SetBlobRunMode(mode);
-      mutable_cf_options_[cf_id].blob_run_mode = mode;
+      assert(cf_info_.count(cf_id) > 0);
+      TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
+      cf_info.titan_table_factory->SetBlobRunMode(mode);
+      cf_info.mutable_cf_options.blob_run_mode = mode;
     }
   }
   return Status::OK();
@@ -842,9 +885,11 @@ TitanOptions TitanDBImpl::GetTitanOptions(
   uint32_t cf_id = column_family->GetID();
   {
     MutexLock l(&mutex_);
+    assert(cf_info_.count(cf_id) > 0);
+    const TitanColumnFamilyInfo& cf_info = cf_info_.at(cf_id);
     *static_cast<TitanCFOptions*>(&titan_options) = TitanCFOptions(
         static_cast<ColumnFamilyOptions>(base_options),
-        immutable_cf_options_.at(cf_id), mutable_cf_options_.at(cf_id));
+        cf_info.immutable_cf_options, cf_info.mutable_cf_options);
   }
   return titan_options;
 }
@@ -916,7 +961,8 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
 
   {
     MutexLock l(&mutex_);
-    auto blob_storage = vset_->GetBlobStorage(flush_job_info.cf_id).lock();
+    auto blob_storage =
+        blob_file_set_->GetBlobStorage(flush_job_info.cf_id).lock();
     if (!blob_storage) {
       // TODO: Should treat it as background error and make DB read-only.
       ROCKS_LOG_ERROR(db_options_.info_log,
@@ -1004,7 +1050,7 @@ void TitanDBImpl::OnCompactionCompleted(
 
   {
     MutexLock l(&mutex_);
-    auto bs = vset_->GetBlobStorage(compaction_job_info.cf_id).lock();
+    auto bs = blob_file_set_->GetBlobStorage(compaction_job_info.cf_id).lock();
     if (!bs) {
       // TODO: Should treat it as background error and make DB read-only.
       ROCKS_LOG_ERROR(db_options_.info_log,
@@ -1045,7 +1091,13 @@ void TitanDBImpl::OnCompactionCompleted(
       if (!file->is_obsolete()) {
         delta += -bfs.second;
       }
+      auto before = file->GetDiscardableRatioLevel();
       file->AddDiscardableSize(static_cast<uint64_t>(-bfs.second));
+      auto after = file->GetDiscardableRatioLevel();
+      if (before != after) {
+        AddStats(stats_.get(), compaction_job_info.cf_id, after, 1);
+        SubStats(stats_.get(), compaction_job_info.cf_id, before, 1);
+      }
     }
     SubStats(stats_.get(), compaction_job_info.cf_id,
              TitanInternalStats::LIVE_BLOB_SIZE, delta);
@@ -1073,6 +1125,29 @@ Status TitanDBImpl::SetBGError(const Status& s) {
     has_bg_error_.store(true);
   }
   return bg_err;
+}
+
+void TitanDBImpl::DumpStats() {
+  if (stats_ == nullptr) {
+    return;
+  }
+  LogBuffer log_buffer(InfoLogLevel::HEADER_LEVEL, db_options_.info_log.get());
+  {
+    MutexLock l(&mutex_);
+    for (auto& cf : cf_info_) {
+      TitanInternalStats* internal_stats = stats_->internal_stats(cf.first);
+      if (internal_stats == nullptr) {
+        ROCKS_LOG_WARN(db_options_.info_log,
+                       "Column family [%s] missing internal stats.",
+                       cf.second.name.c_str());
+        continue;
+      }
+      LogToBuffer(&log_buffer, "Titan internal stats for column family [%s]:",
+                  cf.second.name.c_str());
+      internal_stats->DumpAndResetInternalOpStats(&log_buffer);
+    }
+  }
+  log_buffer.FlushBufferToLog();
 }
 
 }  // namespace titandb

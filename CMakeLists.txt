@@ -96,6 +96,7 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         table_builder_test
         thread_safety_test
         titan_db_test
+        titan_options_test
         util_test
         version_test)
   set(TEST_LIBS
