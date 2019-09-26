@@ -580,7 +580,59 @@ TEST_F(BlobGCJobTest, LevelMergeGC) {
   DestroyDB();
 }
 
+TEST_F(BlobGCJobTest, RangeMerge) {
+  options_.level_merge = true;
+  options_.level_compaction_dynamic_level_bytes = true;
+  options_.blob_file_discardable_ratio = 0.5;
+  options_.range_merge = true;
+  options_.max_sorted_runs = 4;
+  options_.purge_obsolete_files_period_sec = 0;
+  NewDB();
+  ColumnFamilyMetaData cf_meta;
+  std::vector<std::string> to_compact(1);
+  auto opts = db_->GetOptions();
+
+  // compact 5 sorted runs to last level of key range [1, 50]
+  for (int i = 1; i <= 5; i++) {
+    for (int j = 0; j < 10; j++) {
+      db_->Put(WriteOptions(), GenKey(5 * j + i), GenValue(5 * j + i));
+    }
+    Flush();
+    db_->GetColumnFamilyMetaData(base_db_->DefaultColumnFamily(), &cf_meta);
+    to_compact[0] = cf_meta.levels[0].files[0].name;
+    db_->CompactFiles(CompactionOptions(), base_db_->DefaultColumnFamily(),
+                      to_compact, opts.num_levels - 1);
+    CheckBlobNumber(2 * i);
+  }
+
+  auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
+  // blob file number is start from 2. Even number blob files belong to level0,
+  // odd number blob files belong to last level.
+  for (int i = 2; i < 12; i++) {
+    auto blob = b->FindFile(i).lock();
+    if (i % 2 == 0) {
+      ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kObsolete);
+    } else {
+      ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kToMerge);
+    }
+  }
+
+  db_->GetColumnFamilyMetaData(base_db_->DefaultColumnFamily(), &cf_meta);
+  to_compact[0] = cf_meta.levels[opts.num_levels - 1].files[0].name;
+  db_->CompactFiles(CompactionOptions(), base_db_->DefaultColumnFamily(),
+                    to_compact, opts.num_levels - 1);
+
+  // after compact last level sstable again, marked blob files are merged
+  // to new blob files and obsoleted.
+  for (int i = 2; i < 12; i++) {
+    auto blob = b->FindFile(i).lock();
+    ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kObsolete);
+  }
+
+  DestroyDB();
+}
 }  // namespace titandb
+
 }  // namespace rocksdb
 
 int main(int argc, char** argv) {

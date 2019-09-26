@@ -837,6 +837,46 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   return s;
 }
 
+int TitanDBImpl::CountSortedRuns(
+    const std::vector<std::shared_ptr<BlobFileMeta>>& files) {
+  std::list<BlobFileMeta*> remained_files;
+  for (const auto& file : files) {
+    remained_files.emplace_back(file.get());
+  }
+  std::vector<int> sorted_run_blobs;
+  int num_files = files.size();
+
+  auto blob_cmp = [](const BlobFileMeta* f1, const BlobFileMeta* f2) {
+    return f1->smallest_key().compare(f2->smallest_key()) < 0;
+  };
+  remained_files.sort(blob_cmp);
+
+  while (!remained_files.empty()) {
+    int cnt = 0;
+    BlobFileMeta* pre = nullptr;
+    for (auto iter = remained_files.begin(); iter != remained_files.end();) {
+      if (pre == nullptr ||
+          (*iter)->smallest_key().compare(pre->largest_key()) > 0) {
+        cnt++;
+        pre = *iter;
+        remained_files.erase(iter++);
+      } else {
+        iter++;
+      }
+    }
+    sorted_run_blobs.push_back(cnt);
+  }
+
+  // There might be several sorted runs consist of few wide range blob files.
+  // Ignore these sorted runs since it has almost no impact to scan performance.
+  std::sort(sorted_run_blobs.begin(), sorted_run_blobs.end());
+  int i = 0, ignore = num_files * 0.1;
+  while (sorted_run_blobs[i] < ignore) {
+    ignore -= sorted_run_blobs[i++];
+  }
+  return sorted_run_blobs.size() - i;
+}
+
 Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
   assert(column_family != nullptr);
   Options options = db_->GetOptions(column_family);
@@ -1104,9 +1144,19 @@ void TitanDBImpl::OnCompactionCompleted(
     uint64_t delta = 0;
     VersionEdit edit;
     auto cf_options = bs->cf_options();
+    std::vector<std::shared_ptr<BlobFileMeta>> files;
+    bool count_sr =
+        cf_options.level_merge && cf_options.range_merge &&
+        cf_options.num_levels - 1 == compaction_job_info.output_level;
     for (const auto& bfs : blob_files_size_diff) {
       // blob file size < 0 means discardable size > 0
       if (bfs.second >= 0) {
+        if (count_sr) {
+          auto file = bs->FindFile(bfs.first).lock();
+          if (file != nullptr) {
+            files.emplace_back(std::move(file));
+          }
+        }
         continue;
       }
       auto file = bs->FindFile(bfs.first).lock();
@@ -1132,12 +1182,14 @@ void TitanDBImpl::OnCompactionCompleted(
         if (file->NoLiveData()) {
           edit.DeleteBlobFile(file->file_number(),
                               db_impl_->GetLatestSequenceNumber());
+          continue;
         } else if (static_cast<int>(file->file_level()) >=
                        cf_options.num_levels - 2 &&
                    file->GetDiscardableRatio() >
                        cf_options.blob_file_discardable_ratio) {
           file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
         }
+        files.emplace_back(std::move(file));
       }
     }
     SubStats(stats_.get(), compaction_job_info.cf_id,
@@ -1146,6 +1198,11 @@ void TitanDBImpl::OnCompactionCompleted(
     // data based GC, so we don't need to trigger regular GC anymore
     if (cf_options.level_merge) {
       blob_file_set_->LogAndApply(edit);
+      if (count_sr && CountSortedRuns(files) > cf_options.max_sorted_runs) {
+        for (auto& file : files) {
+          file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
+        }
+      }
     } else {
       bs->ComputeGCScore();
 

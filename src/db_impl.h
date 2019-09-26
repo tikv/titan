@@ -216,6 +216,8 @@ class TitanDBImpl : public TitanDB {
     return bg_error_;
   }
 
+  int CountSortedRuns(const std::vector<std::shared_ptr<BlobFileMeta>>& files);
+
   bool HasBGError() { return has_bg_error_.load(); }
 
   void DumpStats();

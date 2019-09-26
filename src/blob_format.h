@@ -202,8 +202,8 @@ class BlobFileMeta {
   uint64_t file_size() const { return file_size_; }
   uint64_t file_entries() const { return file_entries_; }
   uint32_t file_level() const { return file_level_; }
-  Slice smallest_key() const { return smallest_key_; }
-  Slice largest_key() const { return largest_key_; }
+  const std::string& smallest_key() const { return smallest_key_; }
+  const std::string& largest_key() const { return largest_key_; }
 
   FileState file_state() const { return state_; }
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
