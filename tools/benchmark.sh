@@ -40,18 +40,10 @@ if [ ! -d $output_dir ]; then
   mkdir -p $output_dir
 fi
 
-# all multithreaded tests run with sync=1 unless
-# $DB_BENCH_NO_SYNC is defined
-syncval="1"
-if [ ! -z $DB_BENCH_NO_SYNC ]; then
-  echo "Turning sync off for all multithreaded tests"
-  syncval="0";
-fi
-
-num_threads=${NUM_THREADS:-16}
+num_threads=${NUM_THREADS:-1}
 mb_written_per_sec=${MB_WRITE_PER_SEC:-0}
 # Only for tests that do range scans
-num_nexts_per_seek=${NUM_NEXTS_PER_SEEK:-10}
+num_nexts_per_seek=${NUM_NEXTS_PER_SEEK:-100}
 cache_size=${CACHE_SIZE:-$((1 * G))}
 compression_max_dict_bytes=${COMPRESSION_MAX_DICT_BYTES:-0}
 compression_type=${COMPRESSION_TYPE:-snappy}
@@ -59,69 +51,47 @@ duration=${DURATION:-0}
 
 num_keys=${NUM_KEYS:-$((1 * G))}
 key_size=${KEY_SIZE:-20}
-value_size=${VALUE_SIZE:-400}
-block_size=${BLOCK_SIZE:-8192}
+value_size=${VALUE_SIZE:-100}
 
 const_params="
   --db=$DB_DIR \
   --wal_dir=$WAL_DIR \
   \
   --num=$num_keys \
-  --num_levels=6 \
   --key_size=$key_size \
   --value_size=$value_size \
-  --block_size=$block_size \
-  --cache_size=$cache_size \
-  --cache_numshardbits=6 \
-  --compression_max_dict_bytes=$compression_max_dict_bytes \
   --compression_ratio=0.5 \
   --compression_type=$compression_type \
-  --level_compaction_dynamic_level_bytes=true \
-  --bytes_per_sync=$((8 * M)) \
-  --cache_index_and_filter_blocks=0 \
+  \
+  --block_size=$((64 * K)) \
+  --cache_size=$cache_size \
+  --cache_numshardbits=6 \
+  --cache_index_and_filter_blocks=1 \
   --pin_l0_filter_and_index_blocks_in_cache=1 \
-  --benchmark_write_rate_limit=$(( 1024 * 1024 * $mb_written_per_sec )) \
-  \
-  --hard_rate_limit=3 \
-  --rate_limit_delay_max_milliseconds=1000000 \
-  --write_buffer_size=$((128 * M)) \
-  --target_file_size_base=$((128 * M)) \
-  --max_bytes_for_level_base=$((1 * G)) \
-  \
-  --verify_checksum=1 \
-  --delete_obsolete_files_period_micros=$((60 * M)) \
-  --max_bytes_for_level_multiplier=8 \
-  \
-  --statistics=0 \
-  --stats_per_interval=1 \
-  --stats_interval_seconds=60 \
-  --histogram=1 \
-  \
-  --memtablerep=skip_list \
   --bloom_bits=10 \
-  --open_files=-1 \
+  \
+  --num_levels=7 \
+  --write_buffer_size=$((128 * M)) \
+  --level_compaction_dynamic_level_bytes=true \
+  --max_write_buffer_number=5 \
+  --target_file_size_base=$((8 * M)) \
+  --max_bytes_for_level_base=$((512 * M)) \
+  --max_bytes_for_level_multiplier=10 \
+  \
+  --max_background_jobs=6 \
+  --titan_max_background_gc=6
+  --open_files=40960 \
+  --statistics=1 \
+  --verify_checksum=1 \
+  \
+  --bytes_per_sync=$((1 * M)) \
+  --wal_bytes_per_sync=$((512 * K)) \
+  \
   --use_titan=$TITAN"
-
-l0_config="
-  --level0_file_num_compaction_trigger=4 \
-  --level0_slowdown_writes_trigger=12 \
-  --level0_stop_writes_trigger=20"
 
 if [ $duration -gt 0 ]; then
   const_params="$const_params --duration=$duration"
 fi
-
-params_w="$const_params \
-          $l0_config \
-          --max_background_jobs=20 \
-          --max_write_buffer_number=8"
-
-params_bulkload="$const_params \
-                 --max_background_jobs=20 \
-                 --max_write_buffer_number=8 \
-                 --level0_file_num_compaction_trigger=$((10 * M)) \
-                 --level0_slowdown_writes_trigger=$((10 * M)) \
-                 --level0_stop_writes_trigger=$((10 * M))"
 
 #
 # Tune values for level and universal compaction.
@@ -178,13 +148,13 @@ function run_bulkload {
   # TITAN: The implementation of memtable is changed from vector to default skiplist. Because GC in titan need to get in memtable. Vector will cause poor performance.
   echo "Bulk loading $num_keys random keys"
   cmd="./titandb_bench --benchmarks=fillrandom \
+       $const_params \
        --use_existing_db=0 \
        --disable_auto_compactions=1 \
-       --sync=0 \
-       $params_bulkload \
-       --threads=1 \
-       --allow_concurrent_memtable_write=false \
-       --disable_wal=1 \
+       --disable_wal=true
+       --sync=false \
+       --titan_disable_background_gc=true \
+       --threads=${num_threads} \
        --seed=$( date +%s ) \
        2>&1 | tee -a $output_dir/benchmark_bulkload_fillrandom.log"
   echo $cmd | tee $output_dir/benchmark_bulkload_fillrandom.log
@@ -195,7 +165,7 @@ function run_bulkload {
        --use_existing_db=1 \
        --disable_auto_compactions=1 \
        --sync=0 \
-       $params_w \
+       $const_params \
        --threads=1 \
        2>&1 | tee -a $output_dir/benchmark_bulkload_compact.log"
   echo $cmd | tee $output_dir/benchmark_bulkload_compact.log
@@ -298,14 +268,6 @@ function run_univ_compaction {
 }
 
 function run_fillseq {
-  # This runs with a vector memtable. WAL can be either disabled or enabled
-  # depending on the input parameter (1 for disabled, 0 for enabled). The main
-  # benefit behind disabling WAL is to make loading faster. It is still crash
-  # safe and the client can discover where to restart a load after a crash. I
-  # think this is a good way to load.
-
-  # TITAN: The implementation of memtable is changed from vector to default skiplist. Because GC in titan need to get in memtable. Vector will cause poor performance.
-
   # Make sure that we'll have unique names for all the files so that data won't
   # be overwritten.
   if [ $1 == 1 ]; then
@@ -319,12 +281,9 @@ function run_fillseq {
   echo "Loading $num_keys keys sequentially"
   cmd="./titandb_bench --benchmarks=fillseq \
        --use_existing_db=0 \
-       --sync=0 \
-       $params_w \
-       --min_level_to_compress=0 \
-       --threads=1 \
-       --allow_concurrent_memtable_write=false \
+       $const_params \
        --disable_wal=$1 \
+       --threads=${num_threads} \
        --seed=$( date +%s ) \
        2>&1 | tee -a $log_file_name"
   echo $cmd | tee $log_file_name
@@ -337,18 +296,17 @@ function run_fillseq {
 function run_change {
   operation=$1
   echo "Do $num_keys random $operation"
-  out_name="benchmark_${operation}.t${num_threads}.s${syncval}.log"
+  out_name="benchmark_${operation}.t${num_threads}.log"
   cmd="./titandb_bench --benchmarks=$operation \
        --use_existing_db=1 \
-       --sync=$syncval \
-       $params_w \
+       $const_params \
        --threads=$num_threads \
        --merge_operator=\"put\" \
        --seed=$( date +%s ) \
        2>&1 | tee -a $output_dir/${out_name}"
   echo $cmd | tee $output_dir/${out_name}
   eval $cmd
-  summarize_result $output_dir/${out_name} ${operation}.t${num_threads}.s${syncval} $operation
+  summarize_result $output_dir/${out_name} ${operation}.t${num_threads} $operation
 }
 
 function run_filluniquerandom {
@@ -356,7 +314,7 @@ function run_filluniquerandom {
   cmd="./titandb_bench --benchmarks=filluniquerandom \
        --use_existing_db=0 \
        --sync=0 \
-       $params_w \
+       $const_params \
        --threads=1 \
        --seed=$( date +%s ) \
        2>&1 | tee -a $output_dir/benchmark_filluniquerandom.log"
@@ -370,7 +328,7 @@ function run_readrandom {
   out_name="benchmark_readrandom.t${num_threads}.log"
   cmd="./titandb_bench --benchmarks=readrandom \
        --use_existing_db=1 \
-       $params_w \
+       $const_params \
        --threads=$num_threads \
        --seed=$( date +%s ) \
        2>&1 | tee -a $output_dir/${out_name}"
@@ -385,8 +343,7 @@ function run_readwhile {
   out_name="benchmark_readwhile${operation}.t${num_threads}.log"
   cmd="./titandb_bench --benchmarks=readwhile${operation} \
        --use_existing_db=1 \
-       --sync=$syncval \
-       $params_w \
+       $const_params \
        --threads=$num_threads \
        --merge_operator=\"put\" \
        --seed=$( date +%s ) \
@@ -404,8 +361,7 @@ function run_rangewhile {
   echo "Range scan $num_keys random keys while ${operation} for reverse_iter=${reverse_arg}"
   cmd="./titandb_bench --benchmarks=seekrandomwhile${operation} \
        --use_existing_db=1 \
-       --sync=$syncval \
-       $params_w \
+       $const_params \
        --threads=$num_threads \
        --merge_operator=\"put\" \
        --seek_nexts=$num_nexts_per_seek \
@@ -424,7 +380,7 @@ function run_range {
   echo "Range scan $num_keys random keys for reverse_iter=${reverse_arg}"
   cmd="./titandb_bench --benchmarks=seekrandom \
        --use_existing_db=1 \
-       $params_w \
+       $const_params \
        --threads=$num_threads \
        --seek_nexts=$num_nexts_per_seek \
        --reverse_iterator=$reverse_arg \
