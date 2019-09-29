@@ -840,15 +840,15 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
 int TitanDBImpl::CountSortedRuns(
     const std::vector<std::shared_ptr<BlobFileMeta>>& files) {
   std::list<BlobFileMeta*> remained_files;
-  for (const auto& file : files) {
-    remained_files.emplace_back(file.get());
-  }
   std::vector<int> sorted_run_blobs;
   int num_files = files.size();
 
   auto blob_cmp = [](const BlobFileMeta* f1, const BlobFileMeta* f2) {
     return f1->smallest_key().compare(f2->smallest_key()) < 0;
   };
+  for (const auto& file : files) {
+    remained_files.emplace_back(file.get());
+  }
   remained_files.sort(blob_cmp);
 
   while (!remained_files.empty()) {
