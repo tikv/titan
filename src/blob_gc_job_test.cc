@@ -565,7 +565,7 @@ TEST_F(BlobGCJobTest, LevelMergeGC) {
   CheckBlobNumber(4);
 
   auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
-  // blob file number is start from 2, they are: old level0 blob file, old
+  // blob file number starts from 2, they are: old level0 blob file, old
   // last level blob file, new level0 blob file, new last level blob file
   // respectively.
   ASSERT_EQ(b->FindFile(2).lock()->file_state(),
@@ -606,7 +606,7 @@ TEST_F(BlobGCJobTest, RangeMerge) {
   }
 
   auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
-  // blob file number is start from 2. Even number blob files belong to level0,
+  // blob file number starts from 2. Even number blob files belong to level0,
   // odd number blob files belong to last level.
   for (int i = 2; i < 12; i++) {
     auto blob = b->FindFile(i).lock();
@@ -622,8 +622,8 @@ TEST_F(BlobGCJobTest, RangeMerge) {
   db_->CompactFiles(CompactionOptions(), base_db_->DefaultColumnFamily(),
                     to_compact, opts.num_levels - 1);
 
-  // after compact last level sstable again, marked blob files are merged
-  // to new blob files and obsoleted.
+  // after last level compaction, marked blob files are merged to new blob
+  // files and obsoleted.
   for (int i = 2; i < 12; i++) {
     auto blob = b->FindFile(i).lock();
     ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kObsolete);

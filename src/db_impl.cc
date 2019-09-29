@@ -1189,7 +1189,9 @@ void TitanDBImpl::OnCompactionCompleted(
                        cf_options.blob_file_discardable_ratio) {
           file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
         }
-        files.emplace_back(std::move(file));
+        if (count_sr) {
+          files.emplace_back(std::move(file));
+        }
       }
     }
     SubStats(stats_.get(), compaction_job_info.cf_id,
