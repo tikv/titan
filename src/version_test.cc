@@ -313,8 +313,9 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
   VersionEdit edit;
   edit.SetColumnFamilyID(1);
   for (size_t i = 0; i < metas.size(); i++) {
-    auto file = std::make_shared<BlobFileMeta>(
-        i + 1, i + 1, 0, 0, std::move(metas[i].first), std::move(metas[i].second));
+    auto file = std::make_shared<BlobFileMeta>(i + 1, i + 1, 0, 0,
+                                               std::move(metas[i].first),
+                                               std::move(metas[i].second));
     edit.AddBlobFile(file);
   }
   EditCollector collector;

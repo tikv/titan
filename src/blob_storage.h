@@ -61,10 +61,9 @@ class BlobStorage {
   Status NewPrefetcher(uint64_t file_number,
                        std::unique_ptr<BlobFilePrefetcher>* result);
 
-  // Logical deletes all the blobs within the ranges.
-  Status DeleteBlobFilesInRanges(const RangePtr* ranges, size_t n,
-                                 bool include_end,
-                                 SequenceNumber obsolete_sequence);
+  // Get all the blob files within the ranges.
+  Status GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
+                              bool include_end, std::vector<uint64_t>* files);
 
   // Finds the blob file meta for the specified file number. It is a
   // corruption if the file doesn't exist.

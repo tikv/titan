@@ -24,9 +24,9 @@ Status BlobStorage::NewPrefetcher(uint64_t file_number,
                                     result);
 }
 
-Status BlobStorage::DeleteBlobFilesInRanges(const RangePtr* ranges, size_t n,
-                                            bool include_end,
-                                            SequenceNumber obsolete_sequence) {
+Status BlobStorage::GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
+                                         bool include_end,
+                                         std::vector<uint64_t*>* files) {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < n; i++) {
     const Slice* begin = ranges[i].start;
@@ -48,7 +48,7 @@ Status BlobStorage::DeleteBlobFilesInRanges(const RangePtr* ranges, size_t n,
       if ((end == nullptr) ||
           (include_end && cmp->Compare(it->second->largest_key(), *end) <= 0) ||
           (!include_end && cmp->Compare(it->second->largest_key(), *end) < 0)) {
-        MarkFileObsoleteLocked(it->second, obsolete_sequence);
+        files->push_back(it->second->file_number());
       }
       assert(it->second->smallest_key().empty() ||
              (!begin || cmp->Compare(it->second->smallest_key(), *begin) >= 0));

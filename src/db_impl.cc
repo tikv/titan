@@ -786,6 +786,11 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   if (!s.ok()) return s;
 
   MutexLock l(&mutex_);
+  SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
+  s = blob_file_set_->DeleteBlobFilesInRanges(ranges, n, include_end,
+                                              obsolete_sequence);
+  if (!s.ok()) return s;
+
   auto bs = blob_file_set_->GetBlobStorage(cf_id).lock();
   if (!bs) {
     // TODO: Should treat it as background error and make DB read-only.
@@ -794,10 +799,6 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     return Status::NotFound("Column family id: " + std::to_string(cf_id) +
                             " not Found.");
   }
-
-  SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
-  s = bs->DeleteBlobFilesInRanges(ranges, n, include_end, obsolete_sequence);
-  if (!s.ok()) return s;
 
   uint64_t delta = 0;
   VersionEdit edit;
