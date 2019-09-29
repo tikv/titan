@@ -7,8 +7,6 @@
 
 #include <cinttypes>
 
-#include <cinttypes>
-
 namespace rocksdb {
 namespace titandb {
 
