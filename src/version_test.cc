@@ -328,12 +328,14 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
   RangePtr range(&begin, &end);
   auto blob = blob_file_set_->GetBlobStorage(1).lock();
 
-  blob->DeleteBlobFilesInRanges(&range, 1, false /* include_end */, 0);
+  blob_file_set_->DeleteBlobFilesInRanges(1, &range, 1, false /* include_end */,
+                                          0);
   ASSERT_EQ(blob->NumBlobFiles(), metas.size());
   // obsolete files: 6, 8, 10
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 3);
 
-  blob->DeleteBlobFilesInRanges(&range, 1, true /* include_end */, 0);
+  blob_file_set_->DeleteBlobFilesInRanges(1, &range, 1, true /* include_end */,
+                                          0);
   ASSERT_EQ(blob->NumBlobFiles(), metas.size());
   // obsolete file: 6, 8, 9, 10, 13
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 5);
@@ -346,12 +348,14 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
   Slice end1 = Slice("99");
   RangePtr range1(&begin1, &end1);
 
-  blob->DeleteBlobFilesInRanges(&range1, 1, false /* include_end */, 0);
+  blob_file_set_->DeleteBlobFilesInRanges(1, &range1, 1,
+                                          false /* include_end */, 0);
   // obsolete file: 2, 3, 4, 5, 11, 12
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 6);
 
   RangePtr range2(nullptr, nullptr);
-  blob->DeleteBlobFilesInRanges(&range2, 1, true /* include_end */, 0);
+  blob_file_set_->DeleteBlobFilesInRanges(1, &range2, 1, true /* include_end */,
+                                          0);
   // obsolete file: 1, 2, 3, 4, 5, 7, 11, 12, 14
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 9);
 

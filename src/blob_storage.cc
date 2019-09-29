@@ -26,7 +26,7 @@ Status BlobStorage::NewPrefetcher(uint64_t file_number,
 
 Status BlobStorage::GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
                                          bool include_end,
-                                         std::vector<uint64_t*>* files) {
+                                         std::vector<uint64_t>* files) {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < n; i++) {
     const Slice* begin = ranges[i].start;
@@ -53,6 +53,10 @@ Status BlobStorage::GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
       assert(it->second->smallest_key().empty() ||
              (!begin || cmp->Compare(it->second->smallest_key(), *begin) >= 0));
     }
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "Get %" PRIuPTR " blob files in the range [%s, %s%c",
+                   files->size(), begin->ToString(true).c_str(),
+                   end->ToString(true).c_str(), include_end ? ']' : ')');
   }
   return Status::OK();
 }

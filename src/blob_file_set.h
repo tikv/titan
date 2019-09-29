@@ -55,8 +55,8 @@ class BlobFileSet {
 
   // Logical deletes all the blobs within the ranges.
   // REQUIRES: mutex is held
-  Status DeleteBlobFilesInRanges(const RangePtr* ranges, size_t n,
-                                 bool include_end,
+  Status DeleteBlobFilesInRanges(uint32_t cf_id, const RangePtr* ranges,
+                                 size_t n, bool include_end,
                                  SequenceNumber obsolete_sequence);
 
   // Allocates a new file number.
