@@ -3,6 +3,8 @@
 #endif
 #include <inttypes.h>
 
+#include <memory>
+
 #include "blob_gc_job.h"
 
 namespace rocksdb {
@@ -74,7 +76,7 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
                      const TitanDBOptions& titan_db_options, Env* env,
                      const EnvOptions& env_options,
                      BlobFileManager* blob_file_manager,
-                     VersionSet* version_set, LogBuffer* log_buffer,
+                     BlobFileSet* blob_file_set, LogBuffer* log_buffer,
                      std::atomic_bool* shuting_down, TitanStats* stats)
     : blob_gc_(blob_gc),
       base_db_(db),
@@ -84,7 +86,7 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
       env_(env),
       env_options_(env_options),
       blob_file_manager_(blob_file_manager),
-      version_set_(version_set),
+      blob_file_set_(blob_file_set),
       log_buffer_(log_buffer),
       shuting_down_(shuting_down),
       stats_(stats) {}
@@ -95,22 +97,26 @@ BlobGCJob::~BlobGCJob() {
     LogFlush(db_options_.info_log.get());
   }
   // flush metrics
-  RecordTick(stats_, BLOB_DB_BYTES_READ, metrics_.blob_db_bytes_read);
-  RecordTick(stats_, BLOB_DB_BYTES_WRITTEN, metrics_.blob_db_bytes_written);
+  RecordTick(stats_, BLOB_DB_BYTES_READ, metrics_.bytes_read);
+  RecordTick(stats_, BLOB_DB_BYTES_WRITTEN, metrics_.bytes_written);
   RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN,
-             metrics_.blob_db_gc_num_keys_overwritten);
+             metrics_.gc_num_keys_overwritten);
   RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
-             metrics_.blob_db_gc_bytes_overwritten);
+             metrics_.gc_bytes_overwritten);
   RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED,
-             metrics_.blob_db_gc_num_keys_relocated);
-  RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
-             metrics_.blob_db_gc_bytes_relocated);
-  RecordTick(stats_, BLOB_DB_GC_NUM_NEW_FILES,
-             metrics_.blob_db_gc_num_new_files);
-  RecordTick(stats_, BLOB_DB_GC_NUM_FILES, metrics_.blob_db_gc_num_files);
+             metrics_.gc_num_keys_relocated);
+  RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED, metrics_.gc_bytes_relocated);
+  RecordTick(stats_, BLOB_DB_GC_NUM_NEW_FILES, metrics_.gc_num_new_files);
+  RecordTick(stats_, BLOB_DB_GC_NUM_FILES, metrics_.gc_num_files);
+  RecordTick(stats_, TitanStats::GC_DISCARDABLE, metrics_.gc_discardable);
+  RecordTick(stats_, TitanStats::GC_SMALL_FILE, metrics_.gc_small_file);
+  RecordTick(stats_, TitanStats::GC_SAMPLE, metrics_.gc_sample);
 }
 
-Status BlobGCJob::Prepare() { return Status::OK(); }
+Status BlobGCJob::Prepare() {
+  SavePrevIOBytes(&prev_bytes_read_, &prev_bytes_written_);
+  return Status::OK();
+}
 
 Status BlobGCJob::Run() {
   Status s = SampleCandidateFiles();
@@ -146,6 +152,7 @@ Status BlobGCJob::Run() {
 }
 
 Status BlobGCJob::SampleCandidateFiles() {
+  TitanStopWatch sw(env_, metrics_.gc_sampling_micros);
   std::vector<BlobFileMeta*> result;
   for (const auto& file : blob_gc_->inputs()) {
     bool selected = false;
@@ -166,12 +173,15 @@ Status BlobGCJob::SampleCandidateFiles() {
 Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   assert(selected != nullptr);
   if (file->file_size() <=
-          blob_gc_->titan_cf_options().merge_small_file_threshold ||
-      file->GetDiscardableRatio() >=
-          blob_gc_->titan_cf_options().blob_file_discardable_ratio) {
+      blob_gc_->titan_cf_options().merge_small_file_threshold) {
+    metrics_.gc_small_file += 1;
     *selected = true;
-    return Status::OK();
+  } else if (file->GetDiscardableRatio() >=
+             blob_gc_->titan_cf_options().blob_file_discardable_ratio) {
+    metrics_.gc_discardable += 1;
+    *selected = true;
   }
+  if (*selected) return Status::OK();
 
   // TODO: add do sample count metrics
   auto records_size = file->file_size() - BlobFileHeader::kEncodedLength -
@@ -226,7 +236,7 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
       discardable_size += total_length;
     }
   }
-  metrics_.blob_db_bytes_read += iterated_size;
+  metrics_.bytes_read += iterated_size;
   assert(iter.status().ok());
 
   *selected =
@@ -275,7 +285,7 @@ Status BlobGCJob::DoRunGC() {
     }
     BlobIndex blob_index = gc_iter->GetBlobIndex();
     // count read bytes for blob record of gc candidate files
-    metrics_.blob_db_bytes_read += blob_index.blob_handle.size;
+    metrics_.bytes_read += blob_index.blob_handle.size;
 
     if (!last_key.empty() && !gc_iter->key().compare(last_key)) {
       if (last_key_valid) {
@@ -292,8 +302,8 @@ Status BlobGCJob::DoRunGC() {
       break;
     }
     if (discardable) {
-      metrics_.blob_db_gc_num_keys_overwritten++;
-      metrics_.blob_db_gc_bytes_overwritten += blob_index.blob_handle.size;
+      metrics_.gc_num_keys_overwritten++;
+      metrics_.gc_bytes_overwritten += blob_index.blob_handle.size;
       continue;
     }
 
@@ -329,8 +339,7 @@ Status BlobGCJob::DoRunGC() {
     blob_record.value = gc_iter->value();
     // count written bytes for new blob record,
     // blob index's size is counted in `RewriteValidKeyToLSM`
-    metrics_.blob_db_bytes_written +=
-        blob_record.key.size() + blob_record.value.size();
+    metrics_.bytes_written += blob_record.size();
 
     BlobIndex new_blob_index;
     new_blob_index.file_number = blob_file_handle->GetNumber();
@@ -396,6 +405,7 @@ Status BlobGCJob::BuildIterator(
 
 Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
                                bool* discardable) {
+  TitanStopWatch sw(env_, metrics_.gc_read_lsm_micros);
   assert(discardable != nullptr);
   PinnableSlice index_entry;
   bool is_blob_index = false;
@@ -406,7 +416,7 @@ Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
     return s;
   }
   // count read bytes for checking LSM entry
-  metrics_.blob_db_bytes_read += key.size() + index_entry.size();
+  metrics_.bytes_read += key.size() + index_entry.size();
   if (s.IsNotFound() || !is_blob_index) {
     // Either the key is deleted or updated with a newer version which is
     // inlined in LSM.
@@ -455,6 +465,10 @@ Status BlobGCJob::Finish() {
     s = DeleteInputBlobFiles();
   }
 
+  if (s.ok()) {
+    UpdateInternalOpStats();
+  }
+
   return s;
 }
 
@@ -465,18 +479,21 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     if (!s.ok()) {
       break;
     }
-    metrics_.blob_db_gc_num_new_files++;
+    metrics_.gc_num_new_files++;
   }
   if (s.ok()) {
     std::vector<std::pair<std::shared_ptr<BlobFileMeta>,
                           std::unique_ptr<BlobFileHandle>>>
         files;
     std::string tmp;
-    for (auto& builder : this->blob_file_builders_) {
+    for (auto& builder : blob_file_builders_) {
       auto file = std::make_shared<BlobFileMeta>(
           builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(),
-          builder.second->GetSmallestKey(), builder.second->GetLargestKey());
-
+          0, 0, builder.second->GetSmallestKey(),
+          builder.second->GetLargestKey());
+      file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
+      RecordInHistogram(stats_, TitanStats::GC_OUTPUT_FILE_SIZE,
+                        file->file_size());
       if (!tmp.empty()) {
         tmp.append(" ");
       }
@@ -486,7 +503,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
                      blob_gc_->column_family_handle()->GetName().c_str(),
                      tmp.c_str());
-    s = this->blob_file_manager_->BatchFinishFiles(
+    s = blob_file_manager_->BatchFinishFiles(
         blob_gc_->column_family_handle()->GetID(), files);
     if (s.ok()) {
       for (auto& file : files) {
@@ -494,9 +511,9 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       }
     }
   } else {
-    std::vector<unique_ptr<BlobFileHandle>> handles;
+    std::vector<std::unique_ptr<BlobFileHandle>> handles;
     std::string to_delete_files;
-    for (auto& builder : this->blob_file_builders_) {
+    for (auto& builder : blob_file_builders_) {
       if (!to_delete_files.empty()) {
         to_delete_files.append(" ");
       }
@@ -508,19 +525,20 @@ Status BlobGCJob::InstallOutputBlobFiles() {
         "[%s] InstallOutputBlobFiles failed. Delete GC output files: %s",
         blob_gc_->column_family_handle()->GetName().c_str(),
         to_delete_files.c_str());
-    s = this->blob_file_manager_->BatchDeleteFiles(handles);
+    s = blob_file_manager_->BatchDeleteFiles(handles);
   }
   return s;
 }
 
 Status BlobGCJob::RewriteValidKeyToLSM() {
+  TitanStopWatch sw(env_, metrics_.gc_update_lsm_micros);
   Status s;
-  auto* db_impl = reinterpret_cast<DBImpl*>(this->base_db_);
+  auto* db_impl = reinterpret_cast<DBImpl*>(base_db_);
 
   WriteOptions wo;
   wo.low_pri = true;
   wo.ignore_missing_column_families = true;
-  for (auto& write_batch : this->rewrite_batches_) {
+  for (auto& write_batch : rewrite_batches_) {
     if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
       s = Status::Aborted("Column family drop");
       break;
@@ -532,22 +550,20 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
     s = db_impl->WriteWithCallback(wo, &write_batch.first, &write_batch.second);
     if (s.ok()) {
       // count written bytes for new blob index.
-      metrics_.blob_db_bytes_written += write_batch.first.GetDataSize();
-      metrics_.blob_db_gc_num_keys_relocated++;
-      metrics_.blob_db_gc_bytes_relocated +=
-          write_batch.second.blob_record_size();
+      metrics_.bytes_written += write_batch.first.GetDataSize();
+      metrics_.gc_num_keys_relocated++;
+      metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
       // Key is successfully written to LSM.
     } else if (s.IsBusy()) {
-      metrics_.blob_db_gc_num_keys_overwritten++;
-      metrics_.blob_db_gc_bytes_overwritten +=
-          write_batch.second.blob_record_size();
+      metrics_.gc_num_keys_overwritten++;
+      metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
       // The key is overwritten in the meanwhile. Drop the blob record.
     } else {
       // We hit an error.
       break;
     }
     // count read bytes in write callback
-    metrics_.blob_db_bytes_read += write_batch.second.read_bytes();
+    metrics_.bytes_read += write_batch.second.read_bytes();
   }
   if (s.IsBusy()) {
     s = Status::OK();
@@ -568,12 +584,15 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   VersionEdit edit;
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
   for (const auto& file : blob_gc_->sampled_inputs()) {
-    ROCKS_LOG_INFO(db_options_.info_log, "Titan add obsolete file [%llu]",
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "Titan add obsolete file [%" PRIu64 "]",
                    file->file_number());
-    metrics_.blob_db_gc_num_files++;
+    metrics_.gc_num_files++;
+    RecordInHistogram(stats_, TitanStats::GC_INPUT_FILE_SIZE,
+                      file->file_size());
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
   }
-  s = version_set_->LogAndApply(edit);
+  s = blob_file_set_->LogAndApply(edit);
   // TODO(@DorianZheng) Purge pending outputs
   // base_db_->pending_outputs_.erase(handle->GetNumber());
   return s;
@@ -581,6 +600,41 @@ Status BlobGCJob::DeleteInputBlobFiles() {
 
 bool BlobGCJob::IsShutingDown() {
   return (shuting_down_ && shuting_down_->load(std::memory_order_acquire));
+}
+
+void BlobGCJob::UpdateInternalOpStats() {
+  if (stats_ == nullptr) {
+    return;
+  }
+  UpdateIOBytes(prev_bytes_read_, prev_bytes_written_, &io_bytes_read_,
+                &io_bytes_written_);
+  uint32_t cf_id = blob_gc_->column_family_handle()->GetID();
+  TitanInternalStats* internal_stats = stats_->internal_stats(cf_id);
+  if (internal_stats == nullptr) {
+    return;
+  }
+  InternalOpStats* internal_op_stats =
+      internal_stats->GetInternalOpStatsForType(InternalOpType::GC);
+  assert(internal_op_stats != nullptr);
+  AddStats(internal_op_stats, InternalOpStatsType::COUNT);
+  AddStats(internal_op_stats, InternalOpStatsType::BYTES_READ,
+           metrics_.bytes_read);
+  AddStats(internal_op_stats, InternalOpStatsType::BYTES_WRITTEN,
+           metrics_.bytes_written);
+  AddStats(internal_op_stats, InternalOpStatsType::IO_BYTES_READ,
+           io_bytes_read_);
+  AddStats(internal_op_stats, InternalOpStatsType::IO_BYTES_WRITTEN,
+           io_bytes_written_);
+  AddStats(internal_op_stats, InternalOpStatsType::INPUT_FILE_NUM,
+           metrics_.gc_num_files);
+  AddStats(internal_op_stats, InternalOpStatsType::OUTPUT_FILE_NUM,
+           metrics_.gc_num_new_files);
+  AddStats(internal_op_stats, InternalOpStatsType::GC_SAMPLING_MICROS,
+           metrics_.gc_sampling_micros);
+  AddStats(internal_op_stats, InternalOpStatsType::GC_READ_LSM_MICROS,
+           metrics_.gc_read_lsm_micros);
+  AddStats(internal_op_stats, InternalOpStatsType::GC_UPDATE_LSM_MICROS,
+           metrics_.gc_update_lsm_micros);
 }
 
 }  // namespace titandb

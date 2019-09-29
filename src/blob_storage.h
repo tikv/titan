@@ -76,6 +76,8 @@ class BlobStorage {
     for (auto& file : files_) {
       file.second->set_gc_mark(true);
       file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
+      auto level = file.second->GetDiscardableRatioLevel();
+      AddStats(stats_, cf_id_, level, 1);
     }
   }
 
@@ -127,7 +129,7 @@ class BlobStorage {
       std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
  private:
-  friend class VersionSet;
+  friend class BlobFileSet;
   friend class VersionTest;
   friend class BlobGCPickerTest;
   friend class BlobGCJobTest;

@@ -2,17 +2,20 @@
 #include <options/cf_options.h>
 #include <unordered_map>
 
+#include "file/filename.h"
+#include "rocksdb/utilities/debug.h"
+#include "test_util/sync_point.h"
+#include "test_util/testharness.h"
+#include "util/random.h"
+
 #include "blob_file_iterator.h"
 #include "blob_file_reader.h"
+#include "blob_file_size_collector.h"
 #include "db_impl.h"
 #include "db_iter.h"
-#include "rocksdb/utilities/debug.h"
+#include "monitoring/statistics.h"
 #include "titan/db.h"
 #include "titan_fault_injection_test_env.h"
-#include "util/filename.h"
-#include "util/random.h"
-#include "util/sync_point.h"
-#include "util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -36,6 +39,7 @@ class TitanDBTest : public testing::Test {
     options_.merge_small_file_threshold = 0;
     options_.disable_background_gc = true;
     options_.blob_file_compression = CompressionType::kLZ4Compression;
+    options_.statistics = CreateDBStatistics();
     DeleteDir(env_, options_.dirname);
     DeleteDir(env_, dbname_);
   }
@@ -44,6 +48,8 @@ class TitanDBTest : public testing::Test {
     Close();
     DeleteDir(env_, options_.dirname);
     DeleteDir(env_, dbname_);
+    SyncPoint::GetInstance()->DisableProcessing();
+    SyncPoint::GetInstance()->ClearAllCallBacks();
   }
 
   void Open() {
@@ -101,7 +107,7 @@ class TitanDBTest : public testing::Test {
   }
 
   Status LogAndApply(VersionEdit& edit) {
-    return db_impl_->vset_->LogAndApply(edit);
+    return db_impl_->blob_file_set_->LogAndApply(edit);
   }
 
   void Put(uint64_t k, std::map<std::string, std::string>* data = nullptr) {
@@ -117,6 +123,15 @@ class TitanDBTest : public testing::Test {
     }
   }
 
+  void Delete(uint64_t k) {
+    WriteOptions wopts;
+    std::string key = GenKey(k);
+    ASSERT_OK(db_->Delete(wopts, key));
+    for (auto& handle : cf_handles_) {
+      ASSERT_OK(db_->Delete(wopts, handle, key));
+    }
+  }
+
   void Flush() {
     FlushOptions fopts;
     ASSERT_OK(db_->Flush(fopts));
@@ -125,13 +140,17 @@ class TitanDBTest : public testing::Test {
     }
   }
 
+  bool GetIntProperty(const Slice& property, uint64_t* value) {
+    return db_->GetIntProperty(property, value);
+  }
+
   std::weak_ptr<BlobStorage> GetBlobStorage(
       ColumnFamilyHandle* cf_handle = nullptr) {
     if (cf_handle == nullptr) {
       cf_handle = db_->DefaultColumnFamily();
     }
     MutexLock l(&db_impl_->mutex_);
-    return db_impl_->vset_->GetBlobStorage(cf_handle->GetID());
+    return db_impl_->blob_file_set_->GetBlobStorage(cf_handle->GetID());
   }
 
   void VerifyDB(const std::map<std::string, std::string>& data,
@@ -251,10 +270,17 @@ class TitanDBTest : public testing::Test {
   }
 
   void CallGC() {
-    db_impl_->bg_gc_scheduled_++;
+    {
+      MutexLock l(&db_impl_->mutex_);
+      db_impl_->bg_gc_scheduled_++;
+    }
     db_impl_->BackgroundCallGC();
-    while (db_impl_->bg_gc_scheduled_)
-      ;
+    {
+      MutexLock l(&db_impl_->mutex_);
+      while (db_impl_->bg_gc_scheduled_) {
+        db_impl_->bg_cv_.Wait();
+      }
+    }
   }
 
   // Make db ignore first bg_error
@@ -356,6 +382,20 @@ TEST_F(TitanDBTest, DBIterSeek) {
   }
 }
 
+TEST_F(TitanDBTest, GetProperty) {
+  Open();
+  for (uint64_t k = 1; k <= 100; k++) {
+    Put(k);
+  }
+  Flush();
+  uint64_t value;
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumLiveBlobFile, &value));
+  ASSERT_EQ(value, 1);
+  Reopen();
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumLiveBlobFile, &value));
+  ASSERT_EQ(value, 1);
+}
+
 TEST_F(TitanDBTest, Snapshot) {
   Open();
   std::map<std::string, std::string> data;
@@ -427,6 +467,17 @@ TEST_F(TitanDBTest, IngestExternalFiles) {
     bf++;
     VerifyBlob(bf->first, ingested_data);
   }
+}
+
+TEST_F(TitanDBTest, NewColumnFamilyHasBlobFileSizeCollector) {
+  Open();
+  AddCF("new_cf");
+  Options opt = db_->GetOptions(cf_handles_.back());
+  ASSERT_EQ(1, opt.table_properties_collector_factories.size());
+  std::unique_ptr<BlobFileSizeCollectorFactory> prop_collector_factory(
+      new BlobFileSizeCollectorFactory());
+  ASSERT_EQ(std::string(prop_collector_factory->Name()),
+            std::string(opt.table_properties_collector_factories[0]->Name()));
 }
 
 TEST_F(TitanDBTest, DropColumnFamily) {
@@ -551,7 +602,7 @@ TEST_F(TitanDBTest, VersionEditError) {
   auto cf_id = db_->DefaultColumnFamily()->GetID();
   VersionEdit edit;
   edit.SetColumnFamilyID(cf_id);
-  edit.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, "", ""));
+  edit.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, 0, 0, "", ""));
   ASSERT_OK(LogAndApply(edit));
 
   VerifyDB(data);
@@ -559,7 +610,7 @@ TEST_F(TitanDBTest, VersionEditError) {
   // add same blob file twice
   VersionEdit edit1;
   edit1.SetColumnFamilyID(cf_id);
-  edit1.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, "", ""));
+  edit1.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, 0, 0, "", ""));
   ASSERT_NOK(LogAndApply(edit));
 
   Reopen();
@@ -875,6 +926,7 @@ TEST_F(TitanDBTest, FallbackModeEncounterMissingBlobFile) {
   ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
   ASSERT_OK(db_->Delete(WriteOptions(), "foo"));
   ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
   uint32_t default_cf_id = db_->DefaultColumnFamily()->GetID();
   // GC the first blob file.
   ASSERT_OK(db_impl_->TEST_StartGC(default_cf_id));
@@ -921,8 +973,11 @@ TEST_F(TitanDBTest, BackgroundErrorTrigger) {
     Put(i, &data);
   }
   Flush();
+  for (uint64_t i = 1; i <= kNumEntries; i++) {
+    Delete(i);
+  }
   ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
-  SyncPoint::GetInstance()->SetCallBack("VersionSet::LogAndApply", [&](void*) {
+  SyncPoint::GetInstance()->SetCallBack("BlobFileSet::LogAndApply", [&](void*) {
     mock_env->SetFilesystemActive(false, Status::IOError("Injected error"));
   });
   SyncPoint::GetInstance()->EnableProcessing();
@@ -930,6 +985,89 @@ TEST_F(TitanDBTest, BackgroundErrorTrigger) {
   mock_env->SetFilesystemActive(true);
   // Still failed for bg error
   ASSERT_TRUE(db_impl_->Put(WriteOptions(), "key", "val").IsIOError());
+  Close();
+}
+
+// Make sure DropColumnFamilies() will wait if there's running GC job.
+TEST_F(TitanDBTest, DropCFWhileGC) {
+  options_.min_blob_size = 0;
+  options_.blob_file_discardable_ratio = 0.1;
+  options_.disable_background_gc = false;
+  Open();
+
+  // Create CF.
+  std::vector<TitanCFDescriptor> descs = {{"new_cf", options_}};
+  std::vector<ColumnFamilyHandle*> handles;
+  ASSERT_OK(db_->CreateColumnFamilies(descs, &handles));
+  ASSERT_EQ(1, handles.size());
+  auto* cfh = handles[0];
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBImpl::BackgroundCallGC:BeforeBackgroundGC",
+        "TitanDBImpl::DropColumnFamilies:Begin"}});
+  SyncPoint::GetInstance()->SetCallBack(
+      "TitanDBImpl::DropColumnFamilies:BeforeBaseDBDropCF",
+      [&](void*) { ASSERT_EQ(0, db_impl_->TEST_bg_gc_running()); });
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  // Create two blob files, and trigger GC of the first one.
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "foo", "v1"));
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "bar", "v1"));
+  ASSERT_OK(db_->Flush(FlushOptions(), cfh));
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "foo", "v2"));
+  ASSERT_OK(db_->Flush(FlushOptions(), cfh));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), cfh, nullptr, nullptr));
+
+  // Verify no GC job is running while we drop the CF.
+  ASSERT_OK(db_->DropColumnFamilies(handles));
+
+  // Cleanup.
+  ASSERT_OK(db_->DestroyColumnFamilyHandle(cfh));
+  Close();
+}
+
+// Make sure GC job will not run on a dropped CF.
+TEST_F(TitanDBTest, GCAfterDropCF) {
+  options_.min_blob_size = 0;
+  options_.blob_file_discardable_ratio = 0.1;
+  options_.disable_background_gc = false;
+  Open();
+
+  // Create CF.
+  std::vector<TitanCFDescriptor> descs = {{"new_cf", options_}};
+  std::vector<ColumnFamilyHandle*> handles;
+  ASSERT_OK(db_->CreateColumnFamilies(descs, &handles));
+  ASSERT_EQ(1, handles.size());
+  auto* cfh = handles[0];
+
+  std::atomic<int> skip_dropped_cf_count{0};
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBTest::GCAfterDropCF:AfterDropCF",
+        "TitanDBImpl::BackgroundCallGC:BeforeGCRunning"},
+       {"TitanDBImpl::BackgroundGC:Finish",
+        "TitanDBTest::GCAfterDropCF:WaitGC"}});
+  SyncPoint::GetInstance()->SetCallBack(
+      "TitanDBImpl::BackgroundGC:CFDropped",
+      [&](void*) { skip_dropped_cf_count++; });
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  // Create two blob files, and trigger GC of the first one.
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "foo", "v1"));
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "bar", "v1"));
+  ASSERT_OK(db_->Flush(FlushOptions(), cfh));
+  ASSERT_OK(db_->Put(WriteOptions(), cfh, "foo", "v2"));
+  ASSERT_OK(db_->Flush(FlushOptions(), cfh));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), cfh, nullptr, nullptr));
+
+  // Drop CF before GC runs. Check if GC job skip the dropped CF.
+  ASSERT_OK(db_->DropColumnFamilies(handles));
+  TEST_SYNC_POINT("TitanDBTest::GCAfterDropCF:AfterDropCF");
+  TEST_SYNC_POINT("TitanDBTest::GCAfterDropCF:WaitGC");
+  ASSERT_EQ(1, skip_dropped_cf_count.load());
+
+  // Cleanup.
+  ASSERT_OK(db_->DestroyColumnFamilyHandle(cfh));
   Close();
 }
 

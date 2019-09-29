@@ -2,11 +2,12 @@
 
 #include <cinttypes>
 
+#include "file/filename.h"
+#include "test_util/testharness.h"
+
 #include "blob_file_builder.h"
 #include "blob_file_cache.h"
 #include "blob_file_reader.h"
-#include "util/filename.h"
-#include "util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -154,7 +155,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
 
   while ((idx = Random::GetTLSInstance()->Uniform(n)) == 0)
     ;
-  blob_file_iterator_->IterateForPrev(handles[idx].offset - kBlobHeaderSize -
+  blob_file_iterator_->IterateForPrev(handles[idx].offset - kRecordHeaderSize -
                                       1);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();

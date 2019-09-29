@@ -1,5 +1,7 @@
 #include "util.h"
 
+#include "util/stop_watch.h"
+
 namespace rocksdb {
 namespace titandb {
 
@@ -11,46 +13,46 @@ bool GoodCompressionRatio(size_t compressed_size, size_t raw_size) {
   return compressed_size < raw_size - (raw_size / 8u);
 }
 
-Slice Compress(const CompressionContext& ctx, const Slice& input,
+Slice Compress(const CompressionInfo& info, const Slice& input,
                std::string* output, CompressionType* type) {
-  *type = ctx.type();
-  if (ctx.type() == kNoCompression) {
+  *type = info.type();
+  if (info.type() == kNoCompression) {
     return input;
   }
 
   // Returns compressed block contents if:
   // (1) the compression method is supported in this platform and
   // (2) the compression rate is "good enough".
-  switch (ctx.type()) {
+  switch (info.type()) {
     case kSnappyCompression:
-      if (Snappy_Compress(ctx, input.data(), input.size(), output) &&
+      if (Snappy_Compress(info, input.data(), input.size(), output) &&
           GoodCompressionRatio(output->size(), input.size())) {
         return *output;
       }
       break;
     case kZlibCompression:
-      if (Zlib_Compress(ctx, kCompressionFormat, input.data(), input.size(),
+      if (Zlib_Compress(info, kCompressionFormat, input.data(), input.size(),
                         output) &&
           GoodCompressionRatio(output->size(), input.size())) {
         return *output;
       }
       break;
     case kBZip2Compression:
-      if (BZip2_Compress(ctx, kCompressionFormat, input.data(), input.size(),
+      if (BZip2_Compress(info, kCompressionFormat, input.data(), input.size(),
                          output) &&
           GoodCompressionRatio(output->size(), input.size())) {
         return *output;
       }
       break;
     case kLZ4Compression:
-      if (LZ4_Compress(ctx, kCompressionFormat, input.data(), input.size(),
+      if (LZ4_Compress(info, kCompressionFormat, input.data(), input.size(),
                        output) &&
           GoodCompressionRatio(output->size(), input.size())) {
         return *output;
       }
       break;
     case kLZ4HCCompression:
-      if (LZ4HC_Compress(ctx, kCompressionFormat, input.data(), input.size(),
+      if (LZ4HC_Compress(info, kCompressionFormat, input.data(), input.size(),
                          output) &&
           GoodCompressionRatio(output->size(), input.size())) {
         return *output;
@@ -64,7 +66,7 @@ Slice Compress(const CompressionContext& ctx, const Slice& input,
       break;
     case kZSTD:
     case kZSTDNotFinalCompression:
-      if (ZSTD_Compress(ctx, input.data(), input.size(), output) &&
+      if (ZSTD_Compress(info, input.data(), input.size(), output) &&
           GoodCompressionRatio(output->size(), input.size())) {
         return *output;
       }
@@ -78,13 +80,13 @@ Slice Compress(const CompressionContext& ctx, const Slice& input,
   return input;
 }
 
-Status Uncompress(const UncompressionContext& ctx, const Slice& input,
+Status Uncompress(const UncompressionInfo& info, const Slice& input,
                   OwnedSlice* output) {
   int size = 0;
   CacheAllocationPtr ubuf;
-  assert(ctx.type() != kNoCompression);
+  assert(info.type() != kNoCompression);
 
-  switch (ctx.type()) {
+  switch (info.type()) {
     case kSnappyCompression: {
       size_t usize = 0;
       if (!Snappy_GetUncompressedLength(input.data(), input.size(), &usize)) {
@@ -98,7 +100,7 @@ Status Uncompress(const UncompressionContext& ctx, const Slice& input,
       break;
     }
     case kZlibCompression:
-      ubuf = Zlib_Uncompress(ctx, input.data(), input.size(), &size,
+      ubuf = Zlib_Uncompress(info, input.data(), input.size(), &size,
                              kCompressionFormat);
       if (!ubuf.get()) {
         return Status::Corruption("Corrupted compressed blob", "Zlib");
@@ -114,7 +116,7 @@ Status Uncompress(const UncompressionContext& ctx, const Slice& input,
       output->reset(std::move(ubuf), size);
       break;
     case kLZ4Compression:
-      ubuf = LZ4_Uncompress(ctx, input.data(), input.size(), &size,
+      ubuf = LZ4_Uncompress(info, input.data(), input.size(), &size,
                             kCompressionFormat);
       if (!ubuf.get()) {
         return Status::Corruption("Corrupted compressed blob", "LZ4");
@@ -122,7 +124,7 @@ Status Uncompress(const UncompressionContext& ctx, const Slice& input,
       output->reset(std::move(ubuf), size);
       break;
     case kLZ4HCCompression:
-      ubuf = LZ4_Uncompress(ctx, input.data(), input.size(), &size,
+      ubuf = LZ4_Uncompress(info, input.data(), input.size(), &size,
                             kCompressionFormat);
       if (!ubuf.get()) {
         return Status::Corruption("Corrupted compressed blob", "LZ4HC");
@@ -138,7 +140,7 @@ Status Uncompress(const UncompressionContext& ctx, const Slice& input,
       break;
     case kZSTD:
     case kZSTDNotFinalCompression:
-      ubuf = ZSTD_Uncompress(ctx, input.data(), input.size(), &size);
+      ubuf = ZSTD_Uncompress(info, input.data(), input.size(), &size);
       if (!ubuf.get()) {
         return Status::Corruption("Corrupted compressed blob", "ZSTD");
       }
@@ -155,6 +157,13 @@ void UnrefCacheHandle(void* arg1, void* arg2) {
   Cache* cache = reinterpret_cast<Cache*>(arg1);
   Cache::Handle* h = reinterpret_cast<Cache::Handle*>(arg2);
   cache->Release(h);
+}
+
+Status SyncTitanManifest(Env* env, TitanStats* stats,
+                         const ImmutableDBOptions* db_options,
+                         WritableFileWriter* file) {
+  StopWatch sw(env, stats, TitanStats::TITAN_MANIFEST_FILE_SYNC_MICROS);
+  return file->Sync(db_options->use_fsync);
 }
 
 }  // namespace titandb

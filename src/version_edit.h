@@ -43,7 +43,7 @@ class VersionEdit {
   friend bool operator==(const VersionEdit& lhs, const VersionEdit& rhs);
 
  private:
-  friend class VersionSet;
+  friend class BlobFileSet;
   friend class VersionTest;
   friend class EditCollector;
 

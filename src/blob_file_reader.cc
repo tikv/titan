@@ -6,10 +6,10 @@
 
 #include <inttypes.h>
 
+#include "file/filename.h"
+#include "test_util/sync_point.h"
 #include "util/crc32c.h"
-#include "util/filename.h"
 #include "util/string_util.h"
-#include "util/sync_point.h"
 
 #include "titan_stats.h"
 
@@ -28,7 +28,9 @@ Status NewBlobFileReader(uint64_t file_number, uint64_t readahead_size,
   if (readahead_size > 0) {
     file = NewReadaheadRandomAccessFile(std::move(file), readahead_size);
   }
-  result->reset(new RandomAccessFileReader(std::move(file), file_name));
+  result->reset(new RandomAccessFileReader(
+      std::move(file), file_name, nullptr /*env*/, nullptr /*stats*/,
+      0 /*hist_type*/, nullptr /*file_read_hist*/, env_options.rate_limiter));
   return s;
 }
 
@@ -104,15 +106,13 @@ Status BlobFileReader::Get(const ReadOptions& /*options*/,
     EncodeBlobCache(&cache_key, cache_prefix_, handle.offset);
     cache_handle = cache_->Lookup(cache_key);
     if (cache_handle) {
-      RecordTick(stats_, BLOCK_CACHE_DATA_HIT);
-      RecordTick(stats_, BLOCK_CACHE_HIT);
+      RecordTick(stats_, TitanStats::BLOB_CACHE_HIT);
       auto blob = reinterpret_cast<OwnedSlice*>(cache_->Value(cache_handle));
       buffer->PinSlice(*blob, UnrefCacheHandle, cache_.get(), cache_handle);
       return DecodeInto(*blob, record);
     }
   }
-  RecordTick(stats_, BLOCK_CACHE_DATA_MISS);
-  RecordTick(stats_, BLOCK_CACHE_MISS);
+  RecordTick(stats_, TitanStats::BLOB_CACHE_MISS);
 
   OwnedSlice blob;
   Status s = ReadRecord(handle, record, &blob);

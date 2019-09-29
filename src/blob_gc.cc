@@ -21,7 +21,6 @@ ColumnFamilyData* BlobGC::GetColumnFamilyData() {
 }
 
 void BlobGC::AddOutputFile(BlobFileMeta* blob_file) {
-  blob_file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
   outputs_.push_back(blob_file);
 }
 
@@ -33,6 +32,7 @@ void BlobGC::MarkFilesBeingGC() {
 
 void BlobGC::ReleaseGcFiles() {
   for (auto& f : inputs_) {
+    f->set_gc_mark(false);
     f->FileStateTransit(BlobFileMeta::FileEvent::kGCCompleted);
   }
 

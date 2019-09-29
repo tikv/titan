@@ -6,9 +6,9 @@
 
 #include <inttypes.h>
 
+#include "logging/logging.h"
 #include "options/options_helper.h"
 #include "rocksdb/convenience.h"
-#include "util/logging.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -22,8 +22,11 @@ void TitanDBOptions::Dump(Logger* logger) const {
                    "TitanDBOptions.max_background_gc          : %" PRIi32,
                    max_background_gc);
   ROCKS_LOG_HEADER(logger,
-                   "TitanDBOptions.purge_obsolete_files_period: %" PRIu32,
-                   purge_obsolete_files_period);
+                   "TitanDBOptions.purge_obsolete_files_period_sec: %" PRIu32,
+                   purge_obsolete_files_period_sec);
+  ROCKS_LOG_HEADER(logger,
+                   "TitanDBOptions.titan_stats_dump_period_sec: %" PRIu32,
+                   titan_stats_dump_period_sec);
 }
 
 TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,

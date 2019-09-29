@@ -2,6 +2,26 @@ cmake_minimum_required(VERSION 3.0)
 project(titan)
 enable_language(CXX)
 enable_language(C)
+find_package(Git)
+
+if (NOT ROCKSDB_GIT_REPO)
+  set(ROCKSDB_GIT_REPO "https://github.com/pingcap/rocksdb.git")
+endif()
+
+if (NOT ROCKSDB_GIT_BRANCH)
+  set(ROCKSDB_GIT_BRANCH "6.4.tikv")
+endif()
+
+if (NOT DEFINED ROCKSDB_DIR)
+  if (GIT_FOUND)
+    if (WIN32)
+      execute_process(COMMAND $ENV{COMSPEC} /C ${GIT_EXECUTABLE} clone --branch=${ROCKSDB_GIT_BRANCH} ${ROCKSDB_GIT_REPO})
+    else()
+      execute_process(COMMAND ${GIT_EXECUTABLE} clone --branch=${ROCKSDB_GIT_BRANCH} ${ROCKSDB_GIT_REPO})
+    endif()
+    set(ROCKSDB_DIR "${CMAKE_BINARY_DIR}/rocksdb")
+  endif()
+endif()
 
 if (NOT DEFINED ROCKSDB_DIR)
   message(FATAL_ERROR "ROCKSDB_DIR is not defined.")
@@ -31,7 +51,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(WITH_TITAN_TESTS OFF)
 endif()
 
-find_package(Git)
 if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
   if(WIN32)
     execute_process(COMMAND $ENV{COMSPEC} /C ${GIT_EXECUTABLE} rev-parse HEAD OUTPUT_VARIABLE GIT_SHA)
@@ -77,6 +96,7 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         table_builder_test
         thread_safety_test
         titan_db_test
+        titan_options_test
         util_test
         version_test)
   set(TEST_LIBS

@@ -10,8 +10,8 @@
 #include <unordered_map>
 
 #include "db/db_iter.h"
+#include "logging/logging.h"
 #include "rocksdb/env.h"
-#include "util/logging.h"
 
 #include "titan_stats.h"
 
@@ -46,7 +46,7 @@ class TitanDBIterator : public Iterator {
   void SeekToFirst() override {
     iter_->SeekToFirst();
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
@@ -55,7 +55,7 @@ class TitanDBIterator : public Iterator {
   void SeekToLast() override {
     iter_->SeekToLast();
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
@@ -64,7 +64,7 @@ class TitanDBIterator : public Iterator {
   void Seek(const Slice& target) override {
     iter_->Seek(target);
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
@@ -73,7 +73,7 @@ class TitanDBIterator : public Iterator {
   void SeekForPrev(const Slice& target) override {
     iter_->SeekForPrev(target);
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_SEEK);
     }
@@ -83,7 +83,7 @@ class TitanDBIterator : public Iterator {
     assert(Valid());
     iter_->Next();
     if (ShouldGetBlobValue()) {
-      StopWatch next_sw(env_, statistics(stats_), BLOB_DB_NEXT_MICROS);
+      StopWatch next_sw(env_, stats_, BLOB_DB_NEXT_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_NEXT);
     }
@@ -93,7 +93,7 @@ class TitanDBIterator : public Iterator {
     assert(Valid());
     iter_->Prev();
     if (ShouldGetBlobValue()) {
-      StopWatch prev_sw(env_, statistics(stats_), BLOB_DB_PREV_MICROS);
+      StopWatch prev_sw(env_, stats_, BLOB_DB_PREV_MICROS);
       GetBlobValue();
       RecordTick(stats_, BLOB_DB_NUM_PREV);
     }

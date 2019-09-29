@@ -25,13 +25,13 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
   status_ = file_->Append(encoder_.GetHeader());
   if (ok()) {
     status_ = file_->Append(encoder_.GetRecord());
+    num_entries_++;
     // The keys added into blob files are in order.
     if (smallest_key_.empty()) {
       smallest_key_.assign(record.key.data(), record.key.size());
     }
     assert(cf_options_.comparator->Compare(record.key, Slice(smallest_key_)) >=
            0);
-    // printf("%s %s\n", record.key.ToString().c_str(), largest_key_.c_str());
     assert(cf_options_.comparator->Compare(record.key, Slice(largest_key_)) >=
            0);
     largest_key_.assign(record.key.data(), record.key.size());
@@ -54,6 +54,8 @@ Status BlobFileBuilder::Finish() {
 }
 
 void BlobFileBuilder::Abandon() {}
+
+uint64_t BlobFileBuilder::NumEntries() { return num_entries_; }
 
 }  // namespace titandb
 }  // namespace rocksdb

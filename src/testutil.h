@@ -1,8 +1,8 @@
 #pragma once
 
 #include "rocksdb/cache.h"
+#include "test_util/testharness.h"
 #include "util/compression.h"
-#include "util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {

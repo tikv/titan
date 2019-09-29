@@ -1,7 +1,11 @@
 #pragma once
 
+#include "options/db_options.h"
 #include "rocksdb/cache.h"
 #include "util/compression.h"
+#include "util/file_reader_writer.h"
+
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -55,13 +59,13 @@ class FixedSlice : public Slice {
 // compressed data. However, if the compression ratio is not good, it
 // returns the input slice directly and sets "*type" to
 // kNoCompression.
-Slice Compress(const CompressionContext& ctx, const Slice& input,
+Slice Compress(const CompressionInfo& info, const Slice& input,
                std::string* output, CompressionType* type);
 
 // Uncompresses the input data according to the uncompression type.
 // If successful, fills "*buffer" with the uncompressed data and
 // points "*output" to it.
-Status Uncompress(const UncompressionContext& ctx, const Slice& input,
+Status Uncompress(const UncompressionInfo& info, const Slice& input,
                   OwnedSlice* output);
 
 void UnrefCacheHandle(void* cache, void* handle);
@@ -70,6 +74,10 @@ template <class T>
 void DeleteCacheValue(const Slice&, void* value) {
   delete reinterpret_cast<T*>(value);
 }
+
+Status SyncTitanManifest(Env* env, TitanStats* stats,
+                         const ImmutableDBOptions* db_options,
+                         WritableFileWriter* file);
 
 }  // namespace titandb
 }  // namespace rocksdb

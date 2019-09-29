@@ -15,8 +15,13 @@ and provide the path to Titan build script.
 # To build:
 mkdir -p build
 cd build
-cmake .. -DROCKSDB_DIR=<rocksdb_source_dir>
+cmake ..
 make -j<n>
+
+# To specify custom rocksdb
+cmake .. -DROCKSDB_DIR=<rocksdb_source_dir>
+# or
+cmake .. -DROCKSDB_GIT_REPO=<git_repo> -DROCKSDB_GIT_BRANCH=<branch>
 
 # Build static lib (i.e. libtitan.a) only:
 make titan -j<n>
@@ -37,5 +42,5 @@ ctest -R titan
 bash scripts/format-diff.sh
 ```
 
-## Compatibility
-Currently Titan is only compatible with RocksDB 5.18.
+## Compatibility with RocksDB
+Current version of Titan is developed and tested with RocksDB 6.4.

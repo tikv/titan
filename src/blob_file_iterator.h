@@ -14,6 +14,7 @@
 namespace rocksdb {
 namespace titandb {
 
+// Used by GC job for iterate through blob file.
 class BlobFileIterator {
  public:
   const uint64_t kMinReadaheadSize = 4 << 10;

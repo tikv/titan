@@ -12,15 +12,10 @@ namespace titandb {
 // Blob file overall format:
 //
 // [blob file header]
-// [blob head + record 1]
-// [blob head + record 2]
+// [record head + record 1]
+// [record head + record 2]
 // ...
-// [blob head + record N]
-// [meta block 1]
-// [meta block 2]
-// ...
-// [meta block K]
-// [meta index block]
+// [record head + record N]
 // [blob file footer]
 
 // Format of blob head (9 bytes):
@@ -31,7 +26,9 @@ namespace titandb {
 //    | Fixed32 | Fixed32 |    char     |
 //    +---------+---------+-------------+
 //
-const uint64_t kBlobHeaderSize = 9;
+const uint64_t kBlobHeaderSize = 8;
+const uint64_t kRecordHeaderSize = 9;
+const uint64_t kBlobFooterSize = BlockHandle::kMaxEncodedLength + 8 + 4;
 
 // Format of blob record (not fixed size):
 //
@@ -48,12 +45,18 @@ struct BlobRecord {
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
 
+  size_t size() const { return key.size() + value.size(); }
+
   friend bool operator==(const BlobRecord& lhs, const BlobRecord& rhs);
 };
 
 class BlobEncoder {
  public:
-  BlobEncoder(CompressionType compression) : compression_ctx_(compression) {}
+  BlobEncoder(CompressionType compression)
+      : compression_ctx_(compression),
+        compression_info_(compression_opt_, compression_ctx_,
+                          CompressionDict::GetEmptyDict(), compression,
+                          0 /*sample_for_compression*/) {}
 
   void EncodeRecord(const BlobRecord& record);
 
@@ -63,11 +66,13 @@ class BlobEncoder {
   size_t GetEncodedSize() const { return sizeof(header_) + record_.size(); }
 
  private:
-  char header_[kBlobHeaderSize];
+  char header_[kRecordHeaderSize];
   Slice record_;
   std::string record_buffer_;
   std::string compressed_buffer_;
+  CompressionOptions compression_opt_;
   CompressionContext compression_ctx_;
+  CompressionInfo compression_info_;
 };
 
 class BlobDecoder {
@@ -127,11 +132,16 @@ struct BlobIndex {
 
 // Format of blob file meta (not fixed size):
 //
-//    +-------------+-----------+--------------------+--------------------+
-//    | file number | file size |    smallest key    |    largest key     |
-//    +-------------+-----------+--------------------+--------------------+
-//    |  Varint64   | Varint64  | Varint32 + key_len | Varint32 + key_len |
-//    +-------------+-----------+--------------------+--------------------+
+//    +-------------+-----------+--------------+------------+
+//    | file number | file size | file entries | file level |
+//    +-------------+-----------+--------------+------------+
+//    |  Varint64   | Varint64  |   Varint64   |  Varint32  |
+//    +-------------+-----------+--------------+------------+
+//    +--------------------+--------------------+
+//    |    smallest key    |    largest key     |
+//    +--------------------+--------------------+
+//    | Varint32 + key_len | Varint32 + key_len |
+//    +--------------------+--------------------+
 //
 // The blob file meta is stored in Titan's manifest for quick constructing of
 // meta infomations of all the blob files in memory.
@@ -156,6 +166,7 @@ class BlobFileMeta {
     kFlushOrCompactionOutput,
     kDbRestart,
     kDelete,
+    kNeedMerge,
   };
 
   enum class FileState {
@@ -165,14 +176,19 @@ class BlobFileMeta {
     kBeingGC,     // being gced
     kPendingGC,   // output of gc, waiting gc finish and keys adding to LSM
     kObsolete,    // already gced, but wait to be physical deleted
+    kToMerge,     // need merge to new blob file in next compaction
   };
 
   BlobFileMeta() = default;
+
   BlobFileMeta(uint64_t _file_number, uint64_t _file_size,
+               uint64_t _file_entries, uint32_t _file_level,
                const std::string& _smallest_key,
                const std::string& _largest_key)
       : file_number_(_file_number),
         file_size_(_file_size),
+        file_entries_(_file_entries),
+        file_level_(_file_level),
         smallest_key_(_smallest_key),
         largest_key_(_largest_key) {}
 
@@ -184,6 +200,8 @@ class BlobFileMeta {
 
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }
+  uint64_t file_entries() const { return file_entries_; }
+  uint32_t file_level() const { return file_level_; }
   Slice smallest_key() const { return smallest_key_; }
   Slice largest_key() const { return largest_key_; }
 
@@ -198,11 +216,18 @@ class BlobFileMeta {
 
   void AddDiscardableSize(uint64_t _discardable_size);
   double GetDiscardableRatio() const;
+  bool NoLiveData() {
+    return discardable_size_ == file_size_ - kBlobHeaderSize - kBlobFooterSize;
+  }
+  TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
 
  private:
   // Persistent field
   uint64_t file_number_{0};
   uint64_t file_size_{0};
+  uint64_t file_entries_;
+  // Target level of compaction/flush which generates this blob file
+  uint32_t file_level_;
   // Empty `smallest_key_` and `largest_key_` means smallest key is unknown,
   // and can only happen when the file is from legacy version.
   std::string smallest_key_;
@@ -252,7 +277,7 @@ struct BlobFileHeader {
 struct BlobFileFooter {
   // The first 64bits from $(echo titandb/blob | sha1sum).
   static const uint64_t kFooterMagicNumber{0x2be0a6148e39edc6ull};
-  static const uint64_t kEncodedLength{BlockHandle::kMaxEncodedLength + 8 + 4};
+  static const uint64_t kEncodedLength{kBlobFooterSize};
 
   BlockHandle meta_index_handle{BlockHandle::NullBlockHandle()};
 

@@ -2,9 +2,9 @@
 
 #include <unordered_map>
 
+#include "blob_file_set.h"
 #include "util/string_util.h"
 #include "version_edit.h"
-#include "version_set.h"
 
 #include <inttypes.h>
 
@@ -49,12 +49,12 @@ class EditCollector {
   }
 
   // Seal the batch and check the validation of the edits.
-  Status Seal(VersionSet& vset) {
+  Status Seal(BlobFileSet& blob_file_set) {
     if (!status_.ok()) return status_;
 
     for (auto& cf : column_families_) {
       auto cf_id = cf.first;
-      auto storage = vset.GetBlobStorage(cf_id).lock();
+      auto storage = blob_file_set.GetBlobStorage(cf_id).lock();
       if (!storage) {
         // TODO: support OpenForReadOnly which doesn't open DB with all column
         // family so there are maybe some invalid column family, but we can't
@@ -71,7 +71,7 @@ class EditCollector {
   }
 
   // Apply the edits of the batch.
-  Status Apply(VersionSet& vset) {
+  Status Apply(BlobFileSet& blob_file_set) {
     if (!status_.ok()) return status_;
     if (!sealed_)
       return Status::Incomplete(
@@ -79,7 +79,7 @@ class EditCollector {
 
     for (auto& cf : column_families_) {
       auto cf_id = cf.first;
-      auto storage = vset.GetBlobStorage(cf_id).lock();
+      auto storage = blob_file_set.GetBlobStorage(cf_id).lock();
       if (!storage) {
         // TODO: support OpenForReadOnly which doesn't open DB with all column
         // family so there are maybe some invalid column family, but we can't
