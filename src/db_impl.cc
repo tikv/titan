@@ -1007,6 +1007,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushCompleted);
     }
   }
+  TEST_SYNC_POINT("TitanDBImpl::OnFlushCompleted:Finished");
 }
 
 void TitanDBImpl::OnCompactionCompleted(

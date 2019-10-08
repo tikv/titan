@@ -106,6 +106,12 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
     // Nothing to do
     ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
+    {
+      mutex_.Unlock();
+      auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(cfh.get())->cfd();
+      db_impl_->WaitForFlushMemTable(cfd);
+      mutex_.Lock();
+    }
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
                           env_options_, blob_manager_.get(),
                           blob_file_set_.get(), log_buffer, &shuting_down_,
@@ -185,6 +191,12 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
     if (UNLIKELY(!blob_gc)) {
       ROCKS_LOG_BUFFER(&log_buffer, "Titan GC nothing to do");
     } else {
+      {
+        mutex_.Unlock();
+        auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(cfh.get())->cfd();
+        db_impl_->WaitForFlushMemTable(cfd);
+        mutex_.Lock();
+      }
       BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
                             env_options_, blob_manager_.get(),
                             blob_file_set_.get(), &log_buffer, &shuting_down_,
