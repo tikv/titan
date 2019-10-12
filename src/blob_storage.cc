@@ -55,8 +55,9 @@ Status BlobStorage::GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
     }
     ROCKS_LOG_INFO(db_options_.info_log,
                    "Get %" PRIuPTR " blob files in the range [%s, %s%c",
-                   files->size(), begin->ToString(true).c_str(),
-                   end->ToString(true).c_str(), include_end ? ']' : ')');
+                   files->size(), begin ? begin->ToString(true).c_str() : " ",
+                   end ? end->ToString(true).c_str() : " ",
+                   include_end ? ']' : ')');
   }
   return Status::OK();
 }
