@@ -29,9 +29,7 @@ void TitanDBImpl::BGWorkGC(void* db) {
 }
 
 void TitanDBImpl::BackgroundCallGC() {
-  LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
   TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeGCRunning");
-
   {
     MutexLock l(&mutex_);
     assert(bg_gc_scheduled_ > 0);
@@ -43,6 +41,7 @@ void TitanDBImpl::BackgroundCallGC() {
     TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeBackgroundGC");
     if (!gc_queue_.empty()) {
       uint32_t column_family_id = PopFirstFromGCQueue();
+      LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
       BackgroundGC(&log_buffer, column_family_id);
       {
         mutex_.Unlock();
