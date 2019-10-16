@@ -553,12 +553,17 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   auto storage = blob_file_set_->GetBlobStorage(handle->GetID()).lock();
   mutex_.Unlock();
 
-  {
+  if (storage) {
     StopWatch read_sw(env_, stats_.get(), BLOB_DB_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
     RecordTick(stats_.get(), BLOB_DB_NUM_KEYS_READ);
     RecordTick(stats_.get(), BLOB_DB_BLOB_FILE_BYTES_READ,
                index.blob_handle.size);
+  } else {
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "Column family id:%" PRIu32 " not Found.", handle->GetID());
+    return Status::NotFound(
+        "Column family id: " + std::to_string(handle->GetID()) + " not Found.");
   }
   if (s.IsCorruption()) {
     ROCKS_LOG_ERROR(db_options_.info_log,
@@ -625,15 +630,20 @@ Iterator* TitanDBImpl::NewIteratorImpl(
   auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
 
   mutex_.Lock();
-  auto storage = blob_file_set_->GetBlobStorage(handle->GetID());
+  auto storage = blob_file_set_->GetBlobStorage(handle->GetID()).lock();
   mutex_.Unlock();
+
+  if (!storage) {
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "Column family id:%" PRIu32 " not Found.", handle->GetID());
+    return nullptr;
+  }
 
   std::unique_ptr<ArenaWrappedDBIter> iter(db_impl_->NewIteratorImpl(
       options, cfd, options.snapshot->GetSequenceNumber(),
       nullptr /*read_callback*/, true /*allow_blob*/, true /*allow_refresh*/));
-  return new TitanDBIterator(options, storage.lock().get(), snapshot,
-                             std::move(iter), env_, stats_.get(),
-                             db_options_.info_log.get());
+  return new TitanDBIterator(options, storage.get(), snapshot, std::move(iter),
+                             env_, stats_.get(), db_options_.info_log.get());
 }
 
 Status TitanDBImpl::NewIterators(

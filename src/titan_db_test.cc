@@ -152,6 +152,10 @@ class TitanDBTest : public testing::Test {
     return db_impl_->blob_file_set_->GetBlobStorage(cf_handle->GetID());
   }
 
+  ColumnFamilyHandle* GetColumnFamilyHandle(uint32_t cf_id) {
+    return db_impl_->db_impl_->GetColumnFamilyHandleUnlocked(cf_id).release();
+  }
+
   void VerifyDB(const std::map<std::string, std::string>& data,
                 ReadOptions ropts = ReadOptions()) {
     db_impl_->PurgeObsoleteFiles();
@@ -515,6 +519,35 @@ TEST_F(TitanDBTest, DropColumnFamily) {
     VerifyDB(data);
   }
 
+  Close();
+}
+
+TEST_F(TitanDBTest, DestroyColumnFamilyHandle) {
+  Open();
+  const uint64_t kNumCF = 3;
+  for (uint64_t i = 1; i <= kNumCF; i++) {
+    AddCF(std::to_string(i));
+  }
+  const uint64_t kNumEntries = 10;
+  std::map<std::string, std::string> data;
+  for (uint64_t i = 1; i <= kNumEntries; i++) {
+    Put(i, &data);
+  }
+  VerifyDB(data);
+  Flush();
+  VerifyDB(data);
+
+  // Destroy column families handle, check whether GC skips the column families.
+  for (auto& handle : cf_handles_) {
+    auto cf_id = handle->GetID();
+    db_->DestroyColumnFamilyHandle(handle);
+    ASSERT_OK(db_impl_->TEST_StartGC(cf_id));
+  }
+  cf_handles_.clear();
+  VerifyDB(data);
+
+  Reopen();
+  VerifyDB(data);
   Close();
 }
 
