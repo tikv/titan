@@ -29,9 +29,7 @@ void TitanDBImpl::BGWorkGC(void* db) {
 }
 
 void TitanDBImpl::BackgroundCallGC() {
-  LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
   TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeGCRunning");
-
   {
     MutexLock l(&mutex_);
     assert(bg_gc_scheduled_ > 0);
@@ -41,13 +39,17 @@ void TitanDBImpl::BackgroundCallGC() {
     bg_gc_running_++;
 
     TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeBackgroundGC");
-    BackgroundGC(&log_buffer);
-
-    {
-      mutex_.Unlock();
-      log_buffer.FlushBufferToLog();
-      LogFlush(db_options_.info_log.get());
-      mutex_.Lock();
+    if (!gc_queue_.empty()) {
+      uint32_t column_family_id = PopFirstFromGCQueue();
+      LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
+                           db_options_.info_log.get());
+      BackgroundGC(&log_buffer, column_family_id);
+      {
+        mutex_.Unlock();
+        log_buffer.FlushBufferToLog();
+        LogFlush(db_options_.info_log.get());
+        mutex_.Lock();
+      }
     }
 
     bg_gc_running_--;
@@ -67,36 +69,35 @@ void TitanDBImpl::BackgroundCallGC() {
   }
 }
 
-Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
+Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
+                                 uint32_t column_family_id) {
   mutex_.AssertHeld();
   StopWatch gc_sw(env_, stats_.get(), BLOB_DB_GC_MICROS);
 
   std::unique_ptr<BlobGC> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;
   Status s;
-  if (!gc_queue_.empty()) {
-    uint32_t column_family_id = PopFirstFromGCQueue();
-    std::shared_ptr<BlobStorage> blob_storage;
-    // Skip CFs that have been dropped.
-    if (!blob_file_set_->IsColumnFamilyObsolete(column_family_id)) {
-      blob_storage = blob_file_set_->GetBlobStorage(column_family_id).lock();
-    } else {
-      TEST_SYNC_POINT_CALLBACK("TitanDBImpl::BackgroundGC:CFDropped", nullptr);
-      ROCKS_LOG_BUFFER(log_buffer, "GC skip dropped colum family [%s].",
-                       cf_info_[column_family_id].name.c_str());
-    }
-    if (blob_storage != nullptr) {
-      const auto& cf_options = blob_storage->cf_options();
-      std::shared_ptr<BlobGCPicker> blob_gc_picker =
-          std::make_shared<BasicBlobGCPicker>(db_options_, cf_options,
-                                              stats_.get());
-      blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get());
 
-      if (blob_gc) {
-        cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
-        assert(column_family_id == cfh->GetID());
-        blob_gc->SetColumnFamily(cfh.get());
-      }
+  std::shared_ptr<BlobStorage> blob_storage;
+  // Skip CFs that have been dropped.
+  if (!blob_file_set_->IsColumnFamilyObsolete(column_family_id)) {
+    blob_storage = blob_file_set_->GetBlobStorage(column_family_id).lock();
+  } else {
+    TEST_SYNC_POINT_CALLBACK("TitanDBImpl::BackgroundGC:CFDropped", nullptr);
+    ROCKS_LOG_BUFFER(log_buffer, "GC skip dropped colum family [%s].",
+                     cf_info_[column_family_id].name.c_str());
+  }
+  if (blob_storage != nullptr) {
+    const auto& cf_options = blob_storage->cf_options();
+    std::shared_ptr<BlobGCPicker> blob_gc_picker =
+        std::make_shared<BasicBlobGCPicker>(db_options_, cf_options,
+                                            stats_.get());
+    blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get());
+
+    if (blob_gc) {
+      cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
+      assert(column_family_id == cfh->GetID());
+      blob_gc->SetColumnFamily(cfh.get());
     }
   }
 
@@ -146,7 +147,6 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer) {
   return s;
 }
 
-// TODO(yiwu): merge with BackgroundGC().
 Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
   // BackgroundCallGC
   Status s;
@@ -160,54 +160,7 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
     bg_gc_running_++;
     bg_gc_scheduled_++;
 
-    // BackgroudGC
-    StopWatch gc_sw(env_, stats_.get(), BLOB_DB_GC_MICROS);
-
-    std::unique_ptr<BlobGC> blob_gc;
-    std::unique_ptr<ColumnFamilyHandle> cfh;
-
-    if (blob_file_set_->IsColumnFamilyObsolete(column_family_id)) {
-      return Status::ColumnFamilyDropped(
-          "Column Family has been dropped before GC.");
-    }
-    auto bs = blob_file_set_->GetBlobStorage(column_family_id).lock().get();
-    const auto& cf_options = bs->cf_options();
-    std::shared_ptr<BlobGCPicker> blob_gc_picker =
-        std::make_shared<BasicBlobGCPicker>(db_options_, cf_options, nullptr);
-    blob_gc = blob_gc_picker->PickBlobGC(bs);
-
-    if (blob_gc) {
-      cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
-      assert(column_family_id == cfh->GetID());
-      blob_gc->SetColumnFamily(cfh.get());
-    }
-
-    if (UNLIKELY(!blob_gc)) {
-      ROCKS_LOG_BUFFER(&log_buffer, "Titan GC nothing to do");
-    } else {
-      BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
-                            env_options_, blob_manager_.get(),
-                            blob_file_set_.get(), &log_buffer, &shuting_down_,
-                            stats_.get());
-      s = blob_gc_job.Prepare();
-
-      if (s.ok()) {
-        mutex_.Unlock();
-        s = blob_gc_job.Run();
-        mutex_.Lock();
-      }
-
-      if (s.ok()) {
-        s = blob_gc_job.Finish();
-      }
-
-      blob_gc->ReleaseGcFiles();
-    }
-
-    if (!s.ok()) {
-      ROCKS_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
-                     s.ToString().c_str());
-    }
+    s = BackgroundGC(&log_buffer, column_family_id);
 
     {
       mutex_.Unlock();
