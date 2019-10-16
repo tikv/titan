@@ -5,11 +5,11 @@ enable_language(C)
 find_package(Git)
 
 if (NOT ROCKSDB_GIT_REPO)
-  set(ROCKSDB_GIT_REPO "https://github.com/yiwu-arbug/rocksdb.git")
+  set(ROCKSDB_GIT_REPO "https://github.com/pingcap/rocksdb.git")
 endif()
 
 if (NOT ROCKSDB_GIT_BRANCH)
-  set(ROCKSDB_GIT_BRANCH "flush_hotfix_6.4")
+  set(ROCKSDB_GIT_BRANCH "6.4.tikv")
 endif()
 
 if (NOT DEFINED ROCKSDB_DIR)
