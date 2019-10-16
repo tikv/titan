@@ -5,9 +5,11 @@
 #include "blob_file_iterator.h"
 #include "blob_file_reader.h"
 #include "blob_file_size_collector.h"
+#include "db/db_impl.h"
 #include "db_impl.h"
 #include "db_iter.h"
 #include "monitoring/statistics.h"
+#include "port/port.h"
 #include "rocksdb/utilities/debug.h"
 #include "titan/db.h"
 #include "titan_fault_injection_test_env.h"
@@ -150,6 +152,10 @@ class TitanDBTest : public testing::Test {
     }
     MutexLock l(&db_impl_->mutex_);
     return db_impl_->blob_file_set_->GetBlobStorage(cf_handle->GetID());
+  }
+
+  ColumnFamilyHandle* GetColumnFamilyHandle(uint32_t cf_id) {
+    return db_impl_->db_impl_->GetColumnFamilyHandleUnlocked(cf_id).release();
   }
 
   void VerifyDB(const std::map<std::string, std::string>& data,
@@ -515,6 +521,35 @@ TEST_F(TitanDBTest, DropColumnFamily) {
     VerifyDB(data);
   }
 
+  Close();
+}
+
+TEST_F(TitanDBTest, DestroyColumnFamilyHandle) {
+  Open();
+  const uint64_t kNumCF = 3;
+  for (uint64_t i = 1; i <= kNumCF; i++) {
+    AddCF(std::to_string(i));
+  }
+  const uint64_t kNumEntries = 10;
+  std::map<std::string, std::string> data;
+  for (uint64_t i = 1; i <= kNumEntries; i++) {
+    Put(i, &data);
+  }
+  VerifyDB(data);
+  Flush();
+  VerifyDB(data);
+
+  // Destroy column families handle, check whether GC skips the column families.
+  for (auto& handle : cf_handles_) {
+    auto cf_id = handle->GetID();
+    db_->DestroyColumnFamilyHandle(handle);
+    ASSERT_OK(db_impl_->TEST_StartGC(cf_id));
+  }
+  cf_handles_.clear();
+  VerifyDB(data);
+
+  Reopen();
+  VerifyDB(data);
   Close();
 }
 
@@ -1069,6 +1104,76 @@ TEST_F(TitanDBTest, GCAfterDropCF) {
   // Cleanup.
   ASSERT_OK(db_->DestroyColumnFamilyHandle(cfh));
   Close();
+}
+
+TEST_F(TitanDBTest, GCBeforeFlushCommit) {
+  std::atomic<bool> is_first_flush{true};
+  DBImpl* db_impl = nullptr;
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBTest::GCBeforeFlushCommit:PauseInstall",
+        "TitanDBTest::GCBeforeFlushCommit:WaitFlushPause"},
+       {"TitanDBImpl::OnFlushCompleted:Finished",
+        "TitanDBTest::GCBeforeFlushCommit:WaitSecondFlush"}});
+  SyncPoint::GetInstance()->SetCallBack("FlushJob::InstallResults", [&](void*) {
+    if (is_first_flush) {
+      is_first_flush = false;
+    } else {
+      // skip waiting for the second flush.
+      return;
+    }
+    auto* db_mutex = db_impl->mutex();
+    db_mutex->Unlock();
+    TEST_SYNC_POINT("TitanDBTest::GCBeforeFlushCommit:PauseInstall");
+    Env::Default()->SleepForMicroseconds(1000 * 1000);  // 1s
+    db_mutex->Lock();
+  });
+
+  options_.create_if_missing = true;
+  // Setting max_flush_jobs = max_background_jobs / 4 = 2.
+  options_.max_background_jobs = 8;
+  options_.max_write_buffer_number = 4;
+  options_.min_blob_size = 0;
+  options_.merge_small_file_threshold = 1024 * 1024;
+  options_.disable_background_gc = true;
+  Open();
+  uint32_t cf_id = db_->DefaultColumnFamily()->GetID();
+
+  db_impl = reinterpret_cast<DBImpl*>(db_->GetRootDB());
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "foo", "v"));
+  // t1 will wait for the second flush complete before install super version.
+  auto t1 = port::Thread([&]() {
+    // flush_opts.wait = true
+    ASSERT_OK(db_->Flush(FlushOptions()));
+  });
+  TEST_SYNC_POINT("TitanDBTest::GCBeforeFlushCommit:WaitFlushPause");
+  // In the second flush we check if memtable has been committed, and signal
+  // the first flush to proceed.
+  ASSERT_OK(db_->Put(WriteOptions(), "bar", "v"));
+  FlushOptions flush_opts;
+  flush_opts.wait = false;
+  ASSERT_OK(db_->Flush(flush_opts));
+  TEST_SYNC_POINT("TitanDBTest::GCBeforeFlushCommit:WaitSecondFlush");
+  // Set GC mark to force GC select the file.
+  auto blob_storage = GetBlobStorage().lock();
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(2, blob_files.size());
+  auto second_file = blob_files.rbegin()->second.lock();
+  second_file->set_gc_mark(true);
+  ASSERT_OK(db_impl_->TEST_StartGC(cf_id));
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+  t1.join();
+  // Check value after memtable committed.
+  std::string value;
+  // Before fixing the issue, this call will return
+  // Corruption: Missing blob file error.
+  ASSERT_OK(db_->Get(ReadOptions(), "bar", &value));
+  ASSERT_EQ("v", value);
+  SyncPoint::GetInstance()->DisableProcessing();
+  SyncPoint::GetInstance()->ClearAllCallBacks();
 }
 
 }  // namespace titandb

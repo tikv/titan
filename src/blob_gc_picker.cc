@@ -82,9 +82,9 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
 }
 
 bool BasicBlobGCPicker::CheckBlobFile(BlobFileMeta* blob_file) const {
-  assert(blob_file != nullptr &&
+  assert(blob_file == nullptr ||
          blob_file->file_state() != BlobFileMeta::FileState::kInit);
-  if (blob_file != nullptr &&
+  if (blob_file == nullptr ||
       blob_file->file_state() != BlobFileMeta::FileState::kNormal)
     return false;
 
