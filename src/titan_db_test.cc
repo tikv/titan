@@ -917,7 +917,7 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
 
   opts["blob_run_mode"] = "kReadOnly";
   db_->SetOptions(opts);
-  begin = kNumEntries + 2;
+  begin = kNumEntries + 1;
   for (uint64_t i = begin; i < begin + kNumEntries; i++) {
     Put(i, &data);
   }
@@ -937,7 +937,7 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
 
   opts["blob_run_mode"] = "kFallback";
   db_->SetOptions(opts);
-  begin = kNumEntries * 2 + 3;
+  begin = kNumEntries * 2 + 1;
   for (uint64_t i = begin; i < begin + kNumEntries; i++) {
     Put(i, &data);
   }
@@ -955,10 +955,9 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   }
   version.clear();
 
+  // make sure new sstable interleaves with existing sstables.
   Put(0, &data);
-  Put(kNumEntries + 1, &data);
-  Put(kNumEntries * 2 + 2, &data);
-  Put(kNumEntries * 3 + 3, &data);
+  Put(kNumEntries * 3 + 1, &data);
   Flush();
   CompactAll();
   VerifyDB(data);
@@ -967,8 +966,8 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
   blob = GetBlobStorage();
   ASSERT_EQ(0, blob.lock()->NumBlobFiles());
-  begin_key = GenKey(1);
-  end_key = GenKey(kNumEntries * 3 + 3);
+  begin_key = GenKey(0);
+  end_key = GenKey(kNumEntries * 3 + 1);
   GetAllKeyVersions(db_, begin_key, end_key, kMaxKeys, &version);
   for (auto v : version) {
     ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeValue));
