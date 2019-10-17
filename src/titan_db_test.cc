@@ -880,10 +880,12 @@ TEST_F(TitanDBTest, SetOptions) {
 
 TEST_F(TitanDBTest, BlobRunModeBasic) {
   options_.disable_background_gc = true;
+  options_.disable_auto_compactions = true;
   Open();
 
-  const uint64_t kNumEntries = 1000;
+  const uint64_t kNumEntries = 100;
   const uint64_t kMaxKeys = 100000;
+  uint64_t begin;
   std::unordered_map<std::string, std::string> opts;
   std::map<std::string, std::string> data;
   std::vector<KeyVersion> version;
@@ -891,11 +893,12 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   std::string end_key;
   uint64_t num_blob_files;
 
-  for (uint64_t i = 1; i <= kNumEntries; i++) {
+  begin = 1;
+  for (uint64_t i = begin; i < begin + kNumEntries; i++) {
     Put(i, &data);
   }
-  begin_key = GenKey(1);
-  end_key = GenKey(kNumEntries);
+  begin_key = GenKey(begin);
+  end_key = GenKey(begin + kNumEntries - 1);
   ASSERT_EQ(kNumEntries, data.size());
   VerifyDB(data);
   Flush();
@@ -914,11 +917,12 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
 
   opts["blob_run_mode"] = "kReadOnly";
   db_->SetOptions(opts);
-  for (uint64_t i = kNumEntries + 1; i <= kNumEntries * 2; i++) {
+  begin = kNumEntries + 2;
+  for (uint64_t i = begin; i < begin + kNumEntries; i++) {
     Put(i, &data);
   }
-  begin_key = GenKey(kNumEntries + 1);
-  end_key = GenKey(kNumEntries * 2);
+  begin_key = GenKey(begin);
+  end_key = GenKey(begin + kNumEntries - 1);
   ASSERT_EQ(kNumEntries * 2, data.size());
   VerifyDB(data);
   Flush();
@@ -933,11 +937,12 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
 
   opts["blob_run_mode"] = "kFallback";
   db_->SetOptions(opts);
-  for (uint64_t i = kNumEntries * 2 + 1; i <= kNumEntries * 3; i++) {
+  begin = kNumEntries * 2 + 3;
+  for (uint64_t i = begin; i < begin + kNumEntries; i++) {
     Put(i, &data);
   }
-  begin_key = GenKey(kNumEntries * 2 + 1);
-  end_key = GenKey(kNumEntries * 3);
+  begin_key = GenKey(begin);
+  end_key = GenKey(begin + kNumEntries - 1);
   ASSERT_EQ(kNumEntries * 3, data.size());
   VerifyDB(data);
   Flush();
@@ -950,15 +955,20 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   }
   version.clear();
 
-  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+  Put(0, &data);
+  Put(kNumEntries + 1, &data);
+  Put(kNumEntries * 2 + 2, &data);
+  Put(kNumEntries * 3 + 3, &data);
+  Flush();
+  CompactAll();
+  VerifyDB(data);
   uint32_t default_cf_id = db_->DefaultColumnFamily()->GetID();
   ASSERT_OK(db_impl_->TEST_StartGC(default_cf_id));
   ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
   blob = GetBlobStorage();
   ASSERT_EQ(0, blob.lock()->NumBlobFiles());
-  VerifyDB(data);
   begin_key = GenKey(1);
-  end_key = GenKey(kNumEntries * 3);
+  end_key = GenKey(kNumEntries * 3 + 3);
   GetAllKeyVersions(db_, begin_key, end_key, kMaxKeys, &version);
   for (auto v : version) {
     ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeValue));
