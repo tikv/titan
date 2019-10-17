@@ -931,7 +931,7 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
   }
   version.clear();
 
-  opts["blob_run_mode"] = "fallback";
+  opts["blob_run_mode"] = "kFallback";
   db_->SetOptions(opts);
   for (uint64_t i = kNumEntries * 2 + 1; i <= kNumEntries * 3; i++) {
     Put(i, &data);
