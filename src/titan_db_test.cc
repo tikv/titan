@@ -949,6 +949,21 @@ TEST_F(TitanDBTest, BlobRunModeBasic) {
     ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeValue));
   }
   version.clear();
+
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+  uint32_t default_cf_id = db_->DefaultColumnFamily()->GetID();
+  ASSERT_OK(db_impl_->TEST_StartGC(default_cf_id));
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+  blob = GetBlobStorage();
+  ASSERT_EQ(0, blob.lock()->NumBlobFiles());
+  VerifyDB(data);
+  begin_key = GenKey(1);
+  end_key = GenKey(kNumEntries * 3);
+  GetAllKeyVersions(db_, begin_key, end_key, kMaxKeys, &version);
+  for (auto v : version) {
+    ASSERT_EQ(v.type, static_cast<int>(ValueType::kTypeValue));
+  }
+  version.clear();
 }
 
 TEST_F(TitanDBTest, FallbackModeEncounterMissingBlobFile) {
