@@ -875,7 +875,7 @@ void TitanDBImpl::MaybeScheduleRangeMerge(
           ++start;
         }
       } else if (cur == 0) {
-        start = i+1;
+        start = i + 1;
       }
     }
   }
