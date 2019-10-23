@@ -216,7 +216,9 @@ class TitanDBImpl : public TitanDB {
     return bg_error_;
   }
 
-  int CountSortedRuns(const std::vector<std::shared_ptr<BlobFileMeta>>& files);
+  void MaybeScheduleRangeMerge(
+      const std::vector<std::shared_ptr<BlobFileMeta>>& files,
+      int max_sorted_runs);
 
   bool HasBGError() { return has_bg_error_.load(); }
 

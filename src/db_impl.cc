@@ -837,44 +837,46 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   return s;
 }
 
-int TitanDBImpl::CountSortedRuns(
-    const std::vector<std::shared_ptr<BlobFileMeta>>& files) {
-  std::list<BlobFileMeta*> remained_files;
-  std::vector<int> sorted_run_blobs;
-  int num_files = files.size();
+void TitanDBImpl::MaybeScheduleRangeMerge(
+    const std::vector<std::shared_ptr<BlobFileMeta>>& files,
+    int max_sorted_runs) {
+  mutex_.AssertHeld();
+  if (files.empty()) return;
 
-  auto blob_cmp = [](const BlobFileMeta* f1, const BlobFileMeta* f2) {
-    return f1->smallest_key().compare(f2->smallest_key()) < 0;
-  };
+  // store and sort both ends of blob files to count sorted runs
+  std::vector<std::pair<BlobFileMeta*, bool /* is smallest end? */>> blob_ends;
   for (const auto& file : files) {
-    remained_files.emplace_back(file.get());
+    blob_ends.emplace_back(std::make_pair(file.get(), true));
+    blob_ends.emplace_back(std::make_pair(file.get(), false));
   }
-  remained_files.sort(blob_cmp);
+  auto blob_ends_cmp = [](const std::pair<BlobFileMeta*, bool>& end1,
+                          const std::pair<BlobFileMeta*, bool>& end2) {
+    std::string key1 = std::move(end1.second ? end1.first->smallest_key()
+                                             : end1.first->largest_key());
+    std::string key2 = std::move(end2.second ? end2.first->smallest_key()
+                                             : end2.first->largest_key());
+    return key1.compare(key2) < 0;
+  };
+  std::sort(blob_ends.begin(), blob_ends.end(), blob_ends_cmp);
 
-  while (!remained_files.empty()) {
-    int cnt = 0;
-    BlobFileMeta* pre = nullptr;
-    for (auto iter = remained_files.begin(); iter != remained_files.end();) {
-      if (pre == nullptr ||
-          (*iter)->smallest_key().compare(pre->largest_key()) > 0) {
-        cnt++;
-        pre = *iter;
-        remained_files.erase(iter++);
-      } else {
-        iter++;
+  int cur = 0, start = 0, size = blob_ends.size();
+  for (int i = 0; i < size; i++) {
+    if (blob_ends[i].second) {
+      ++cur;
+    } else {
+      --cur;
+      // reach max sorted run in [start, i], mark these blob files to merge
+      if (cur == max_sorted_runs) {
+        while (start < i) {
+          if (blob_ends[start].second) {
+            blob_ends[start].first->FileStateTransit(
+                BlobFileMeta::FileEvent::kNeedMerge);
+          }
+          ++start;
+        }
       }
     }
-    sorted_run_blobs.push_back(cnt);
   }
-
-  // There might be several sorted runs consist of few wide range blob files.
-  // Ignore these sorted runs since it has almost no impact to scan performance.
-  std::sort(sorted_run_blobs.begin(), sorted_run_blobs.end());
-  int i = 0, ignore = num_files * 0.1;
-  while (sorted_run_blobs[i] < ignore) {
-    ignore -= sorted_run_blobs[i++];
-  }
-  return sorted_run_blobs.size() - i;
 }
 
 Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
@@ -1145,13 +1147,13 @@ void TitanDBImpl::OnCompactionCompleted(
     VersionEdit edit;
     auto cf_options = bs->cf_options();
     std::vector<std::shared_ptr<BlobFileMeta>> files;
-    bool count_sr =
+    bool count_sorted_run =
         cf_options.level_merge && cf_options.range_merge &&
         cf_options.num_levels - 1 == compaction_job_info.output_level;
     for (const auto& bfs : blob_files_size_diff) {
       // blob file size < 0 means discardable size > 0
       if (bfs.second >= 0) {
-        if (count_sr) {
+        if (count_sorted_run) {
           auto file = bs->FindFile(bfs.first).lock();
           if (file != nullptr) {
             files.emplace_back(std::move(file));
@@ -1189,7 +1191,7 @@ void TitanDBImpl::OnCompactionCompleted(
                        cf_options.blob_file_discardable_ratio) {
           file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
         }
-        if (count_sr) {
+        if (count_sorted_run) {
           files.emplace_back(std::move(file));
         }
       }
@@ -1200,11 +1202,7 @@ void TitanDBImpl::OnCompactionCompleted(
     // data based GC, so we don't need to trigger regular GC anymore
     if (cf_options.level_merge) {
       blob_file_set_->LogAndApply(edit);
-      if (count_sr && CountSortedRuns(files) > cf_options.max_sorted_runs) {
-        for (auto& file : files) {
-          file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
-        }
-      }
+      MaybeScheduleRangeMerge(files, cf_options.max_sorted_runs);
     } else {
       bs->ComputeGCScore();
 
