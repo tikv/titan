@@ -60,6 +60,7 @@ int main() {
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
 #include "rocksdb/write_batch.h"
+#include "util/build_version.h"
 #include "util/coding.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
@@ -76,6 +77,7 @@ int main() {
 #include "utilities/merge_operators.h"
 
 #include "titan/db.h"
+#include "titan_build_version.h"
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::RegisterFlagValidator;
@@ -2639,6 +2641,8 @@ class StressTest {
   void PrintEnv() const {
     fprintf(stdout, "RocksDB version           : %d.%d\n", kMajorVersion,
             kMinorVersion);
+    fprintf(stdout, "RocksDB hash              : %s\n", rocksdb_build_git_sha);
+    fprintf(stdout, "Titan hash                : %s\n", titan_build_git_sha);
     fprintf(stdout, "Format version            : %d\n", FLAGS_format_version);
     fprintf(stdout, "TransactionDB             : %s\n",
             FLAGS_use_txn ? "true" : "false");
