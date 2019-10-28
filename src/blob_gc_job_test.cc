@@ -91,6 +91,14 @@ class BlobGCJobTest : public testing::Test {
     Open();
   }
 
+  void ScheduleRangeMerge(
+      const std::vector<std::shared_ptr<BlobFileMeta>>& files,
+      int max_sorted_runs) {
+    mutex_->Lock();
+    tdb_->MaybeScheduleRangeMerge(files, max_sorted_runs);
+    mutex_->Unlock();
+  }
+
   void Flush() {
     FlushOptions fopts;
     fopts.wait = true;
@@ -580,12 +588,50 @@ TEST_F(BlobGCJobTest, LevelMergeGC) {
   DestroyDB();
 }
 
+TEST_F(BlobGCJobTest, RangeMergeScheduler) {
+  NewDB();
+  int max_sorted_run = 2;
+  std::vector<std::shared_ptr<BlobFileMeta>> files;
+
+  // one sorted run, no file will be mark
+  for (int i = 0; i < 10; i++) {
+    auto file =
+        std::make_shared<BlobFileMeta>(i, 0, 0, 0, std::string('a' + i * 2, 1),
+                                       std::string('a' + i * 2 + 1, 1));
+    file->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
+    files.emplace_back(file);
+  }
+  ScheduleRangeMerge(files, max_sorted_run);
+  for (const auto& file : files) {
+    ASSERT_EQ(file->file_state(), BlobFileMeta::FileState::kNormal);
+  }
+
+  // one more sorted run for 5 files, only those files will be marked
+  for (int i = 3; i < 8; i++) {
+    auto file =
+        std::make_shared<BlobFileMeta>(i, 0, 0, 0, std::string('a' + i * 2, 1),
+                                       std::string('a' + i * 2 + 1, 1));
+    file->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
+    files.emplace_back(file);
+  }
+  ScheduleRangeMerge(files, max_sorted_run);
+  for (int i = 0; i < 10; i++) {
+    if (i < 3 || i >= 8) {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
+    } else {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
+    }
+  }
+
+  DestroyDB();
+}
+
 TEST_F(BlobGCJobTest, RangeMerge) {
   options_.level_merge = true;
   options_.level_compaction_dynamic_level_bytes = true;
   options_.blob_file_discardable_ratio = 0.5;
   options_.range_merge = true;
-  options_.max_sorted_runs = 4;
+  options_.max_sorted_runs = 5;
   options_.purge_obsolete_files_period_sec = 0;
   NewDB();
   ColumnFamilyMetaData cf_meta;

@@ -851,22 +851,25 @@ void TitanDBImpl::MaybeScheduleRangeMerge(
   }
   auto blob_ends_cmp = [](const std::pair<BlobFileMeta*, bool>& end1,
                           const std::pair<BlobFileMeta*, bool>& end2) {
-    std::string key1 = std::move(end1.second ? end1.first->smallest_key()
-                                             : end1.first->largest_key());
-    std::string key2 = std::move(end2.second ? end2.first->smallest_key()
-                                             : end2.first->largest_key());
-    return key1.compare(key2) < 0;
+    const std::string& key1 =
+        end1.second ? end1.first->smallest_key() : end1.first->largest_key();
+    const std::string& key2 =
+        end2.second ? end2.first->smallest_key() : end2.first->largest_key();
+    int cmp = key1.compare(key2);
+    // when the key being the same, order largest_key before smallest_key
+    return cmp == 0 ? end2.second : cmp < 0;
   };
   std::sort(blob_ends.begin(), blob_ends.end(), blob_ends_cmp);
 
-  int cur = 0, start = 0, size = blob_ends.size();
+  int cur = 0;
+  int start = 0;
+  int size = blob_ends.size();
   for (int i = 0; i < size; i++) {
     if (blob_ends[i].second) {
       ++cur;
     } else {
-      --cur;
       // reach max sorted run in [start, i], mark these blob files to merge
-      if (cur == max_sorted_runs) {
+      if (cur >= max_sorted_runs) {
         while (start < i) {
           if (blob_ends[start].second) {
             blob_ends[start].first->FileStateTransit(
@@ -874,9 +877,10 @@ void TitanDBImpl::MaybeScheduleRangeMerge(
           }
           ++start;
         }
-      } else if (cur == 0) {
+      } else if (cur == 1) {
         start = i + 1;
       }
+      --cur;
     }
   }
 }
