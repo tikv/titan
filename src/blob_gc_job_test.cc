@@ -593,7 +593,8 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
   int max_sorted_run = 2;
   std::vector<std::shared_ptr<BlobFileMeta>> files;
 
-  // one sorted run, no file will be mark
+  // one sorted run, no file will be marked
+  // run 1: [a, b] [c, d] [e, f] ... [p, q] [r, s]
   for (int i = 0; i < 10; i++) {
     auto file =
         std::make_shared<BlobFileMeta>(i, 0, 0, 0, std::string('a' + i * 2, 1),
@@ -606,8 +607,11 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
     ASSERT_EQ(file->file_state(), BlobFileMeta::FileState::kNormal);
   }
 
-  // one more sorted run for 5 files, only those files will be marked
-  for (int i = 3; i < 8; i++) {
+  // one more sorted run for 6 files, only those files will be marked
+  // run 1: [a, b] [c, d] [e, f] ... [n, o] [p, q] [r, s]
+  // run 2:               [e, f] ... [n, o]
+  // so files in range [e, o] will be marked
+  for (int i = 2; i < 8; i++) {
     auto file =
         std::make_shared<BlobFileMeta>(i, 0, 0, 0, std::string('a' + i * 2, 1),
                                        std::string('a' + i * 2 + 1, 1));
@@ -616,7 +620,7 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
   }
   ScheduleRangeMerge(files, max_sorted_run);
   for (int i = 0; i < 10; i++) {
-    if (i < 3 || i >= 8) {
+    if (i < 2 || i >= 8) {
       ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
     } else {
       ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
