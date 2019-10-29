@@ -225,6 +225,9 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
       assert(state_ == FileState::kNormal);
       state_ = FileState::kToMerge;
       break;
+    case FileEvent::kReset:
+      state_ = FileState::kNormal;
+      break;
     default:
       assert(false);
   }

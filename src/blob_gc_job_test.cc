@@ -592,39 +592,62 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
   NewDB();
   int max_sorted_run = 2;
   std::vector<std::shared_ptr<BlobFileMeta>> files;
+  auto add_file = [&](int file_num, const std::string& smallest,
+                      const std::string& largest) {
+    auto file =
+        std::make_shared<BlobFileMeta>(file_num, 0, 0, 0, smallest, largest);
+    file->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+    files.emplace_back(file);
+  };
 
   // one sorted run, no file will be marked
-  // run 1: [a, b] [c, d] [e, f] ... [p, q] [r, s]
-  for (int i = 0; i < 10; i++) {
-    auto file =
-        std::make_shared<BlobFileMeta>(i, 0, 0, 0, std::string('a' + i * 2, 1),
-                                       std::string('a' + i * 2 + 1, 1));
-    file->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
-    files.emplace_back(file);
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  for (size_t i = 0; i <= 5; i++) {
+    add_file(i, std::string(1, 'a' + i * 2), std::string(1, 'a' + i * 2 + 1));
   }
   ScheduleRangeMerge(files, max_sorted_run);
   for (const auto& file : files) {
     ASSERT_EQ(file->file_state(), BlobFileMeta::FileState::kNormal);
   }
 
-  // one more sorted run for 6 files, only those files will be marked
-  // run 1: [a, b] [c, d] [e, f] ... [n, o] [p, q] [r, s]
-  // run 2:               [e, f] ... [n, o]
-  // so files in range [e, o] will be marked
-  for (int i = 2; i < 8; i++) {
-    auto file =
-        std::make_shared<BlobFileMeta>(i, 0, 0, 0, std::string('a' + i * 2, 1),
-                                       std::string('a' + i * 2 + 1, 1));
-    file->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
-    files.emplace_back(file);
-  }
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  // run 2:               [e, f] [g, h]
+  // so files in range [e, h] will be marked
+  add_file(6, "e", "f");
+  add_file(7, "g", "h");
   ScheduleRangeMerge(files, max_sorted_run);
-  for (int i = 0; i < 10; i++) {
-    if (i < 2 || i >= 8) {
+  for (size_t i = 0; i < files.size(); i++) {
+    if (i == 2 || i == 3 || i == 6 || i == 7) {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
+      files[i]->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+    } else {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
+    }
+  }
+
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  // run 2: [a, b]        [e, f] [g, h]            [l, m]
+  // files in range [a, b] and [e, h] will be marked
+  add_file(8, "a", "b");
+  add_file(9, "l", "m");
+  ScheduleRangeMerge(files, max_sorted_run);
+  for (size_t i = 0; i < files.size(); i++) {
+    if (i == 1 || i == 4 || i == 5 || i == 9) {
       ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
     } else {
       ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
+      files[i]->FileStateTransit(BlobFileMeta::FileEvent::kReset);
     }
+  }
+
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  // run 2: [a, b]        [e, f] [g, h]            [l, m]
+  // run 3: [a,                                      l1]
+  // all files will be marked
+  add_file(10, "a", "l1");
+  ScheduleRangeMerge(files, max_sorted_run);
+  for (const auto& f : files) {
+    ASSERT_EQ(f->file_state(), BlobFileMeta::FileState::kToMerge);
   }
 
   DestroyDB();

@@ -167,6 +167,7 @@ class BlobFileMeta {
     kDbRestart,
     kDelete,
     kNeedMerge,
+    kReset,  // reset file to normal for test
   };
 
   enum class FileState {
