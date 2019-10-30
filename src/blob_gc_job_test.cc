@@ -95,7 +95,7 @@ class BlobGCJobTest : public testing::Test {
       const std::vector<std::shared_ptr<BlobFileMeta>>& files,
       int max_sorted_runs) {
     tdb_->mutex_.Lock();
-    tdb_->MaybeScheduleRangeMerge(files, max_sorted_runs);
+    tdb_->MarkFileIfNeedMerge(files, max_sorted_runs);
     tdb_->mutex_.Unlock();
   }
 

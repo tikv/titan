@@ -216,7 +216,7 @@ class TitanDBImpl : public TitanDB {
     return bg_error_;
   }
 
-  void MaybeScheduleRangeMerge(
+  void MarkFileIfNeedMerge(
       const std::vector<std::shared_ptr<BlobFileMeta>>& files,
       int max_sorted_runs);
 

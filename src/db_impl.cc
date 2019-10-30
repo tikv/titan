@@ -847,7 +847,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   return s;
 }
 
-void TitanDBImpl::MaybeScheduleRangeMerge(
+void TitanDBImpl::MarkFileIfNeedMerge(
     const std::vector<std::shared_ptr<BlobFileMeta>>& files,
     int max_sorted_runs) {
   mutex_.AssertHeld();
@@ -1213,7 +1213,7 @@ void TitanDBImpl::OnCompactionCompleted(
     // data based GC, so we don't need to trigger regular GC anymore
     if (cf_options.level_merge) {
       blob_file_set_->LogAndApply(edit);
-      MaybeScheduleRangeMerge(files, cf_options.max_sorted_runs);
+      MarkFileIfNeedMerge(files, cf_options.max_sorted_runs);
     } else {
       bs->ComputeGCScore();
 
