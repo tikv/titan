@@ -612,7 +612,7 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
 
   // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
   // run 2:               [e, f] [g, h]
-  // so files in range [e, h] will be marked
+  // files overlaped with [e, h] will be marked
   add_file(6, "e", "f");
   add_file(7, "g", "h");
   ScheduleRangeMerge(files, max_sorted_run);
@@ -627,7 +627,7 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
 
   // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
   // run 2: [a, b]        [e, f] [g, h]            [l, m]
-  // files in range [a, b] and [e, h] will be marked
+  // files overlaped with [a, b] and [e, h] will be marked
   add_file(8, "a", "b");
   add_file(9, "l", "m");
   ScheduleRangeMerge(files, max_sorted_run);
@@ -640,14 +640,20 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
     }
   }
 
+  max_sorted_run = 3;
   // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
   // run 2: [a, b]        [e, f] [g, h]            [l, m]
   // run 3: [a,                                      l1]
-  // all files will be marked
+  // files overlaped with [a, b] and [e, h] will be marked.
   add_file(10, "a", "l1");
   ScheduleRangeMerge(files, max_sorted_run);
-  for (const auto& f : files) {
-    ASSERT_EQ(f->file_state(), BlobFileMeta::FileState::kToMerge);
+  for (size_t i = 0; i < files.size(); i++) {
+    if (i == 1 || i == 4 || i == 5 || i == 9) {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
+    } else {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
+      files[i]->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+    }
   }
 
   DestroyDB();

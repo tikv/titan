@@ -871,26 +871,20 @@ void TitanDBImpl::MaybeScheduleRangeMerge(
   };
   std::sort(blob_ends.begin(), blob_ends.end(), blob_ends_cmp);
 
-  int cur = 0;
-  int start = 0;
+  int cur_add = 0;
+  int cur_remove = 0;
   int size = blob_ends.size();
+  std::unordered_map<BlobFileMeta*, int> tmp;
   for (int i = 0; i < size; i++) {
     if (blob_ends[i].second) {
-      ++cur;
+      ++cur_add;
+      tmp[blob_ends[i].first] = cur_remove;
     } else {
-      // reach max sorted run in [start, i], mark these blob files to merge
-      if (cur >= max_sorted_runs) {
-        while (start < i) {
-          if (blob_ends[start].second) {
-            blob_ends[start].first->FileStateTransit(
-                BlobFileMeta::FileEvent::kNeedMerge);
-          }
-          ++start;
-        }
-      } else if (cur == 1) {
-        start = i + 1;
+      ++cur_remove;
+      auto record = tmp.find(blob_ends[i].first);
+      if (cur_add - record->second >= max_sorted_runs) {
+        record->first->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
       }
-      --cur;
     }
   }
 }
