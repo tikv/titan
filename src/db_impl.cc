@@ -1012,7 +1012,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
     }
     for (const auto& file_number : outputs) {
       auto file = blob_storage->FindFile(file_number).lock();
-      // This file maybe output of a gc job, and it's been gced out.
+      // This file maybe output of a gc job, and it's been GCed out.
       if (!file) {
         continue;
       }
