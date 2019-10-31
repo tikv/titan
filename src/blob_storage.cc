@@ -33,6 +33,7 @@ Status BlobStorage::GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
     const Slice* end = ranges[i].limit;
     auto cmp = cf_options_.comparator;
 
+    std::string tmp;
     // nullptr means the minimum or maximum.
     for (auto it = ((begin != nullptr) ? blob_ranges_.lower_bound(*begin)
                                        : blob_ranges_.begin());
@@ -49,15 +50,19 @@ Status BlobStorage::GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
           (include_end && cmp->Compare(it->second->largest_key(), *end) <= 0) ||
           (!include_end && cmp->Compare(it->second->largest_key(), *end) < 0)) {
         files->push_back(it->second->file_number());
+        if (!tmp.empty()) {
+          tmp.append(" ");
+        }
+        tmp.append(std::to_string(it->second->file_number()));
       }
       assert(it->second->smallest_key().empty() ||
              (!begin || cmp->Compare(it->second->smallest_key(), *begin) >= 0));
     }
-    ROCKS_LOG_INFO(db_options_.info_log,
-                   "Get %" PRIuPTR " blob files in the range [%s, %s%c",
-                   files->size(), begin ? begin->ToString(true).c_str() : " ",
-                   end ? end->ToString(true).c_str() : " ",
-                   include_end ? ']' : ')');
+    ROCKS_LOG_INFO(
+        db_options_.info_log,
+        "Get %" PRIuPTR " blob files [%s] in the range [%s, %s%c",
+        files->size(), tmp.c_str(), begin ? begin->ToString(true).c_str() : " ",
+        end ? end->ToString(true).c_str() : " ", include_end ? ']' : ')');
   }
   return Status::OK();
 }
