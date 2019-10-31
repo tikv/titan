@@ -53,7 +53,7 @@ class TitanTableBuilder : public TableBuilder {
 
   bool ShouldMerge(const std::shared_ptr<BlobFileMeta>& file);
 
-  void FinishBlob();
+  void FinishBlobFile();
 
   void UpdateInternalOpStats();
 

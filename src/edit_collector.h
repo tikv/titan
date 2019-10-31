@@ -186,12 +186,10 @@ class EditCollector {
         if (added_files_.count(number) > 0) {
           continue;
         }
-        auto blob = storage->FindFile(number).lock();
-        if (!blob) {
+        if (!storage->MarkFileObsolete(number, file.second)) {
           return Status::NotFound("Invalid file number " +
                                   std::to_string(number));
         }
-        storage->MarkFileObsolete(blob, file.second);
       }
 
       storage->ComputeGCScore();

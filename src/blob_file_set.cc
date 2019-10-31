@@ -284,6 +284,30 @@ Status BlobFileSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
   return Status::NotFound("invalid column family");
 }
 
+Status BlobFileSet::DeleteBlobFilesInRanges(uint32_t cf_id,
+                                            const RangePtr* ranges, size_t n,
+                                            bool include_end,
+                                            SequenceNumber obsolete_sequence) {
+  auto it = column_families_.find(cf_id);
+  if (it != column_families_.end()) {
+    VersionEdit edit;
+    edit.SetColumnFamilyID(cf_id);
+
+    std::vector<uint64_t> files;
+    Status s = it->second->GetBlobFilesInRanges(ranges, n, include_end, &files);
+    if (!s.ok()) return s;
+    for (auto file_number : files) {
+      edit.DeleteBlobFile(file_number);
+    }
+    s = LogAndApply(edit);
+    return s;
+  }
+  ROCKS_LOG_ERROR(db_options_.info_log,
+                  "column %u not found for delete blob files in ranges\n",
+                  cf_id);
+  return Status::NotFound("invalid column family");
+}
+
 void BlobFileSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                                    SequenceNumber oldest_sequence) {
   for (auto it = column_families_.begin(); it != column_families_.end();) {
