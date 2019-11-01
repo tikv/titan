@@ -137,12 +137,12 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
     index.EncodeTo(index_value);
     if (blob_handle_->GetFile()->GetFileSize() >=
         cf_options_.blob_file_target_size) {
-      FinishBlob();
+      FinishBlobFile();
     }
   }
 }
 
-void TitanTableBuilder::FinishBlob() {
+void TitanTableBuilder::FinishBlobFile() {
   if (blob_builder_) {
     blob_builder_->Finish();
     if (ok()) {
@@ -179,7 +179,7 @@ Status TitanTableBuilder::status() const {
 
 Status TitanTableBuilder::Finish() {
   base_builder_->Finish();
-  FinishBlob();
+  FinishBlobFile();
   status_ = blob_manager_->BatchFinishFiles(cf_id_, finished_blobs_);
   if (!status_.ok()) {
     ROCKS_LOG_ERROR(db_options_.info_log,

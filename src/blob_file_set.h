@@ -53,6 +53,12 @@ class BlobFileSet {
   // REQUIRES: mutex is held
   Status MaybeDestroyColumnFamily(uint32_t cf_id);
 
+  // Logical deletes all the blobs within the ranges.
+  // REQUIRES: mutex is held
+  Status DeleteBlobFilesInRanges(uint32_t cf_id, const RangePtr* ranges,
+                                 size_t n, bool include_end,
+                                 SequenceNumber obsolete_sequence);
+
   // Allocates a new file number.
   uint64_t NewFileNumber() { return next_file_number_.fetch_add(1); }
 

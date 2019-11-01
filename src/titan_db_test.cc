@@ -593,36 +593,35 @@ TEST_F(TitanDBTest, DeleteFilesInRange) {
   // The LSM structure is:
   // L0: [11, 21, 31] [41, 51] [61, 71, 81, 91]
   // L6: [12, 22, 32] [42, 52] [62, 72, 82, 92]
-  // with 6 blob files
+  // with 6 alive blob files
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
   ASSERT_EQ(value, "3");
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
   ASSERT_EQ(value, "3");
 
   std::string key40 = GenKey(40);
-  std::string key70 = GenKey(70);
+  std::string key80 = GenKey(80);
   Slice start = Slice(key40);
-  Slice end = Slice(key70);
+  Slice end = Slice(key80);
   DeleteFilesInRange(&start, &end);
 
   // Now the LSM structure is:
   // L0: [11, 21, 31] [41, 51] [61, 71, 81, 91]
   // L6: [12, 22, 32]          [62, 72, 82, 92]
-  // with 6 blob files
+  // with 4 alive blob files and 2 obsolete blob files
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
   ASSERT_EQ(value, "3");
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
   ASSERT_EQ(value, "2");
 
-  auto blob = GetBlobStorage(db_->DefaultColumnFamily());
-  auto before = blob.lock()->NumBlobFiles();
-  ASSERT_EQ(before, 6);
+  auto blob = GetBlobStorage(db_->DefaultColumnFamily()).lock();
+  ASSERT_EQ(blob->NumBlobFiles(), 6);
+  // These two files are marked obsolete directly by `DeleteBlobFilesInRanges`
+  ASSERT_EQ(blob->NumObsoleteBlobFiles(), 2);
 
-  ASSERT_OK(db_impl_->TEST_StartGC(db_->DefaultColumnFamily()->GetID()));
   ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
-
-  // The blob file of deleted SST should be GCed.
-  ASSERT_EQ(before - 1, blob.lock()->NumBlobFiles());
+  ASSERT_EQ(blob->NumBlobFiles(), 4);
+  ASSERT_EQ(blob->NumObsoleteBlobFiles(), 0);
 
   Close();
 }

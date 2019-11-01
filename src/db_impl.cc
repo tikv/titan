@@ -68,8 +68,10 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       if (!s.ok()) return s;
 
       ROCKS_LOG_INFO(db_->db_options_.info_log,
-                     "Titan adding blob file [%" PRIu64 "]",
-                     file.first->file_number());
+                     "Titan adding blob file [%" PRIu64 "] range [%s, %s]",
+                     file.first->file_number(),
+                     file.first->smallest_key().ToString(true).c_str(),
+                     file.first->largest_key().ToString(true).c_str());
       edit.AddBlobFile(file.first);
     }
 
@@ -796,6 +798,11 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   if (!s.ok()) return s;
 
   MutexLock l(&mutex_);
+  SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
+  s = blob_file_set_->DeleteBlobFilesInRanges(cf_id, ranges, n, include_end,
+                                              obsolete_sequence);
+  if (!s.ok()) return s;
+
   auto bs = blob_file_set_->GetBlobStorage(cf_id).lock();
   if (!bs) {
     // TODO: Should treat it as background error and make DB read-only.
@@ -1049,7 +1056,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
     }
     for (const auto& file_number : outputs) {
       auto file = blob_storage->FindFile(file_number).lock();
-      // This file maybe output of a gc job, and it's been gced out.
+      // This file maybe output of a gc job, and it's been GCed out.
       if (!file) {
         continue;
       }
