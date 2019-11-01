@@ -867,7 +867,7 @@ void TitanDBImpl::MarkFileIfNeedMerge(
         end2.second ? end2.first->smallest_key() : end2.first->largest_key();
     int cmp = key1.compare(key2);
     // when the key being the same, order largest_key before smallest_key
-    return cmp == 0 ? !end1.second && end2.second : cmp < 0;
+    return (cmp == 0) ? (!end1.second && end2.second) : (cmp < 0);
   };
   std::sort(blob_ends.begin(), blob_ends.end(), blob_ends_cmp);
 
@@ -882,7 +882,7 @@ void TitanDBImpl::MarkFileIfNeedMerge(
     } else {
       ++cur_remove;
       auto record = tmp.find(blob_ends[i].first);
-      if (cur_add - record->second >= max_sorted_runs) {
+      if (cur_add - record->second > max_sorted_runs) {
         record->first->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
       }
     }

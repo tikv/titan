@@ -590,7 +590,7 @@ TEST_F(BlobGCJobTest, LevelMergeGC) {
 
 TEST_F(BlobGCJobTest, RangeMergeScheduler) {
   NewDB();
-  int max_sorted_run = 2;
+  int max_sorted_run = 1;
   std::vector<std::shared_ptr<BlobFileMeta>> files;
   auto add_file = [&](int file_num, const std::string& smallest,
                       const std::string& largest) {
@@ -640,7 +640,7 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
     }
   }
 
-  max_sorted_run = 3;
+  max_sorted_run = 2;
   // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
   // run 2: [a, b]        [e, f] [g, h]            [l, m]
   // run 3: [a,                                      l1]
@@ -664,7 +664,7 @@ TEST_F(BlobGCJobTest, RangeMerge) {
   options_.level_compaction_dynamic_level_bytes = true;
   options_.blob_file_discardable_ratio = 0.5;
   options_.range_merge = true;
-  options_.max_sorted_runs = 5;
+  options_.max_sorted_runs = 4;
   options_.purge_obsolete_files_period_sec = 0;
   NewDB();
   ColumnFamilyMetaData cf_meta;
