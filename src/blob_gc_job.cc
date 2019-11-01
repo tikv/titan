@@ -586,9 +586,8 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   for (const auto& file : blob_gc_->sampled_inputs()) {
     ROCKS_LOG_INFO(db_options_.info_log,
                    "Titan add obsolete file [%" PRIu64 "] range [%s, %s]",
-                   file->file_number(),
-                   file->smallest_key().ToString(true).c_str(),
-                   file->largest_key().ToString(true).c_str());
+                   file->file_number(), file->smallest_key().c_str(),
+                   file->largest_key().c_str());
     metrics_.gc_num_files++;
     RecordInHistogram(stats_, TitanStats::GC_INPUT_FILE_SIZE,
                       file->file_size());

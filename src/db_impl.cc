@@ -70,8 +70,8 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       ROCKS_LOG_INFO(db_->db_options_.info_log,
                      "Titan adding blob file [%" PRIu64 "] range [%s, %s]",
                      file.first->file_number(),
-                     file.first->smallest_key().ToString(true).c_str(),
-                     file.first->largest_key().ToString(true).c_str());
+                     file.first->smallest_key().c_str(),
+                     file.first->largest_key().c_str());
       edit.AddBlobFile(file.first);
     }
 
