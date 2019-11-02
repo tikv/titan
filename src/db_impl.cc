@@ -70,8 +70,8 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       ROCKS_LOG_INFO(db_->db_options_.info_log,
                      "Titan adding blob file [%" PRIu64 "] range [%s, %s]",
                      file.first->file_number(),
-                     file.first->smallest_key().ToString(true).c_str(),
-                     file.first->largest_key().ToString(true).c_str());
+                     file.first->smallest_key().c_str(),
+                     file.first->largest_key().c_str());
       edit.AddBlobFile(file.first);
     }
 
@@ -854,6 +854,48 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   return s;
 }
 
+void TitanDBImpl::MarkFileIfNeedMerge(
+    const std::vector<std::shared_ptr<BlobFileMeta>>& files,
+    int max_sorted_runs) {
+  mutex_.AssertHeld();
+  if (files.empty()) return;
+
+  // store and sort both ends of blob files to count sorted runs
+  std::vector<std::pair<BlobFileMeta*, bool /* is smallest end? */>> blob_ends;
+  for (const auto& file : files) {
+    blob_ends.emplace_back(std::make_pair(file.get(), true));
+    blob_ends.emplace_back(std::make_pair(file.get(), false));
+  }
+  auto blob_ends_cmp = [](const std::pair<BlobFileMeta*, bool>& end1,
+                          const std::pair<BlobFileMeta*, bool>& end2) {
+    const std::string& key1 =
+        end1.second ? end1.first->smallest_key() : end1.first->largest_key();
+    const std::string& key2 =
+        end2.second ? end2.first->smallest_key() : end2.first->largest_key();
+    int cmp = key1.compare(key2);
+    // when the key being the same, order largest_key before smallest_key
+    return (cmp == 0) ? (!end1.second && end2.second) : (cmp < 0);
+  };
+  std::sort(blob_ends.begin(), blob_ends.end(), blob_ends_cmp);
+
+  int cur_add = 0;
+  int cur_remove = 0;
+  int size = blob_ends.size();
+  std::unordered_map<BlobFileMeta*, int> tmp;
+  for (int i = 0; i < size; i++) {
+    if (blob_ends[i].second) {
+      ++cur_add;
+      tmp[blob_ends[i].first] = cur_remove;
+    } else {
+      ++cur_remove;
+      auto record = tmp.find(blob_ends[i].first);
+      if (cur_add - record->second > max_sorted_runs) {
+        record->first->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
+      }
+    }
+  }
+}
+
 Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
   assert(column_family != nullptr);
   Options options = db_->GetOptions(column_family);
@@ -1122,9 +1164,19 @@ void TitanDBImpl::OnCompactionCompleted(
     uint64_t delta = 0;
     VersionEdit edit;
     auto cf_options = bs->cf_options();
+    std::vector<std::shared_ptr<BlobFileMeta>> files;
+    bool count_sorted_run =
+        cf_options.level_merge && cf_options.range_merge &&
+        cf_options.num_levels - 1 == compaction_job_info.output_level;
     for (const auto& bfs : blob_files_size_diff) {
       // blob file size < 0 means discardable size > 0
       if (bfs.second >= 0) {
+        if (count_sorted_run) {
+          auto file = bs->FindFile(bfs.first).lock();
+          if (file != nullptr) {
+            files.emplace_back(std::move(file));
+          }
+        }
         continue;
       }
       auto file = bs->FindFile(bfs.first).lock();
@@ -1150,11 +1202,15 @@ void TitanDBImpl::OnCompactionCompleted(
         if (file->NoLiveData()) {
           edit.DeleteBlobFile(file->file_number(),
                               db_impl_->GetLatestSequenceNumber());
+          continue;
         } else if (static_cast<int>(file->file_level()) >=
                        cf_options.num_levels - 2 &&
                    file->GetDiscardableRatio() >
                        cf_options.blob_file_discardable_ratio) {
           file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
+        }
+        if (count_sorted_run) {
+          files.emplace_back(std::move(file));
         }
       }
     }
@@ -1164,6 +1220,7 @@ void TitanDBImpl::OnCompactionCompleted(
     // data based GC, so we don't need to trigger regular GC anymore
     if (cf_options.level_merge) {
       blob_file_set_->LogAndApply(edit);
+      MarkFileIfNeedMerge(files, cf_options.max_sorted_runs);
     } else {
       bs->ComputeGCScore();
 

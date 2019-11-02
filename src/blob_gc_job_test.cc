@@ -91,6 +91,14 @@ class BlobGCJobTest : public testing::Test {
     Open();
   }
 
+  void ScheduleRangeMerge(
+      const std::vector<std::shared_ptr<BlobFileMeta>>& files,
+      int max_sorted_runs) {
+    tdb_->mutex_.Lock();
+    tdb_->MarkFileIfNeedMerge(files, max_sorted_runs);
+    tdb_->mutex_.Unlock();
+  }
+
   void Flush() {
     FlushOptions fopts;
     fopts.wait = true;
@@ -583,7 +591,7 @@ TEST_F(BlobGCJobTest, LevelMergeGC) {
   CheckBlobNumber(4);
 
   auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
-  // blob file number is start from 2, they are: old level0 blob file, old
+  // blob file number starts from 2, they are: old level0 blob file, old
   // last level blob file, new level0 blob file, new last level blob file
   // respectively.
   ASSERT_EQ(b->FindFile(2).lock()->file_state(),
@@ -598,7 +606,130 @@ TEST_F(BlobGCJobTest, LevelMergeGC) {
   DestroyDB();
 }
 
+TEST_F(BlobGCJobTest, RangeMergeScheduler) {
+  NewDB();
+  int max_sorted_run = 1;
+  std::vector<std::shared_ptr<BlobFileMeta>> files;
+  auto add_file = [&](int file_num, const std::string& smallest,
+                      const std::string& largest) {
+    auto file =
+        std::make_shared<BlobFileMeta>(file_num, 0, 0, 0, smallest, largest);
+    file->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+    files.emplace_back(file);
+  };
+
+  // one sorted run, no file will be marked
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  for (size_t i = 0; i <= 5; i++) {
+    add_file(i, std::string(1, 'a' + i * 2), std::string(1, 'a' + i * 2 + 1));
+  }
+  ScheduleRangeMerge(files, max_sorted_run);
+  for (const auto& file : files) {
+    ASSERT_EQ(file->file_state(), BlobFileMeta::FileState::kNormal);
+  }
+
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  // run 2:               [e, f] [g, h]
+  // files overlaped with [e, h] will be marked
+  add_file(6, "e", "f");
+  add_file(7, "g", "h");
+  ScheduleRangeMerge(files, max_sorted_run);
+  for (size_t i = 0; i < files.size(); i++) {
+    if (i == 2 || i == 3 || i == 6 || i == 7) {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
+      files[i]->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+    } else {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
+    }
+  }
+
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  // run 2: [a, b]        [e, f] [g, h]            [l, m]
+  // files overlaped with [a, b] and [e, h] will be marked
+  add_file(8, "a", "b");
+  add_file(9, "l", "m");
+  ScheduleRangeMerge(files, max_sorted_run);
+  for (size_t i = 0; i < files.size(); i++) {
+    if (i == 1 || i == 4 || i == 5 || i == 9) {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
+    } else {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
+      files[i]->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+    }
+  }
+
+  max_sorted_run = 2;
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  // run 2: [a, b]        [e, f] [g, h]            [l, m]
+  // run 3: [a,                                      l1]
+  // files overlaped with [a, b] and [e, h] will be marked.
+  add_file(10, "a", "l1");
+  ScheduleRangeMerge(files, max_sorted_run);
+  for (size_t i = 0; i < files.size(); i++) {
+    if (i == 1 || i == 4 || i == 5 || i == 9) {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
+    } else {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
+      files[i]->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+    }
+  }
+
+  DestroyDB();
+}
+
+TEST_F(BlobGCJobTest, RangeMerge) {
+  options_.level_merge = true;
+  options_.level_compaction_dynamic_level_bytes = true;
+  options_.blob_file_discardable_ratio = 0.5;
+  options_.range_merge = true;
+  options_.max_sorted_runs = 4;
+  options_.purge_obsolete_files_period_sec = 0;
+  NewDB();
+  ColumnFamilyMetaData cf_meta;
+  std::vector<std::string> to_compact(1);
+  auto opts = db_->GetOptions();
+
+  // compact 5 sorted runs to last level of key range [1, 50]
+  for (int i = 1; i <= 5; i++) {
+    for (int j = 0; j < 10; j++) {
+      db_->Put(WriteOptions(), GenKey(5 * j + i), GenValue(5 * j + i));
+    }
+    Flush();
+    db_->GetColumnFamilyMetaData(base_db_->DefaultColumnFamily(), &cf_meta);
+    to_compact[0] = cf_meta.levels[0].files[0].name;
+    db_->CompactFiles(CompactionOptions(), base_db_->DefaultColumnFamily(),
+                      to_compact, opts.num_levels - 1);
+    CheckBlobNumber(2 * i);
+  }
+
+  auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
+  // blob file number starts from 2. Even number blob files belong to level0,
+  // odd number blob files belong to last level.
+  for (int i = 2; i < 12; i++) {
+    auto blob = b->FindFile(i).lock();
+    if (i % 2 == 0) {
+      ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kObsolete);
+    } else {
+      ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kToMerge);
+    }
+  }
+
+  db_->GetColumnFamilyMetaData(base_db_->DefaultColumnFamily(), &cf_meta);
+  to_compact[0] = cf_meta.levels[opts.num_levels - 1].files[0].name;
+  db_->CompactFiles(CompactionOptions(), base_db_->DefaultColumnFamily(),
+                    to_compact, opts.num_levels - 1);
+
+  // after last level compaction, marked blob files are merged to new blob
+  // files and obsoleted.
+  for (int i = 2; i < 12; i++) {
+    auto blob = b->FindFile(i).lock();
+    ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kObsolete);
+  }
+
+  DestroyDB();
+}
 }  // namespace titandb
+
 }  // namespace rocksdb
 
 int main(int argc, char** argv) {

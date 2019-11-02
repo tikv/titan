@@ -137,6 +137,24 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: false
   bool level_merge{false};
 
+  // With level merge enabled, we expect there are no more than 10 sorted runs
+  // of blob files in both of last two levels. But since last level blob files
+  // won't be merged again, sorted runs in last level will increase infinitely.
+  //
+  // With this feature enabled, Titan will check sorted runs of compaction range
+  // after each last level compaction and mark related blob files if there are
+  // too many. These marked blob files will be merged to a new sorted run in
+  // next compaction.
+  //
+  // Default: false
+  bool range_merge{false};
+
+  // Max sorted runs to trigger range merge. Decrease this value will increase
+  // write amplification but get better short range scan performance.
+  //
+  // Default: 20
+  int max_sorted_runs{20};
+
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}

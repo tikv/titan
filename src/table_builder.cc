@@ -221,6 +221,10 @@ TableProperties TitanTableBuilder::GetTableProperties() const {
 bool TitanTableBuilder::ShouldMerge(
     const std::shared_ptr<rocksdb::titandb::BlobFileMeta>& file) {
   assert(cf_options_.level_merge);
+  // Values in blob file should be merged if
+  // 1. Corresponding keys are being compacted to last two level from lower
+  // level
+  // 2. Blob file is marked by GC or range merge
   return file != nullptr &&
          (static_cast<int>(file->file_level()) < target_level_ ||
           file->file_state() == BlobFileMeta::FileState::kToMerge);
