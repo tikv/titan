@@ -878,20 +878,17 @@ void TitanDBImpl::MarkFileIfNeedMerge(
   };
   std::sort(blob_ends.begin(), blob_ends.end(), blob_ends_cmp);
 
-  int cur_add = 0;
-  int cur_remove = 0;
-  int size = blob_ends.size();
-  std::unordered_map<BlobFileMeta*, int> tmp;
-  for (int i = 0; i < size; i++) {
-    if (blob_ends[i].second) {
-      ++cur_add;
-      tmp[blob_ends[i].first] = cur_remove;
-    } else {
-      ++cur_remove;
-      auto record = tmp.find(blob_ends[i].first);
-      if (cur_add - record->second > max_sorted_runs) {
-        record->first->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
+  std::unordered_set<BlobFileMeta*> tmp;
+  for (auto& end: blob_ends) {
+    if (end.second) {
+      tmp.insert(end.first);
+      if (tmp.size() > (size_t)max_sorted_runs) {
+        for (auto file: tmp) {
+          file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
+        }
       }
+    } else {
+      tmp.erase(end.first);
     }
   }
 }
