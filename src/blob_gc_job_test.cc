@@ -629,7 +629,12 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
   // no file will be marked
   auto file_runs =
       std::vector<std::vector<std::pair<std::string, std::string>>>{
-        {{"a", "b"}, {"c", "d"}, {"e", "f"}, {"g", "h"}, {"i", "j"}, {"k", "l"}},
+          {{"a", "b"},
+           {"c", "d"},
+           {"e", "f"},
+           {"g", "h"},
+           {"i", "j"},
+           {"k", "l"}},
       };
   auto files = init_files(file_runs);
   ScheduleRangeMerge(files, 1);
