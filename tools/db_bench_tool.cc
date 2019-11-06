@@ -760,6 +760,10 @@ DEFINE_uint64(blob_db_min_blob_size, 0,
 // Titan Options
 DEFINE_bool(use_titan, true, "Open a Titan instance.");
 
+DEFINE_bool(titan_level_merge, false, "Enable Titan level merge.");
+
+DEFINE_bool(titan_range_merge, false, "Enable Titan range merge.");
+
 DEFINE_uint64(titan_min_blob_size, 0,
               "Smallest blob to store in a file. Blobs smaller than this "
               "will be inlined with the key in the LSM tree.");
@@ -3825,6 +3829,8 @@ class Benchmark {
 
     options.listeners.emplace_back(listener_);
     opts->min_blob_size = FLAGS_titan_min_blob_size;
+    opts->level_merge = FLAGS_titan_level_merge;
+    opts->range_merge = FLAGS_titan_range_merge;
     opts->disable_background_gc = FLAGS_titan_disable_background_gc;
     opts->max_background_gc = FLAGS_titan_max_background_gc;
     opts->min_gc_batch_size = 128 << 20;

@@ -70,8 +70,8 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       ROCKS_LOG_INFO(db_->db_options_.info_log,
                      "Titan adding blob file [%" PRIu64 "] range [%s, %s]",
                      file.first->file_number(),
-                     file.first->smallest_key().c_str(),
-                     file.first->largest_key().c_str());
+                     Slice(file.first->smallest_key()).ToString(true).c_str(),
+                     Slice(file.first->largest_key()).ToString(true).c_str());
       edit.AddBlobFile(file.first);
     }
 
@@ -878,20 +878,17 @@ void TitanDBImpl::MarkFileIfNeedMerge(
   };
   std::sort(blob_ends.begin(), blob_ends.end(), blob_ends_cmp);
 
-  int cur_add = 0;
-  int cur_remove = 0;
-  int size = blob_ends.size();
-  std::unordered_map<BlobFileMeta*, int> tmp;
-  for (int i = 0; i < size; i++) {
-    if (blob_ends[i].second) {
-      ++cur_add;
-      tmp[blob_ends[i].first] = cur_remove;
-    } else {
-      ++cur_remove;
-      auto record = tmp.find(blob_ends[i].first);
-      if (cur_add - record->second > max_sorted_runs) {
-        record->first->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
+  std::unordered_set<BlobFileMeta*> set;
+  for (auto& end : blob_ends) {
+    if (end.second) {
+      set.insert(end.first);
+      if (set.size() > static_cast<size_t>(max_sorted_runs)) {
+        for (auto file : set) {
+          file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
+        }
       }
+    } else {
+      set.erase(end.first);
     }
   }
 }

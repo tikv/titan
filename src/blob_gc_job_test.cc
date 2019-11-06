@@ -608,32 +608,50 @@ TEST_F(BlobGCJobTest, LevelMergeGC) {
 
 TEST_F(BlobGCJobTest, RangeMergeScheduler) {
   NewDB();
-  int max_sorted_run = 1;
-  std::vector<std::shared_ptr<BlobFileMeta>> files;
-  auto add_file = [&](int file_num, const std::string& smallest,
-                      const std::string& largest) {
-    auto file =
-        std::make_shared<BlobFileMeta>(file_num, 0, 0, 0, smallest, largest);
-    file->FileStateTransit(BlobFileMeta::FileEvent::kReset);
-    files.emplace_back(file);
-  };
+  auto init_files =
+      [&](std::vector<std::vector<std::pair<std::string, std::string>>>
+              file_runs) {
+        std::vector<std::shared_ptr<BlobFileMeta>> files;
+        int file_num = 0;
+        for (auto& run : file_runs) {
+          for (auto& range : run) {
+            auto file = std::make_shared<BlobFileMeta>(
+                file_num++, 0, 0, 0, range.first, range.second);
+            file->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+            files.emplace_back(file);
+          }
+        }
+        return files;
+      };
 
-  // one sorted run, no file will be marked
+  // max_sorted_run = 1
   // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
-  for (size_t i = 0; i <= 5; i++) {
-    add_file(i, std::string(1, 'a' + i * 2), std::string(1, 'a' + i * 2 + 1));
-  }
-  ScheduleRangeMerge(files, max_sorted_run);
+  // no file will be marked
+  auto file_runs =
+      std::vector<std::vector<std::pair<std::string, std::string>>>{
+          {{"a", "b"},
+           {"c", "d"},
+           {"e", "f"},
+           {"g", "h"},
+           {"i", "j"},
+           {"k", "l"}},
+      };
+  auto files = init_files(file_runs);
+  ScheduleRangeMerge(files, 1);
   for (const auto& file : files) {
     ASSERT_EQ(file->file_state(), BlobFileMeta::FileState::kNormal);
   }
 
+  // max_sorted_run = 1
   // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
   // run 2:               [e, f] [g, h]
-  // files overlaped with [e, h] will be marked
-  add_file(6, "e", "f");
-  add_file(7, "g", "h");
-  ScheduleRangeMerge(files, max_sorted_run);
+  // files overlapped with [e, h] will be marked
+  file_runs = std::vector<std::vector<std::pair<std::string, std::string>>>{
+      {{"a", "b"}, {"c", "d"}, {"e", "f"}, {"g", "h"}, {"i", "j"}, {"k", "l"}},
+      {{"e", "f"}, {"g", "h"}},
+  };
+  files = init_files(file_runs);
+  ScheduleRangeMerge(files, 1);
   for (size_t i = 0; i < files.size(); i++) {
     if (i == 2 || i == 3 || i == 6 || i == 7) {
       ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
@@ -643,12 +661,16 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
     }
   }
 
+  // max_sorted_run = 1
   // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
   // run 2: [a, b]        [e, f] [g, h]            [l, m]
-  // files overlaped with [a, b] and [e, h] will be marked
-  add_file(8, "a", "b");
-  add_file(9, "l", "m");
-  ScheduleRangeMerge(files, max_sorted_run);
+  // files overlapped with [a, b] and [e, h] will be marked
+  file_runs = std::vector<std::vector<std::pair<std::string, std::string>>>{
+      {{"a", "b"}, {"c", "d"}, {"e", "f"}, {"g", "h"}, {"i", "j"}, {"k", "l"}},
+      {{"a", "b"}, {"e", "f"}, {"g", "h"}, {"l", "m"}},
+  };
+  files = init_files(file_runs);
+  ScheduleRangeMerge(files, 1);
   for (size_t i = 0; i < files.size(); i++) {
     if (i == 1 || i == 4 || i == 5 || i == 9) {
       ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
@@ -658,13 +680,93 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
     }
   }
 
-  max_sorted_run = 2;
+  // max_sorted_run = 2
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  // run 2:        [c,                             l]
+  // no file will be marked
+  file_runs = std::vector<std::vector<std::pair<std::string, std::string>>>{
+      {{"a", "b"}, {"c", "d"}, {"e", "f"}, {"g", "h"}, {"i", "j"}, {"k", "l"}},
+      {{"c", "l"}},
+  };
+  files = init_files(file_runs);
+  ScheduleRangeMerge(files, 2);
+  for (const auto& file : files) {
+    ASSERT_EQ(file->file_state(), BlobFileMeta::FileState::kNormal);
+  }
+
+  // max_sorted_run = 2
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  // run 2:        [c, d]
+  // run 3:        [c, d]
+  // files overlapped with [c, d] will be marked.
+  file_runs = std::vector<std::vector<std::pair<std::string, std::string>>>{
+      {{"a", "b"}, {"c", "d"}, {"e", "f"}, {"g", "h"}, {"i", "j"}, {"k", "l"}},
+      {{"c", "d"}},
+      {{"c", "d"}},
+  };
+  files = init_files(file_runs);
+  ScheduleRangeMerge(files, 2);
+  for (size_t i = 0; i < files.size(); i++) {
+    if (i == 1 || i == 6 || i == 7) {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
+      files[i]->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+    } else {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
+    }
+  }
+
+  // max_sorted_run = 2
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  // run 2:      [b1,  d]
+  // run 3: [a,        d]
+  // files overlapped with [c, d] will be marked.
+  file_runs = std::vector<std::vector<std::pair<std::string, std::string>>>{
+      {{"a", "b"}, {"c", "d"}, {"e", "f"}, {"g", "h"}, {"i", "j"}, {"k", "l"}},
+      {{"b1", "d"}},
+      {{"a", "d"}},
+  };
+  files = init_files(file_runs);
+  ScheduleRangeMerge(files, 2);
+  for (size_t i = 0; i < files.size(); i++) {
+    if (i == 1 || i == 6 || i == 7) {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
+      files[i]->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+    } else {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
+    }
+  }
+
+  // max_sorted_run = 2;
+  // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
+  // run 2: [a, b]        [e, f] [g, h]            [l, m]
+  // run 3:               [e,     g1]
+  // files overlapped with [e, g] will be marked.
+  file_runs = std::vector<std::vector<std::pair<std::string, std::string>>>{
+      {{"a", "b"}, {"c", "d"}, {"e", "f"}, {"g", "h"}, {"i", "j"}, {"k", "l"}},
+      {{"a", "b"}, {"e", "f"}, {"g", "h"}, {"l", "m"}},
+      {{"e", "g1"}}};
+  files = init_files(file_runs);
+  ScheduleRangeMerge(files, 2);
+  for (size_t i = 0; i < files.size(); i++) {
+    if (i == 2 || i == 3 || i == 7 || i == 8 || i == 10) {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kToMerge);
+      files[i]->FileStateTransit(BlobFileMeta::FileEvent::kReset);
+    } else {
+      ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
+    }
+  }
+
+  // max_sorted_run = 2;
   // run 1: [a, b] [c, d] [e, f] [g, h] [i, j] [k, l]
   // run 2: [a, b]        [e, f] [g, h]            [l, m]
   // run 3: [a,                                      l1]
-  // files overlaped with [a, b] and [e, h] will be marked.
-  add_file(10, "a", "l1");
-  ScheduleRangeMerge(files, max_sorted_run);
+  // files overlapped with [a, b] and [e, h] will be marked.
+  file_runs = std::vector<std::vector<std::pair<std::string, std::string>>>{
+      {{"a", "b"}, {"c", "d"}, {"e", "f"}, {"g", "h"}, {"i", "j"}, {"k", "l"}},
+      {{"a", "b"}, {"e", "f"}, {"g", "h"}, {"l", "m"}},
+      {{"a", "l1"}}};
+  files = init_files(file_runs);
+  ScheduleRangeMerge(files, 2);
   for (size_t i = 0; i < files.size(); i++) {
     if (i == 1 || i == 4 || i == 5 || i == 9) {
       ASSERT_EQ(files[i]->file_state(), BlobFileMeta::FileState::kNormal);
