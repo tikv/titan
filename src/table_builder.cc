@@ -90,7 +90,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
         std::string index_value;
         AddBlob(ikey.user_key, record.value, &index_value);
         UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
-                  &io_bytes_written_);
+                      &io_bytes_written_);
         if (ok()) {
           std::string index_key;
           ikey.type = kTypeBlobIndex;
