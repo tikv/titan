@@ -146,7 +146,13 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
 
 void TitanTableBuilder::FinishBlobFile() {
   if (blob_builder_) {
+    uint64_t prev_bytes_read = 0;
+    uint64_t prev_bytes_written = 0;
+    SavePrevIOBytes(&prev_bytes_read, &prev_bytes_written);
     blob_builder_->Finish();
+    UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
+                  &io_bytes_written_);
+
     if (ok()) {
       ROCKS_LOG_INFO(db_options_.info_log,
                      "Titan table builder finish output file %" PRIu64 ".",
