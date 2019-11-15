@@ -120,8 +120,7 @@ class BlobGCJobTest : public testing::Test {
   }
 
   void Close() {
-    if (!db_)
-      return;
+    if (!db_) return;
     ASSERT_OK(db_->Close());
     delete db_;
     db_ = nullptr;
