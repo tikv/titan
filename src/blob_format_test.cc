@@ -84,7 +84,7 @@ TEST(BlobFormatTest, BlobCompressionLZ4) {
   BlobRecord decoded_record;
   OwnedSlice blob;
   decoder.DecodeRecord(&encoded_record, &decoded_record, &blob);
-  
+
   ASSERT_EQ(record, decoded_record);
 }
 
@@ -94,7 +94,7 @@ std::string CreateDict() {
   const int sample_count = 1000;
   std::string samples = "";
   std::vector<size_t> sample_lens;
-  
+
   BlobRecord record;
   BlobEncoder encoder(kZSTD);
 
@@ -132,7 +132,7 @@ TEST(BlobFormatTest, BlobCompressionZSTD) {
   BlobRecord decoded_record;
   OwnedSlice blob;
   decoder.DecodeRecord(&encoded_record, &decoded_record, &blob);
-  
+
   ASSERT_EQ(record, decoded_record);
 }
 

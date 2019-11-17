@@ -52,11 +52,11 @@ struct BlobRecord {
 
 class BlobEncoder {
  public:
-  BlobEncoder(CompressionType compression, const CompressionDict& compression_dict)
+  BlobEncoder(CompressionType compression,
+              const CompressionDict& compression_dict)
       : compression_ctx_(compression),
-        compression_info_(compression_opt_, compression_ctx_,
-                          compression_dict, compression,
-                          0 /*sample_for_compression*/) {}
+        compression_info_(compression_opt_, compression_ctx_, compression_dict,
+                          compression, 0 /*sample_for_compression*/) {}
   BlobEncoder(CompressionType compression)
       : BlobEncoder(compression, CompressionDict::GetEmptyDict()) {}
 
@@ -79,7 +79,8 @@ class BlobEncoder {
 
 class BlobDecoder {
  public:
-  BlobDecoder(const UncompressionDict &uncompression_dict) : uncompression_dict_(uncompression_dict) {}
+  BlobDecoder(const UncompressionDict& uncompression_dict)
+      : uncompression_dict_(uncompression_dict) {}
   BlobDecoder() : BlobDecoder(UncompressionDict::GetEmptyDict()) {}
 
   Status DecodeHeader(Slice* src);
