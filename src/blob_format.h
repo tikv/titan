@@ -52,11 +52,13 @@ struct BlobRecord {
 
 class BlobEncoder {
  public:
-  BlobEncoder(CompressionType compression)
+  BlobEncoder(CompressionType compression, const CompressionDict& compression_dict)
       : compression_ctx_(compression),
         compression_info_(compression_opt_, compression_ctx_,
-                          CompressionDict::GetEmptyDict(), compression,
+                          compression_dict, compression,
                           0 /*sample_for_compression*/) {}
+  BlobEncoder(CompressionType compression)
+      : BlobEncoder(compression, CompressionDict::GetEmptyDict()) {}
 
   void EncodeRecord(const BlobRecord& record);
 
@@ -77,6 +79,9 @@ class BlobEncoder {
 
 class BlobDecoder {
  public:
+  BlobDecoder(const UncompressionDict &uncompression_dict) : uncompression_dict_(uncompression_dict) {}
+  BlobDecoder() : BlobDecoder(UncompressionDict::GetEmptyDict()) {}
+
   Status DecodeHeader(Slice* src);
   Status DecodeRecord(Slice* src, BlobRecord* record, OwnedSlice* buffer);
 
@@ -87,6 +92,7 @@ class BlobDecoder {
   uint32_t header_crc_{0};
   uint32_t record_size_{0};
   CompressionType compression_{kNoCompression};
+  const UncompressionDict& uncompression_dict_;
 };
 
 // Format of blob handle (not fixed size):
@@ -253,10 +259,14 @@ class BlobFileMeta {
 //
 // The header is mean to be compatible with header of BlobDB blob files, except
 // we use a different magic number.
+//
+// If the version is 2, then the meta section includes a (possibly empty)
+// uncompression dictionary.
 struct BlobFileHeader {
   // The first 32bits from $(echo titandb/blob | sha1sum).
   static const uint32_t kHeaderMagicNumber = 0x2be0a614ul;
   static const uint32_t kVersion1 = 1;
+  static const uint32_t kVersion2 = 2;
   static const uint64_t kEncodedLength = 4 + 4;
 
   uint32_t version = kVersion1;
@@ -281,6 +291,10 @@ struct BlobFileFooter {
   static const uint64_t kEncodedLength{kBlobFooterSize};
 
   BlockHandle meta_index_handle{BlockHandle::NullBlockHandle()};
+
+  // Points to a (possibly empty) uncompression dictionary used for
+  // ZSTD decompression if the file version is 2.
+  BlockHandle uncompression_dict_handle{BlockHandle::NullBlockHandle()};
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);

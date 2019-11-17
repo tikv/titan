@@ -82,7 +82,7 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
     return DecodeInto(input, record);
   }
   UncompressionContext ctx(compression_);
-  UncompressionInfo info(ctx, UncompressionDict::GetEmptyDict(), compression_);
+  UncompressionInfo info(ctx, uncompression_dict_, compression_);
   Status s = Uncompress(info, input, buffer);
   if (!s.ok()) {
     return s;
@@ -276,7 +276,8 @@ Status BlobFileHeader::DecodeFrom(Slice* src) {
     return Status::Corruption(
         "Blob file header magic number missing or mismatched.");
   }
-  if (!GetFixed32(src, &version) || version != kVersion1) {
+  if (!GetFixed32(src, &version) ||
+      (version != kVersion1 && version != kVersion2)) {
     return Status::Corruption("Blob file header version missing or invalid.");
   }
   return Status::OK();
