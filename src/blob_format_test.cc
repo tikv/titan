@@ -136,7 +136,7 @@ TEST(BlobFormatTest, BlobCompressionZSTD) {
   ASSERT_EQ(record, decoded_record);
 }
 
-#endif
+#endif  // ZSTD
 
 }  // namespace titandb
 }  // namespace rocksdb
