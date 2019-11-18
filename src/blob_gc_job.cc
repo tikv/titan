@@ -520,12 +520,12 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       to_delete_files.append(std::to_string(builder.first->GetNumber()));
       handles.emplace_back(std::move(builder.first));
     }
-    ROCKS_LOG_BUFFER(
-        log_buffer_,
-        "[%s] InstallOutputBlobFiles failed. Delete GC output files: %s",
-        blob_gc_->column_family_handle()->GetName().c_str(),
-        to_delete_files.c_str());
-    s = blob_file_manager_->BatchDeleteFiles(handles);
+    Status status = blob_file_manager_->BatchDeleteFiles(handles);
+    ROCKS_LOG_BUFFER(log_buffer_,
+                     "[%s] InstallOutputBlobFiles failed. Delete GC output "
+                     "files: %s with status: %s",
+                     blob_gc_->column_family_handle()->GetName().c_str(),
+                     to_delete_files.c_str(), status.ToString().c_str());
   }
   return s;
 }
