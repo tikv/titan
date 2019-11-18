@@ -268,6 +268,10 @@ double BlobFileMeta::GetDiscardableRatio() const {
 void BlobFileHeader::EncodeTo(std::string* dst) const {
   PutFixed32(dst, kHeaderMagicNumber);
   PutFixed32(dst, version);
+
+  if (version == 2) {
+    PutFixed32(dst, flags);
+  }
 }
 
 Status BlobFileHeader::DecodeFrom(Slice* src) {
@@ -279,6 +283,11 @@ Status BlobFileHeader::DecodeFrom(Slice* src) {
   if (!GetFixed32(src, &version) ||
       (version != kVersion1 && version != kVersion2)) {
     return Status::Corruption("Blob file header version missing or invalid.");
+  }
+  if (version == 2) {
+    if (!GetFixed32(src, &flags) || flags & ~kHasUncompressionDictionary) {
+      return Status::Corruption("Blob file header flags missing or invalid.");
+    }
   }
   return Status::OK();
 }

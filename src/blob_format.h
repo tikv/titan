@@ -250,7 +250,7 @@ class BlobFileMeta {
   bool gc_mark_{false};
 };
 
-// Format of blob file header (8 bytes):
+// Format of blob file header for version 1 (8 bytes):
 //
 //    +--------------+---------+
 //    | magic number | version |
@@ -258,11 +258,16 @@ class BlobFileMeta {
 //    |   Fixed32    | Fixed32 |
 //    +--------------+---------+
 //
+// For version 2, there are another 4 bytes for flags:
+//
+//    +--------------+---------+---------+
+//    | magic number | version |  flags  |
+//    +--------------+---------+---------+
+//    |   Fixed32    | Fixed32 | Fixed32 |
+//    +--------------+---------+---------+
+//
 // The header is mean to be compatible with header of BlobDB blob files, except
 // we use a different magic number.
-//
-// If the version is 2, then the meta section includes a (possibly empty)
-// uncompression dictionary.
 struct BlobFileHeader {
   // The first 32bits from $(echo titandb/blob | sha1sum).
   static const uint32_t kHeaderMagicNumber = 0x2be0a614ul;
@@ -270,7 +275,11 @@ struct BlobFileHeader {
   static const uint32_t kVersion2 = 2;
   static const uint64_t kEncodedLength = 4 + 4;
 
+  // Flags:
+  static const uint32_t kHasUncompressionDictionary = 1 << 0;
+
   uint32_t version = kVersion1;
+  uint32_t flags = 0;
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
@@ -293,8 +302,8 @@ struct BlobFileFooter {
 
   BlockHandle meta_index_handle{BlockHandle::NullBlockHandle()};
 
-  // Points to a (possibly empty) uncompression dictionary used for
-  // ZSTD decompression if the file version is 2.
+  // Points to a uncompression dictionary (which is also pointed to by the meta
+  // index) when `kHasUncompressionDictionary` is set in the header.
   BlockHandle uncompression_dict_handle{BlockHandle::NullBlockHandle()};
 
   void EncodeTo(std::string* dst) const;
