@@ -1,0 +1,46 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "titan_build_file_cc_in",
+    srcs = glob(["util/titan_build_version.cc.in"]),
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "titan_build_version",
+    srcs = [
+        ":titan_build_file_cc_in",
+    ],
+    outs = [
+        "util/titan_build_version.cc",
+    ],
+    cmd = "GIT_DIR=./.git; " +
+          "GIT_SHA=$$(git rev-parse HEAD || echo 'titan.master'); " +
+          "sed -e s/@@GIT_SHA@@/$$GIT_SHA/ ./util/titan_build_version.cc.in >> $(@)",
+)
+
+cc_library(
+    name = "titan",
+    srcs = glob(
+        [
+            "src/*.cc",
+        ],
+        exclude = [
+            "src/*_test.cc",
+        ],
+    ) + [
+        ":titan_build_version",
+    ],
+    hdrs = glob([
+        "include/*/*.h",
+        "src/*.h",
+        "util/*.h",
+    ]),
+    includes = [
+        "include",
+        "util",
+    ],
+    deps = [
+        "@com_github_pingcap_rocksdb//:rocksdb",
+    ],
+)
