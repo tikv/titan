@@ -181,15 +181,23 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
   }
   // Sets up directories for base DB and Titan.
   s = env_->CreateDirIfMissing(dbname_);
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    return s;
+  }
   if (!db_options_.info_log) {
     s = CreateLoggerFromOptions(dbname_, db_options_, &db_options_.info_log);
-    if (!s.ok()) return s;
+    if (!s.ok()) {
+      return s;
+    }
   }
   s = env_->CreateDirIfMissing(dirname_);
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    return s;
+  }
   s = env_->LockFile(LockFileName(dirname_), &lock_);
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    return s;
+  }
 
   // Descriptors for initial DB open to get CF ids.
   std::vector<ColumnFamilyDescriptor> init_descs;
@@ -253,14 +261,18 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
     delete db_;
     db_ = nullptr;
   }
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    return s;
+  }
 
   if (stats_.get()) {
     stats_->Initialize(column_families);
   }
 
   s = blob_file_set_->Open(column_families);
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    return s;
+  }
 
   // Initialize GC thread pool.
   if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
