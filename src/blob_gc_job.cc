@@ -527,7 +527,8 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     // mistake.
     Status status = blob_file_manager_->BatchDeleteFiles(handles);
     if (!status.ok()) {
-      ROCKS_LOG_WARN(log_buffer_, "Delete GC output files[%s] failed: %s",
+      ROCKS_LOG_WARN(db_options_.info_log,
+                     "Delete GC output files[%s] failed: %s",
                      to_delete_files.c_str(), status.ToString().c_str());
     }
   }
