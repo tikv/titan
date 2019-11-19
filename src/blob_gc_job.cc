@@ -517,12 +517,19 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       to_delete_files.append(std::to_string(builder.first->GetNumber()));
       handles.emplace_back(std::move(builder.first));
     }
-    Status status = blob_file_manager_->BatchDeleteFiles(handles);
     ROCKS_LOG_BUFFER(log_buffer_,
                      "[%s] InstallOutputBlobFiles failed. Delete GC output "
-                     "files: %s with status: %s",
+                     "files: %s",
                      blob_gc_->column_family_handle()->GetName().c_str(),
+                     to_delete_files.c_str());
+    // Do not set status `s` here, cause it may override the non-okay-status of
+    // `s` so that in the outer funcation it will rewrite blob indexes to LSM by
+    // mistake.
+    Status status = blob_file_manager_->BatchDeleteFiles(handles);
+    if (!status.ok()) {
+      ROCKS_LOG_WARN(log_buffer_, "Delete GC output files[%s] failed: %s",
                      to_delete_files.c_str(), status.ToString().c_str());
+    }
   }
   return s;
 }
