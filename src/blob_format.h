@@ -16,7 +16,15 @@ namespace titandb {
 // [record head + record 2]
 // ...
 // [record head + record N]
+// [blob file meta block 1]
+// [blob file meta block 2]
+// ...
+// [blob file meta block M]
+// [blob file meta index]
 // [blob file footer]
+//
+// For now, the only kind of meta block is an optional uncompression dictionary
+// indicated by a flag in the file header.
 
 // Format of blob head (9 bytes):
 //
