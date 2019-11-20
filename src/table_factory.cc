@@ -1,5 +1,6 @@
 #include "table_factory.h"
 
+#include "db_impl.h"
 #include "table_builder.h"
 
 namespace rocksdb {
@@ -20,6 +21,9 @@ TableBuilder* TitanTableFactory::NewTableBuilder(
     WritableFileWriter* file) const {
   std::unique_ptr<TableBuilder> base_builder(
       base_factory_->NewTableBuilder(options, column_family_id, file));
+  if (!db_impl_->initialized()) {
+    return base_builder.release();
+  }
   TitanCFOptions cf_options = cf_options_;
   cf_options.blob_run_mode = blob_run_mode_.load();
   std::weak_ptr<BlobStorage> blob_storage;
