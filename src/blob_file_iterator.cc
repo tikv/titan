@@ -18,11 +18,11 @@ BlobFileIterator::~BlobFileIterator() {}
 
 bool BlobFileIterator::Init() {
   Slice slice;
-  char header_buf[BlobFileHeader::kEncodedLength];
+  char header_buf[BlobFileHeader::kMaxEncodedLength];
   // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
   // is only used for GC, we always set for_compaction to true.
-  status_ = file_->Read(0, BlobFileHeader::kEncodedLength, &slice, header_buf,
-                        true /*for_compaction*/);
+  status_ = file_->Read(0, BlobFileHeader::kMaxEncodedLength, &slice,
+                        header_buf, true /*for_compaction*/);
   if (!status_.ok()) {
     return false;
   }
@@ -31,6 +31,11 @@ bool BlobFileIterator::Init() {
   if (!status_.ok()) {
     return false;
   }
+
+  header_size_ = blob_file_header.version == BlobFileHeader::kVersion1
+                     ? BlobFileHeader::kMinEncodedLength
+                     : BlobFileHeader::kMaxEncodedLength;
+
   char footer_buf[BlobFileFooter::kEncodedLength];
   // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
   // is only used for GC, we always set for_compaction to true.
@@ -42,7 +47,7 @@ bool BlobFileIterator::Init() {
   status_ = blob_file_footer.DecodeFrom(&slice);
   end_of_blob_record_ = file_size_ - BlobFileFooter::kEncodedLength -
                         blob_file_footer.meta_index_handle.size();
-  assert(end_of_blob_record_ > BlobFileHeader::kEncodedLength);
+  assert(end_of_blob_record_ > BlobFileHeader::kMinEncodedLength);
   init_ = true;
   return true;
 }
@@ -50,7 +55,7 @@ bool BlobFileIterator::Init() {
 void BlobFileIterator::SeekToFirst() {
   if (!init_ && !Init()) return;
   status_ = Status::OK();
-  iterate_offset_ = BlobFileHeader::kEncodedLength;
+  iterate_offset_ = header_size_;
   PrefetchAndGet();
 }
 
@@ -78,7 +83,7 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
 
   uint64_t total_length = 0;
   FixedSlice<kRecordHeaderSize> header_buffer;
-  iterate_offset_ = BlobFileHeader::kEncodedLength;
+  iterate_offset_ = header_size_;
   for (; iterate_offset_ < offset; iterate_offset_ += total_length) {
     // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
     // is only used for GC, we always set for_compaction to true.

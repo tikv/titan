@@ -269,7 +269,7 @@ void BlobFileHeader::EncodeTo(std::string* dst) const {
   PutFixed32(dst, kHeaderMagicNumber);
   PutFixed32(dst, version);
 
-  if (version == 2) {
+  if (version == BlobFileHeader::kVersion2) {
     PutFixed32(dst, flags);
   }
 }
@@ -285,6 +285,7 @@ Status BlobFileHeader::DecodeFrom(Slice* src) {
     return Status::Corruption("Blob file header version missing or invalid.");
   }
   if (version == 2) {
+    // Check that no other flags are set
     if (!GetFixed32(src, &flags) || flags & ~kHasUncompressionDictionary) {
       return Status::Corruption("Blob file header flags missing or invalid.");
     }

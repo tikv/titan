@@ -184,12 +184,12 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   if (*selected) return Status::OK();
 
   // TODO: add do sample count metrics
-  auto records_size = file->file_size() - BlobFileHeader::kEncodedLength -
+  auto records_size = file->file_size() - BlobFileHeader::kMaxEncodedLength -
                       BlobFileFooter::kEncodedLength;
   Status s;
   uint64_t sample_size_window = static_cast<uint64_t>(
       records_size * blob_gc_->titan_cf_options().sample_file_size_ratio);
-  uint64_t sample_begin_offset = BlobFileHeader::kEncodedLength;
+  uint64_t sample_begin_offset = BlobFileHeader::kMaxEncodedLength;
   if (records_size != sample_size_window) {
     Random64 random64(records_size);
     sample_begin_offset += random64.Uniform(records_size - sample_size_window);
@@ -207,7 +207,7 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   // TODO(@DorianZheng) sample_begin_offset maybe out of data block size, need
   // more elegant solution
   if (iter.status().IsInvalidArgument()) {
-    iter.IterateForPrev(BlobFileHeader::kEncodedLength);
+    iter.IterateForPrev(BlobFileHeader::kMaxEncodedLength);
   }
   if (!iter.status().ok()) {
     s = iter.status();

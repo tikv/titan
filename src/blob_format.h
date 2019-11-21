@@ -34,7 +34,7 @@ namespace titandb {
 //    | Fixed32 | Fixed32 |    char     |
 //    +---------+---------+-------------+
 //
-const uint64_t kBlobHeaderSize = 8;
+const uint64_t kBlobHeaderSize = 12;
 const uint64_t kRecordHeaderSize = 9;
 const uint64_t kBlobFooterSize = BlockHandle::kMaxEncodedLength + 8 + 4;
 
@@ -281,12 +281,14 @@ struct BlobFileHeader {
   static const uint32_t kHeaderMagicNumber = 0x2be0a614ul;
   static const uint32_t kVersion1 = 1;
   static const uint32_t kVersion2 = 2;
-  static const uint64_t kEncodedLength = 4 + 4;
+
+  static const uint64_t kMinEncodedLength = 4 + 4;
+  static const uint64_t kMaxEncodedLength = 4 + 4 + 4;
 
   // Flags:
   static const uint32_t kHasUncompressionDictionary = 1 << 0;
 
-  uint32_t version = kVersion1;
+  uint32_t version = kVersion2;
   uint32_t flags = 0;
 
   void EncodeTo(std::string* dst) const;
