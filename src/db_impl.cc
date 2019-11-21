@@ -139,6 +139,7 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
   if (db_options_.statistics != nullptr) {
     stats_.reset(new TitanStats(db_options_.statistics.get()));
   }
+  blob_file_set_.reset(new BlobFileSet(db_options_, stats_.get()));
   blob_manager_.reset(new FileManager(this));
 }
 
