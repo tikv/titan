@@ -46,12 +46,18 @@ Status BlobFileSizeCollector::AddUserKey(const Slice& /* key */,
                                          const Slice& value, EntryType type,
                                          SequenceNumber /* seq */,
                                          uint64_t /* file_size */) {
-  if (type != kEntryBlobIndex) {
+  if (type != kEntryBlobIndex && type != kEntryMerge) {
     return Status::OK();
   }
 
-  BlobIndex index;
-  auto s = index.DecodeFrom(const_cast<Slice*>(&value));
+  Status s;
+  VersionedBlobIndex index;
+
+  if (type == kEntryMerge) {
+    s = index.DecodeFrom(const_cast<Slice *>(&value));
+  } else {
+    s = index.DecodeFromUnversioned(const_cast<Slice *>(&value));
+  }
   if (!s.ok()) {
     return s;
   }

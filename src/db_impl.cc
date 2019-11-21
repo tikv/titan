@@ -15,6 +15,7 @@
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc.h"
+#include "blob_index_merge_operator.h"
 #include "db_iter.h"
 #include "table_factory.h"
 #include "titan_build_version.h"
@@ -247,6 +248,8 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       // Add TableProperties for collecting statistics GC
       base_descs[i].options.table_properties_collector_factories.emplace_back(
           std::make_shared<BlobFileSizeCollectorFactory>());
+      base_descs[i].options.merge_operator.reset(
+          new BlobIndexMergeOperator(&mutex_, blob_file_set_.get(), cf_id));
     }
     handles->clear();
     s = db_->Close();
@@ -341,6 +344,7 @@ Status TitanDBImpl::CreateColumnFamilies(
   std::vector<ColumnFamilyDescriptor> base_descs;
   std::vector<std::shared_ptr<TableFactory>> base_table_factory;
   std::vector<std::shared_ptr<TitanTableFactory>> titan_table_factory;
+  std::vector<std::shared_ptr<BlobIndexMergeOperator>> merge_operators;
   for (auto& desc : descs) {
     ColumnFamilyOptions options = desc.options;
     // Replaces the provided table factory with TitanTableFactory.
@@ -351,6 +355,9 @@ Status TitanDBImpl::CreateColumnFamilies(
     options.table_factory = titan_table_factory.back();
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
+    merge_operators.emplace_back(std::make_shared<BlobIndexMergeOperator>(
+        &mutex_, blob_file_set_.get(), 0));
+    options.merge_operator = merge_operators.back();
     base_descs.emplace_back(desc.name, options);
   }
 
@@ -364,6 +371,7 @@ Status TitanDBImpl::CreateColumnFamilies(
       for (size_t i = 0; i < descs.size(); i++) {
         ColumnFamilyHandle* handle = (*handles)[i];
         uint32_t cf_id = handle->GetID();
+        merge_operators[i]->set_column_family_id(cf_id);
         column_families.emplace(cf_id, descs[i].options);
         cf_info_.emplace(
             cf_id,

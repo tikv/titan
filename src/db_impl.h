@@ -134,6 +134,10 @@ class TitanDBImpl : public TitanDB {
 
   void StartBackgroundTasks();
 
+  void PausePurging(bool pause) {
+    pause_purging_.store(pause, std::memory_order_relaxed);
+  }
+
   Status TEST_StartGC(uint32_t column_family_id);
   Status TEST_PurgeObsoleteFiles();
 
@@ -275,6 +279,10 @@ class TitanDBImpl : public TitanDB {
   int unscheduled_gc_ = 0;
   // REQUIRE: mutex_ held.
   int drop_cf_requests_ = 0;
+  // REQUIRE: mutex_ held.
+  uint32_t blob_gc_seqno_ = 0;
+
+  std::atomic_bool pause_purging_{false};
 
   std::atomic_bool shuting_down_{false};
 };

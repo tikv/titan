@@ -19,11 +19,12 @@ bool GetChar(Slice* src, unsigned char* value) {
 
 void BlobRecord::EncodeTo(std::string* dst) const {
   PutLengthPrefixedSlice(dst, key);
+  PutVarint64(dst, sequence);
   PutLengthPrefixedSlice(dst, value);
 }
 
 Status BlobRecord::DecodeFrom(Slice* src) {
-  if (!GetLengthPrefixedSlice(src, &key) ||
+  if (!GetLengthPrefixedSlice(src, &key) || !GetVarint64(src, &sequence) ||
       !GetLengthPrefixedSlice(src, &value)) {
     return Status::Corruption("BlobRecord");
   }
@@ -31,7 +32,8 @@ Status BlobRecord::DecodeFrom(Slice* src) {
 }
 
 bool operator==(const BlobRecord& lhs, const BlobRecord& rhs) {
-  return lhs.key == rhs.key && lhs.value == rhs.value;
+  return lhs.key == rhs.key && lhs.sequence == rhs.sequence &&
+         lhs.value == rhs.value;
 }
 
 void BlobEncoder::EncodeRecord(const BlobRecord& record) {
@@ -128,6 +130,54 @@ Status BlobIndex::DecodeFrom(Slice* src) {
 bool operator==(const BlobIndex& lhs, const BlobIndex& rhs) {
   return (lhs.file_number == rhs.file_number &&
           lhs.blob_handle == rhs.blob_handle);
+}
+
+void VersionedBlobIndex::EncodeTo(std::string* dst) const {
+  dst->push_back(kBlobRecord);
+  PutVarint64(dst, file_number);
+  blob_handle.EncodeTo(dst);
+  PutVarint64(dst, sequence);
+}
+
+void VersionedBlobIndex::EncodeToUnversioned(std::string* dst) const {
+  dst->push_back(kBlobRecord);
+  PutVarint64(dst, file_number);
+  blob_handle.EncodeTo(dst);
+}
+
+Status VersionedBlobIndex::DecodeFrom(Slice* src) {
+  unsigned char type;
+  if (!GetChar(src, &type) || type != kBlobRecord ||
+      !GetVarint64(src, &file_number)) {
+    return Status::Corruption("VersionedBlobIndex");
+  }
+  Status s = blob_handle.DecodeFrom(src);
+  if (!s.ok()) {
+    return Status::Corruption("VersionedBlobIndex", s.ToString());
+  }
+  if (!GetVarint64(src, &sequence)) {
+    return Status::Corruption("VersionedBlobIndex(sequence)");
+  }
+  return s;
+}
+
+Status VersionedBlobIndex::DecodeFromUnversioned(Slice* src) {
+  unsigned char type;
+  if (!GetChar(src, &type) || type != kBlobRecord ||
+      !GetVarint64(src, &file_number)) {
+    return Status::Corruption("VersionedBlobIndex");
+  }
+  Status s = blob_handle.DecodeFrom(src);
+  if (!s.ok()) {
+    return Status::Corruption("VersionedBlobIndex", s.ToString());
+  }
+  sequence = 0;
+  return s;
+}
+
+bool operator==(const VersionedBlobIndex& lhs, const VersionedBlobIndex& rhs) {
+  return (lhs.file_number == rhs.file_number &&
+          lhs.blob_handle == rhs.blob_handle && lhs.sequence == rhs.sequence);
 }
 
 void BlobFileMeta::EncodeTo(std::string* dst) const {

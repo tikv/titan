@@ -63,6 +63,10 @@ void BlobFileIterator::Next() {
 
 Slice BlobFileIterator::key() const { return cur_blob_record_.key; }
 
+SequenceNumber BlobFileIterator::sequence() const {
+  return cur_blob_record_.sequence;
+}
+
 Slice BlobFileIterator::value() const { return cur_blob_record_.value; }
 
 void BlobFileIterator::IterateForPrev(uint64_t offset) {
@@ -195,6 +199,11 @@ void BlobFileMergeIterator::Next() {
 Slice BlobFileMergeIterator::key() const {
   assert(current_ != nullptr);
   return current_->key();
+}
+
+SequenceNumber BlobFileMergeIterator::sequence() const {
+  assert(current_ != nullptr);
+  return current_->sequence();
 }
 
 Slice BlobFileMergeIterator::value() const {

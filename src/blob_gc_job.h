@@ -20,6 +20,13 @@ class BlobGCJob {
   BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
             const TitanDBOptions& titan_db_options, Env* env,
             const EnvOptions& env_options, BlobFileManager* blob_file_manager,
+            BlobFileSet* blob_file_set, LogBuffer* log_buffer, uint32_t seqno,
+            std::atomic_bool* pause_purging,
+            std::atomic_bool* shuting_down, TitanStats* stats);
+
+  BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
+            const TitanDBOptions& titan_db_options, Env* env,
+            const EnvOptions& env_options, BlobFileManager* blob_file_manager,
             BlobFileSet* blob_file_set, LogBuffer* log_buffer,
             std::atomic_bool* shuting_down, TitanStats* stats);
 
@@ -42,6 +49,13 @@ class BlobGCJob {
 
   void UpdateInternalOpStats();
 
+  enum RewriteOption {
+    kDefault = 0,
+    kMerge = 1,
+    kIngest = 2,
+    kFastIngest = 3,
+  } rewrite_opt_ = kMerge;
+
   BlobGC* blob_gc_;
   DB* base_db_;
   DBImpl* base_db_impl_;
@@ -56,9 +70,16 @@ class BlobGCJob {
   std::vector<std::pair<std::unique_ptr<BlobFileHandle>,
                         std::unique_ptr<BlobFileBuilder>>>
       blob_file_builders_;
+  // Default rewrite
   std::vector<std::pair<WriteBatch, GarbageCollectionWriteCallback>>
       rewrite_batches_;
+  // Rewrite by merge
+  std::vector<WriteBatch> rewrite_batches_without_callback_;
+  // Rewrite by ingestion
+  std::string ingestion_file_path_;
+  bool ingestion_file_ready_ = false;
 
+  std::atomic_bool* pause_purging_{nullptr};
   std::atomic_bool* shuting_down_{nullptr};
 
   TitanStats* stats_;

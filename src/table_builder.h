@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rocksdb/types.h"
+
 #include "blob_file_builder.h"
 #include "blob_file_manager.h"
 #include "blob_file_set.h"
@@ -49,7 +51,8 @@ class TitanTableBuilder : public TableBuilder {
 
   bool ok() const { return status().ok(); }
 
-  void AddBlob(const Slice& key, const Slice& value, std::string* index_value);
+  void AddBlob(const Slice& key, SequenceNumber sequence, const Slice& value,
+               std::string* index_value);
 
   bool ShouldMerge(const std::shared_ptr<BlobFileMeta>& file);
 

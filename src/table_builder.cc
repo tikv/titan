@@ -60,7 +60,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     // we write to blob file and insert index
     std::string index_value;
-    AddBlob(ikey.user_key, value, &index_value);
+    AddBlob(ikey.user_key, ikey.sequence, value, &index_value);
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
     if (ok()) {
@@ -88,7 +88,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       Status s = storage->Get(ReadOptions(), index, &record, &buffer);
       if (s.ok()) {
         std::string index_value;
-        AddBlob(ikey.user_key, record.value, &index_value);
+        AddBlob(ikey.user_key, ikey.sequence, record.value, &index_value);
         if (ok()) {
           std::string index_key;
           ikey.type = kTypeBlobIndex;
@@ -104,8 +104,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   }
 }
 
-void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
-                                std::string* index_value) {
+void TitanTableBuilder::AddBlob(const Slice& key, SequenceNumber sequence,
+                                const Slice& value, std::string* index_value) {
   if (!ok()) return;
   StopWatch write_sw(db_options_.env, stats_, BLOB_DB_BLOB_FILE_WRITE_MICROS);
 
@@ -128,6 +128,7 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
   BlobIndex index;
   BlobRecord record;
   record.key = key;
+  record.sequence = sequence;
   record.value = value;
   index.file_number = blob_handle_->GetNumber();
   blob_builder_->Add(record, &index.blob_handle);

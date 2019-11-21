@@ -107,10 +107,12 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     // Nothing to do
     ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
+    auto blob_gc_seqno = blob_gc_seqno_++;
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
                           env_options_, blob_manager_.get(),
-                          blob_file_set_.get(), log_buffer, &shuting_down_,
-                          stats_.get());
+                          blob_file_set_.get(), log_buffer, blob_gc_seqno,
+                          &pause_purging_,
+                          &shuting_down_, stats_.get());
     s = blob_gc_job.Prepare();
     if (s.ok()) {
       mutex_.Unlock();

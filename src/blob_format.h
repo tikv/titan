@@ -3,6 +3,7 @@
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
+#include "rocksdb/types.h"
 #include "table/format.h"
 #include "util.h"
 
@@ -40,12 +41,13 @@ const uint64_t kBlobFooterSize = BlockHandle::kMaxEncodedLength + 8 + 4;
 //
 struct BlobRecord {
   Slice key;
+  SequenceNumber sequence;
   Slice value;
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
 
-  size_t size() const { return key.size() + value.size(); }
+  size_t size() const { return key.size() + value.size() + 8; }
 
   friend bool operator==(const BlobRecord& lhs, const BlobRecord& rhs);
 };
@@ -126,6 +128,26 @@ struct BlobIndex {
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
+
+  friend bool operator==(const BlobIndex& lhs, const BlobIndex& rhs);
+};
+
+struct VersionedBlobIndex {
+  enum Type : unsigned char {
+    kBlobRecord = 1,
+  };
+  uint64_t file_number{0};
+  BlobHandle blob_handle;
+  SequenceNumber sequence;
+
+  void EncodeTo(std::string* dst) const;
+  void EncodeToUnversioned(std::string* dst) const;
+  Status DecodeFrom(Slice* src);
+  Status DecodeFromUnversioned(Slice* src);
+
+  std::string ToString() {
+    return std::to_string(file_number) + ", " + std::to_string(sequence);
+  }
 
   friend bool operator==(const BlobIndex& lhs, const BlobIndex& rhs);
 };

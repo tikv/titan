@@ -30,6 +30,7 @@ class BlobFileIterator {
   void SeekToFirst();
   void Next();
   Slice key() const;
+  SequenceNumber sequence() const;
   Slice value() const;
   Status status() const { return status_; }
 
@@ -84,6 +85,7 @@ class BlobFileMergeIterator {
   void SeekToFirst();
   void Next();
   Slice key() const;
+  SequenceNumber sequence() const;
   Slice value() const;
   Status status() const {
     if (current_ != nullptr && !current_->status().ok())

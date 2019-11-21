@@ -41,7 +41,7 @@ class BlobGCJobTest : public testing::Test {
     options_.env->CreateDirIfMissing(dbname_);
     options_.env->CreateDirIfMissing(options_.dirname);
   }
-  ~BlobGCJobTest() {}
+  ~BlobGCJobTest() { DestroyDB(); }
 
   void DisableMergeSmall() { options_.merge_small_file_threshold = 0; }
 
@@ -120,8 +120,9 @@ class BlobGCJobTest : public testing::Test {
   }
 
   void DestroyDB() {
-    Status s __attribute__((__unused__)) = db_->Close();
-    assert(s.ok());
+    if (!db_)
+      return;
+    ASSERT_OK(db_->Close());
     delete db_;
     db_ = nullptr;
   }

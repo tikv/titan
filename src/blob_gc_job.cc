@@ -7,6 +7,8 @@
 
 #include "blob_gc_job.h"
 
+#include "blob_file_size_collector.h"
+
 namespace rocksdb {
 namespace titandb {
 
@@ -77,19 +79,30 @@ BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
                      const EnvOptions& env_options,
                      BlobFileManager* blob_file_manager,
                      BlobFileSet* blob_file_set, LogBuffer* log_buffer,
-                     std::atomic_bool* shuting_down, TitanStats* stats)
-    : blob_gc_(blob_gc),
-      base_db_(db),
-      base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)),
-      mutex_(mutex),
-      db_options_(titan_db_options),
-      env_(env),
-      env_options_(env_options),
-      blob_file_manager_(blob_file_manager),
-      blob_file_set_(blob_file_set),
+                     uint32_t seqno, std::atomic_bool* pause_purging,
+                     std::atomic_bool* shuting_down,
+                     TitanStats* stats)
+    : blob_gc_(blob_gc), base_db_(db),
+      base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)), mutex_(mutex),
+      db_options_(titan_db_options), env_(env), env_options_(env_options),
+      blob_file_manager_(blob_file_manager), blob_file_set_(blob_file_set),
       log_buffer_(log_buffer),
-      shuting_down_(shuting_down),
-      stats_(stats) {}
+      ingestion_file_path_("/tmp/blob-index-ingest-" + std::to_string(seqno)),
+      pause_purging_(pause_purging),
+      shuting_down_(shuting_down), stats_(stats) {}
+
+BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
+                     const TitanDBOptions& titan_db_options, Env* env,
+                     const EnvOptions& env_options,
+                     BlobFileManager* blob_file_manager,
+                     BlobFileSet* blob_file_set, LogBuffer* log_buffer,
+                     std::atomic_bool* shuting_down, TitanStats* stats)
+    : blob_gc_(blob_gc), base_db_(db),
+      base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)), mutex_(mutex),
+      db_options_(titan_db_options), env_(env), env_options_(env_options),
+      blob_file_manager_(blob_file_manager), blob_file_set_(blob_file_set),
+      log_buffer_(log_buffer), ingestion_file_path_("/tmp/blob-index-ingest"),
+      shuting_down_(shuting_down), stats_(stats) {}
 
 BlobGCJob::~BlobGCJob() {
   if (log_buffer_) {
@@ -267,6 +280,16 @@ Status BlobGCJob::DoRunGC() {
 
   auto* cfh = blob_gc_->column_family_handle();
 
+  Options options;
+  options.table_properties_collector_factories.emplace_back(
+      std::make_shared<BlobFileSizeCollectorFactory>());
+  SstFileWriter blob_index_table(EnvOptions(), options, cfh);
+  uint32_t entry_count = 0;
+  if (rewrite_opt_ >= kIngest) {
+    s = blob_index_table.Open(ingestion_file_path_);
+    assert(s.ok());
+  }
+
   //  uint64_t drop_entry_num = 0;
   //  uint64_t drop_entry_size = 0;
   //  uint64_t total_entry_num = 0;
@@ -336,28 +359,51 @@ Status BlobGCJob::DoRunGC() {
 
     BlobRecord blob_record;
     blob_record.key = gc_iter->key();
+    blob_record.sequence = gc_iter->sequence();
     blob_record.value = gc_iter->value();
     // count written bytes for new blob record,
     // blob index's size is counted in `RewriteValidKeyToLSM`
     metrics_.bytes_written += blob_record.size();
 
-    BlobIndex new_blob_index;
+    VersionedBlobIndex new_blob_index;
     new_blob_index.file_number = blob_file_handle->GetNumber();
+    new_blob_index.sequence = gc_iter->sequence();
     blob_file_builder->Add(blob_record, &new_blob_index.blob_handle);
     std::string index_entry;
-    new_blob_index.EncodeTo(&index_entry);
 
-    // Store WriteBatch for rewriting new Key-Index pairs to LSM
-    GarbageCollectionWriteCallback callback(cfh, blob_record.key.ToString(),
-                                            std::move(blob_index));
-    callback.value = index_entry;
-    rewrite_batches_.emplace_back(
-        std::make_pair(WriteBatch(), std::move(callback)));
-    auto& wb = rewrite_batches_.back().first;
-    s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), blob_record.key,
-                                         index_entry);
+    if (rewrite_opt_ == kDefault) {
+      new_blob_index.EncodeToUnversioned(&index_entry);
+      // Store WriteBatch for rewriting new Key-Index pairs to LSM
+      GarbageCollectionWriteCallback callback(cfh, blob_record.key.ToString(),
+                                              std::move(blob_index));
+      callback.value = index_entry;
+      rewrite_batches_.emplace_back(
+          std::make_pair(WriteBatch(), std::move(callback)));
+      auto &wb = rewrite_batches_.back().first;
+      s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), blob_record.key,
+                                           index_entry);
+    } else if (rewrite_opt_ == kMerge) {
+      new_blob_index.EncodeTo(&index_entry);
+      rewrite_batches_without_callback_.emplace_back(WriteBatch());
+      auto &wb = rewrite_batches_without_callback_.back();
+      s = WriteBatchInternal::Merge(&wb, cfh->GetID(), blob_record.key,
+                                    index_entry);
+    } else { // kIngest / kFastIngest
+      new_blob_index.EncodeTo(&index_entry);
+      s = blob_index_table.Merge(blob_record.key, index_entry);
+      if (s.ok()) {
+        entry_count++;
+      }
+    }
     if (!s.ok()) {
       break;
+    }
+  }
+
+  if (s.ok() && rewrite_opt_ >= kIngest && entry_count > 0) {
+    s = blob_index_table.Finish();
+    if (s.ok()) {
+      ingestion_file_ready_ = true;
     }
   }
 
@@ -442,6 +488,14 @@ Status BlobGCJob::Finish() {
   {
     mutex_->Unlock();
     s = InstallOutputBlobFiles();
+    if (pause_purging_) {
+      pause_purging_->store(true);
+    }
+    mutex_->Lock();
+    if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
+      s = DeleteInputBlobFiles();
+    }
+    mutex_->Unlock();
     if (s.ok()) {
       s = RewriteValidKeyToLSM();
       if (!s.ok()) {
@@ -458,12 +512,11 @@ Status BlobGCJob::Finish() {
     }
     mutex_->Lock();
   }
+  if (pause_purging_) {
+    pause_purging_->store(false);
+  }
 
   // TODO(@DorianZheng) cal discardable size for new blob file
-
-  if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
-    s = DeleteInputBlobFiles();
-  }
 
   if (s.ok()) {
     UpdateInternalOpStats();
@@ -538,32 +591,76 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
   WriteOptions wo;
   wo.low_pri = true;
   wo.ignore_missing_column_families = true;
-  for (auto& write_batch : rewrite_batches_) {
-    if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
-      s = Status::Aborted("Column family drop");
+  switch (rewrite_opt_) {
+    case kDefault:
+      for (auto &write_batch : rewrite_batches_) {
+        if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
+          s = Status::Aborted("Column family drop");
+          break;
+        }
+        if (IsShutingDown()) {
+          s = Status::ShutdownInProgress();
+          break;
+        }
+        s = db_impl->WriteWithCallback(wo, &write_batch.first,
+                                      &write_batch.second);
+        if (s.ok()) {
+          // count written bytes for new blob index.
+          metrics_.bytes_written += write_batch.first.GetDataSize();
+          metrics_.gc_num_keys_relocated++;
+          metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
+          // Key is successfully written to LSM.
+        } else if (s.IsBusy()) {
+          metrics_.gc_num_keys_overwritten++;
+          metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
+          // The key is overwritten in the meanwhile. Drop the blob record.
+        } else {
+          // We hit an error.
+          break;
+        }
+        // count read bytes in write callback
+        metrics_.bytes_read += write_batch.second.read_bytes();
+      }
       break;
-    }
-    if (IsShutingDown()) {
-      s = Status::ShutdownInProgress();
+    case kMerge:
+      for (auto &write_batch : rewrite_batches_without_callback_) {
+        if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
+          s = Status::Aborted("Column family drop");
+          break;
+        }
+        if (IsShutingDown()) {
+          s = Status::ShutdownInProgress();
+          break;
+        }
+        s = db_impl->Write(wo, &write_batch);
+        if (s.ok()) {
+          // count written bytes for new blob index.
+          metrics_.bytes_written += write_batch.GetDataSize();
+          metrics_.gc_num_keys_relocated++;
+          // metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
+          // Key is successfully written to LSM.
+        } else if (s.IsBusy()) {
+          metrics_.gc_num_keys_overwritten++;
+          // metrics_.gc_bytes_overwritten +=
+          // write_batch.second.blob_record_size();
+          // The key is overwritten in the meanwhile. Drop the blob record.
+        } else {
+          // We hit an error.
+          break;
+        }
+        // count read bytes in write callback
+        // metrics_.bytes_read += write_batch.second.read_bytes();
+      }
       break;
-    }
-    s = db_impl->WriteWithCallback(wo, &write_batch.first, &write_batch.second);
-    if (s.ok()) {
-      // count written bytes for new blob index.
-      metrics_.bytes_written += write_batch.first.GetDataSize();
-      metrics_.gc_num_keys_relocated++;
-      metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
-      // Key is successfully written to LSM.
-    } else if (s.IsBusy()) {
-      metrics_.gc_num_keys_overwritten++;
-      metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
-      // The key is overwritten in the meanwhile. Drop the blob record.
-    } else {
-      // We hit an error.
+    case kIngest:
+    case kFastIngest:
+      if (ingestion_file_ready_) {
+        auto *cfh = blob_gc_->column_family_handle();
+        IngestExternalFileOptions ifo;
+        ifo.skip_memtable_check = (rewrite_opt_ == kFastIngest);
+        s = db_impl->IngestExternalFile(cfh, {ingestion_file_path_}, ifo);
+      }
       break;
-    }
-    // count read bytes in write callback
-    metrics_.bytes_read += write_batch.second.read_bytes();
   }
   if (s.IsBusy()) {
     s = Status::OK();
