@@ -85,7 +85,22 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     if (ShouldMerge(blob_file)) {
       BlobRecord record;
       PinnableSlice buffer;
-      Status s = storage->Get(ReadOptions(), index, &record, &buffer);
+      Status s;
+
+      auto it = merging_blobs_.find(index.file_number);
+      if (it == merging_blobs_.end()) {
+        std::unique_ptr<BlobFilePrefetcher> prefetcher;
+        s = storage->NewPrefetcher(index.file_number, &prefetcher);
+        if (s.ok()) {
+          it = merging_blobs_.emplace(index.file_number, std::move(prefetcher))
+                   .first;
+        }
+      }
+
+      if (s.ok()) {
+        s = it->second->Get(ReadOptions(), index.blob_handle, &record, &buffer);
+      }
+
       if (s.ok()) {
         std::string index_value;
         AddBlob(ikey.user_key, record.value, &index_value);
