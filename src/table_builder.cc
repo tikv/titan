@@ -34,12 +34,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     }
 
     BlobRecord record;
-    PinnableSlice buffer;
-
-    auto storage = blob_storage_.lock();
-    assert(storage != nullptr);
-    ReadOptions options;  // dummy option
-    Status get_status = storage->Get(options, index, &record, &buffer);
+    Status get_status = GetBlobRecord(index, &record);
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
     if (get_status.ok()) {
@@ -84,24 +79,9 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     auto blob_file = storage->FindFile(index.file_number).lock();
     if (ShouldMerge(blob_file)) {
       BlobRecord record;
-      PinnableSlice buffer;
-      Status s;
+      Status get_status = GetBlobRecord(index, &record);
 
-      auto it = merging_blobs_.find(index.file_number);
-      if (it == merging_blobs_.end()) {
-        std::unique_ptr<BlobFilePrefetcher> prefetcher;
-        s = storage->NewPrefetcher(index.file_number, &prefetcher);
-        if (s.ok()) {
-          it = merging_blobs_.emplace(index.file_number, std::move(prefetcher))
-                   .first;
-        }
-      }
-
-      if (s.ok()) {
-        s = it->second->Get(ReadOptions(), index.blob_handle, &record, &buffer);
-      }
-
-      if (s.ok()) {
+      if (get_status.ok()) {
         std::string index_value;
         AddBlob(ikey.user_key, record.value, &index_value);
         UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
@@ -279,6 +259,30 @@ void TitanTableBuilder::UpdateInternalOpStats() {
   if (blob_builder_ != nullptr) {
     AddStats(internal_op_stats, InternalOpStatsType::OUTPUT_FILE_NUM);
   }
+}
+
+Status TitanTableBuilder::GetBlobRecord(const BlobIndex& index,
+                                        BlobRecord* record) {
+  auto storage = blob_storage_.lock();
+  assert(storage != nullptr);
+  Status s;
+  PinnableSlice buffer;
+
+  auto it = input_file_prefetchers_.find(index.file_number);
+  if (it == input_file_prefetchers_.end()) {
+    std::unique_ptr<BlobFilePrefetcher> prefetcher;
+    s = storage->NewPrefetcher(index.file_number, &prefetcher);
+    if (s.ok()) {
+      it = input_file_prefetchers_
+               .emplace(index.file_number, std::move(prefetcher))
+               .first;
+    }
+  }
+
+  if (s.ok()) {
+    s = it->second->Get(ReadOptions(), index.blob_handle, record, &buffer);
+  }
+  return s;
 }
 
 }  // namespace titandb
