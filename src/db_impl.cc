@@ -139,7 +139,6 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
   if (db_options_.statistics != nullptr) {
     stats_.reset(new TitanStats(db_options_.statistics.get()));
   }
-  blob_file_set_.reset(new BlobFileSet(db_options_, stats_.get()));
   blob_manager_.reset(new FileManager(this));
 }
 
@@ -237,6 +236,10 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   if (!s.ok()) {
     return s;
   }
+  // Note that info log is initialized after `CreateLoggerFromOptions`,
+  // so new `BlobFileSet` here but not in constructor is to get a proper info
+  // log.
+  blob_file_set_.reset(new BlobFileSet(db_options_, stats_.get()));
   // Setup options.
   db_options_.listeners.emplace_back(std::make_shared<BaseDbListener>(this));
   // Descriptors for actually open DB.
