@@ -32,9 +32,7 @@ bool BlobFileIterator::Init() {
     return false;
   }
 
-  header_size_ = blob_file_header.version == BlobFileHeader::kVersion1
-                     ? BlobFileHeader::kMinEncodedLength
-                     : BlobFileHeader::kMaxEncodedLength;
+  header_size_ = blob_file_header.size();
 
   char footer_buf[BlobFileFooter::kEncodedLength];
   // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator

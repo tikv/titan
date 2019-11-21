@@ -184,6 +184,8 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
   if (*selected) return Status::OK();
 
   // TODO: add do sample count metrics
+  // `records_size` won't be accurate if the file is version 1, but this method
+  // is planned to be removed soon.
   auto records_size = file->file_size() - BlobFileHeader::kMaxEncodedLength -
                       BlobFileFooter::kEncodedLength;
   Status s;

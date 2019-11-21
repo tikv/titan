@@ -284,7 +284,7 @@ Status BlobFileHeader::DecodeFrom(Slice* src) {
       (version != kVersion1 && version != kVersion2)) {
     return Status::Corruption("Blob file header version missing or invalid.");
   }
-  if (version == 2) {
+  if (version == BlobFileHeader::kVersion2) {
     // Check that no other flags are set
     if (!GetFixed32(src, &flags) || flags & ~kHasUncompressionDictionary) {
       return Status::Corruption("Blob file header flags missing or invalid.");

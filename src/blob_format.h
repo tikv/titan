@@ -34,7 +34,7 @@ namespace titandb {
 //    | Fixed32 | Fixed32 |    char     |
 //    +---------+---------+-------------+
 //
-const uint64_t kBlobHeaderSize = 12;
+const uint64_t kBlobMaxHeaderSize = 12;
 const uint64_t kRecordHeaderSize = 9;
 const uint64_t kBlobFooterSize = BlockHandle::kMaxEncodedLength + 8 + 4;
 
@@ -233,7 +233,8 @@ class BlobFileMeta {
   void AddDiscardableSize(uint64_t _discardable_size);
   double GetDiscardableRatio() const;
   bool NoLiveData() {
-    return discardable_size_ == file_size_ - kBlobHeaderSize - kBlobFooterSize;
+    return discardable_size_ ==
+           file_size_ - kBlobMaxHeaderSize - kBlobFooterSize;
   }
   TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
 
@@ -290,6 +291,12 @@ struct BlobFileHeader {
 
   uint32_t version = kVersion2;
   uint32_t flags = 0;
+
+  uint64_t size() const {
+    return version == BlobFileHeader::kVersion1
+               ? BlobFileHeader::kMinEncodedLength
+               : BlobFileHeader::kMaxEncodedLength;
+  }
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
