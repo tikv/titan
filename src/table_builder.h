@@ -57,7 +57,8 @@ class TitanTableBuilder : public TableBuilder {
 
   void UpdateInternalOpStats();
 
-  Status GetBlobRecord(const BlobIndex& index, BlobRecord* record);
+  Status GetBlobRecord(const BlobIndex& index, BlobRecord* record,
+                       PinnableSlice* buffer);
 
   Status status_;
   uint32_t cf_id_;

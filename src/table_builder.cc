@@ -34,7 +34,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     }
 
     BlobRecord record;
-    Status get_status = GetBlobRecord(index, &record);
+    PinnableSlice buffer;
+    Status get_status = GetBlobRecord(index, &record, &buffer);
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
     if (get_status.ok()) {
@@ -79,7 +80,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     auto blob_file = storage->FindFile(index.file_number).lock();
     if (ShouldMerge(blob_file)) {
       BlobRecord record;
-      Status get_status = GetBlobRecord(index, &record);
+      PinnableSlice buffer;
+      Status get_status = GetBlobRecord(index, &record, &buffer);
 
       if (get_status.ok()) {
         std::string index_value;
@@ -262,15 +264,15 @@ void TitanTableBuilder::UpdateInternalOpStats() {
 }
 
 Status TitanTableBuilder::GetBlobRecord(const BlobIndex& index,
-                                        BlobRecord* record) {
-  auto storage = blob_storage_.lock();
-  assert(storage != nullptr);
+                                        BlobRecord* record,
+                                        PinnableSlice* buffer) {
   Status s;
-  PinnableSlice buffer;
 
   auto it = input_file_prefetchers_.find(index.file_number);
   if (it == input_file_prefetchers_.end()) {
     std::unique_ptr<BlobFilePrefetcher> prefetcher;
+    auto storage = blob_storage_.lock();
+    assert(storage != nullptr);
     s = storage->NewPrefetcher(index.file_number, &prefetcher);
     if (s.ok()) {
       it = input_file_prefetchers_
@@ -280,7 +282,7 @@ Status TitanTableBuilder::GetBlobRecord(const BlobIndex& index,
   }
 
   if (s.ok()) {
-    s = it->second->Get(ReadOptions(), index.blob_handle, record, &buffer);
+    s = it->second->Get(ReadOptions(), index.blob_handle, record, buffer);
   }
   return s;
 }
