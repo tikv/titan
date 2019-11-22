@@ -72,7 +72,7 @@ install:
       export SANITIZER_OPT="-DWITH_${SANITIZER}=ON";
       export TOOLS_OPT="-DWITH_TITAN_TOOLS=OFF";
     fi
- 
+
 script:
   - if [ -z "${FORMATTER}" ]; then
       bash scripts/travis-make.sh;
