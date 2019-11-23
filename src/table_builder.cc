@@ -83,6 +83,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       PinnableSlice buffer;
       Status get_status = GetBlobRecord(index, &record, &buffer);
 
+      // If not ok, write original blob index as compaction output without
+      // doing level merge.
       if (get_status.ok()) {
         std::string index_value;
         AddBlob(ikey.user_key, record.value, &index_value);
