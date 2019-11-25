@@ -158,9 +158,8 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}
-  explicit TitanCFOptions(const ColumnFamilyOptions&,
-                          const ImmutableTitanCFOptions&,
-                          const MutableTitanCFOptions&);
+  TitanCFOptions(const ColumnFamilyOptions&, const ImmutableTitanCFOptions&,
+                 const MutableTitanCFOptions&);
 
   TitanCFOptions& operator=(const ColumnFamilyOptions& options) {
     *dynamic_cast<ColumnFamilyOptions*>(this) = options;

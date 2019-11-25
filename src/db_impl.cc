@@ -175,114 +175,144 @@ Status TitanDBImpl::ValidateOptions(
 
 Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
                          std::vector<ColumnFamilyHandle*>* handles) {
+  if (handles == nullptr) {
+    return Status::InvalidArgument("handles must be non-null.");
+  }
+  Status s = OpenImpl(descs, handles);
+  // Cleanup after failure.
+  if (!s.ok()) {
+    if (handles->size() > 0) {
+      assert(db_ != nullptr);
+      for (ColumnFamilyHandle* cfh : *handles) {
+        Status destroy_handle_status = db_->DestroyColumnFamilyHandle(cfh);
+        if (!destroy_handle_status.ok()) {
+          ROCKS_LOG_ERROR(db_options_.info_log,
+                          "Failed to destroy CF handle after open failure: %s",
+                          destroy_handle_status.ToString().c_str());
+        }
+      }
+      handles->clear();
+    }
+    if (db_ != nullptr) {
+      Status close_status = db_->Close();
+      if (!close_status.ok()) {
+        ROCKS_LOG_ERROR(db_options_.info_log,
+                        "Failed to close base DB after open failure: %s",
+                        close_status.ToString().c_str());
+      }
+      db_ = nullptr;
+      db_impl_ = nullptr;
+    }
+    if (lock_) {
+      env_->UnlockFile(lock_);
+      lock_ = nullptr;
+    }
+  }
+  return s;
+}
+
+Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
+                             std::vector<ColumnFamilyHandle*>* handles) {
   Status s = ValidateOptions(db_options_, descs);
   if (!s.ok()) {
     return s;
   }
   // Sets up directories for base DB and Titan.
   s = env_->CreateDirIfMissing(dbname_);
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    return s;
+  }
   if (!db_options_.info_log) {
     s = CreateLoggerFromOptions(dbname_, db_options_, &db_options_.info_log);
-    if (!s.ok()) return s;
+    if (!s.ok()) {
+      return s;
+    }
   }
   s = env_->CreateDirIfMissing(dirname_);
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    return s;
+  }
   s = env_->LockFile(LockFileName(dirname_), &lock_);
-  if (!s.ok()) return s;
-
-  // Descriptors for initial DB open to get CF ids.
-  std::vector<ColumnFamilyDescriptor> init_descs;
-  // Descriptors for actually open DB.
-  std::vector<ColumnFamilyDescriptor> base_descs;
-  for (auto& desc : descs) {
-    init_descs.emplace_back(desc.name, desc.options);
-    base_descs.emplace_back(desc.name, desc.options);
+  if (!s.ok()) {
+    return s;
   }
-  std::map<uint32_t, TitanCFOptions> column_families;
-
-  // Opens the base DB first to collect the column families information
-  //
-  // Disable compaction at this point because we haven't add table properties
-  // collector. A compaction can generate a SST file without blob size table
-  // property. A later compaction after Titan DB open can cause crash because
-  // OnCompactionCompleted use table property to discover blob files generated
-  // by the compaction, and get confused by missing property.
-  //
-  // We also avoid flush here because we haven't replaced the table factory
-  // yet, but rocksdb may still flush if memtable is full. This is fine though,
-  // since values in memtable are raw values.
-  for (auto& desc : init_descs) {
-    desc.options.disable_auto_compactions = true;
-  }
-  db_options_.avoid_flush_during_recovery = true;
-  // Add EventListener to collect statistics for GC
-  db_options_.listeners.emplace_back(std::make_shared<BaseDbListener>(this));
   // Note that info log is initialized after `CreateLoggerFromOptions`,
   // so new `BlobFileSet` here but not in constructor is to get a proper info
   // log.
   blob_file_set_.reset(new BlobFileSet(db_options_, stats_.get()));
-
-  s = DB::Open(db_options_, dbname_, init_descs, handles, &db_);
-  if (s.ok()) {
-    for (size_t i = 0; i < descs.size(); i++) {
-      auto handle = (*handles)[i];
-      uint32_t cf_id = handle->GetID();
-      std::string cf_name = handle->GetName();
-      column_families.emplace(cf_id, descs[i].options);
-      db_->DestroyColumnFamilyHandle(handle);
-      // Replaces the provided table factory with TitanTableFactory.
-      // While we need to preserve original table_factory for GetOptions.
-      auto& base_table_factory = base_descs[i].options.table_factory;
-      assert(base_table_factory != nullptr);
-      auto titan_table_factory = std::make_shared<TitanTableFactory>(
-          db_options_, descs[i].options, blob_manager_, &mutex_,
-          blob_file_set_.get(), stats_.get());
-      cf_info_.emplace(cf_id,
-                       TitanColumnFamilyInfo(
-                           {cf_name, ImmutableTitanCFOptions(descs[i].options),
-                            MutableTitanCFOptions(descs[i].options),
-                            base_table_factory, titan_table_factory}));
-      base_descs[i].options.table_factory = titan_table_factory;
-      // Add TableProperties for collecting statistics GC
-      base_descs[i].options.table_properties_collector_factories.emplace_back(
-          std::make_shared<BlobFileSizeCollectorFactory>());
-    }
-    handles->clear();
-    s = db_->Close();
-    delete db_;
-    db_ = nullptr;
+  // Setup options.
+  db_options_.listeners.emplace_back(std::make_shared<BaseDbListener>(this));
+  // Descriptors for actually open DB.
+  std::vector<ColumnFamilyDescriptor> base_descs;
+  std::vector<std::shared_ptr<TitanTableFactory>> titan_table_factories;
+  for (auto& desc : descs) {
+    base_descs.emplace_back(desc.name, desc.options);
+    ColumnFamilyOptions& cf_opts = base_descs.back().options;
+    // Disable compactions before everything is initialized.
+    cf_opts.disable_auto_compactions = true;
+    cf_opts.table_properties_collector_factories.emplace_back(
+        std::make_shared<BlobFileSizeCollectorFactory>());
+    titan_table_factories.push_back(std::make_shared<TitanTableFactory>(
+        db_options_, desc.options, this, blob_manager_, &mutex_,
+        blob_file_set_.get(), stats_.get()));
+    cf_opts.table_factory = titan_table_factories.back();
   }
-  if (!s.ok()) return s;
-
-  if (stats_.get()) {
-    stats_->Initialize(column_families);
-  }
-
-  s = blob_file_set_->Open(column_families);
-  if (!s.ok()) return s;
-
   // Initialize GC thread pool.
   if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
     env_->IncBackgroundThreadsIfNeeded(db_options_.max_background_gc,
                                        Env::Priority::BOTTOM);
   }
-
+  // Open base DB.
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
-  if (s.ok()) {
-    db_impl_ = reinterpret_cast<DBImpl*>(db_->GetRootDB());
-    ROCKS_LOG_INFO(db_options_.info_log, "Titan DB open.");
-    ROCKS_LOG_HEADER(db_options_.info_log, "Titan git sha: %s",
-                     titan_build_git_sha);
-    db_options_.Dump(db_options_.info_log.get());
-    for (auto& desc : descs) {
-      ROCKS_LOG_HEADER(db_options_.info_log,
-                       "Column family [%s], options:", desc.name.c_str());
-      desc.options.Dump(db_options_.info_log.get());
+  if (!s.ok()) {
+    db_ = nullptr;
+    handles->clear();
+    return s;
+  }
+  db_impl_ = reinterpret_cast<DBImpl*>(db_->GetRootDB());
+  assert(db_ != nullptr);
+  assert(handles->size() == descs.size());
+  std::map<uint32_t, TitanCFOptions> column_families;
+  std::vector<ColumnFamilyHandle*> cf_with_compaction;
+  for (size_t i = 0; i < descs.size(); i++) {
+    cf_info_.emplace((*handles)[i]->GetID(),
+                     TitanColumnFamilyInfo(
+                         {(*handles)[i]->GetName(),
+                          ImmutableTitanCFOptions(descs[i].options),
+                          MutableTitanCFOptions(descs[i].options),
+                          descs[i].options.table_factory /*base_table_factory*/,
+                          titan_table_factories[i]}));
+    column_families[(*handles)[i]->GetID()] = descs[i].options;
+    if (!descs[i].options.disable_auto_compactions) {
+      cf_with_compaction.push_back((*handles)[i]);
     }
-  } else {
-    ROCKS_LOG_ERROR(db_options_.info_log, "Titan DB open failed: %s",
-                    s.ToString().c_str());
+  }
+  // Initialize Titan internals.
+  if (stats_ != nullptr) {
+    stats_->Initialize(column_families);
+  }
+  s = blob_file_set_->Open(column_families);
+  if (!s.ok()) {
+    return s;
+  }
+  TEST_SYNC_POINT_CALLBACK("TitanDBImpl::OpenImpl:BeforeInitialized", db_);
+  // Initialization done.
+  initialized_ = true;
+  // Enable compaction and background tasks after initilization.
+  s = db_->EnableAutoCompaction(cf_with_compaction);
+  if (!s.ok()) {
+    return s;
+  }
+  StartBackgroundTasks();
+  // Dump options.
+  ROCKS_LOG_INFO(db_options_.info_log, "Titan DB open.");
+  ROCKS_LOG_HEADER(db_options_.info_log, "Titan git sha: %s",
+                   titan_build_git_sha);
+  db_options_.Dump(db_options_.info_log.get());
+  for (auto& desc : descs) {
+    ROCKS_LOG_HEADER(db_options_.info_log,
+                     "Column family [%s], options:", desc.name.c_str());
+    desc.options.Dump(db_options_.info_log.get());
   }
   return s;
 }
@@ -346,8 +376,8 @@ Status TitanDBImpl::CreateColumnFamilies(
     // Replaces the provided table factory with TitanTableFactory.
     base_table_factory.emplace_back(options.table_factory);
     titan_table_factory.emplace_back(std::make_shared<TitanTableFactory>(
-        db_options_, desc.options, blob_manager_, &mutex_, blob_file_set_.get(),
-        stats_.get()));
+        db_options_, desc.options, this, blob_manager_, &mutex_,
+        blob_file_set_.get(), stats_.get()));
     options.table_factory = titan_table_factory.back();
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
@@ -1015,6 +1045,11 @@ bool TitanDBImpl::GetIntProperty(ColumnFamilyHandle* column_family,
 }
 
 void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
+  TEST_SYNC_POINT("TitanDBImpl::OnFlushCompleted:Begin");
+  if (!initialized()) {
+    assert(false);
+    return;
+  }
   const auto& tps = flush_job_info.table_properties;
   auto ucp_iter = tps.user_collected_properties.find(
       BlobFileSizeCollector::kPropertiesName);
@@ -1068,6 +1103,11 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
 
 void TitanDBImpl::OnCompactionCompleted(
     const CompactionJobInfo& compaction_job_info) {
+  TEST_SYNC_POINT("TitanDBImpl::OnCompactionCompleted:Begin");
+  if (!initialized()) {
+    assert(false);
+    return;
+  }
   if (!compaction_job_info.status.ok()) {
     // TODO: Clean up blob file generated by the failed compaction.
     return;
