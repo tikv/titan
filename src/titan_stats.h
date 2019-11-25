@@ -168,7 +168,7 @@ class TitanStats : public Statistics {
   // created after DB open.
   Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options) {
     for (auto& opts : cf_options) {
-      internal_stats_[opts.first] = NewTitanInternalStats(opts.second);
+      internal_stats_[opts.first] = std::make_shared<TitanInternalStats>();
     }
     return Status::OK();
   }
@@ -279,11 +279,6 @@ class TitanStats : public Statistics {
       tickers_;
   std::array<HistogramImpl, INTERNAL_HISTOGRAM_ENUM_MAX - HISTOGRAM_ENUM_MAX>
       histograms_;
-
-  std::shared_ptr<TitanInternalStats> NewTitanInternalStats(
-      TitanCFOptions& opts) {
-    return std::make_shared<TitanInternalStats>();
-  }
 };
 
 // Utility functions for Titan ticker and histogram stats types
