@@ -97,20 +97,22 @@ BlobGCJob::~BlobGCJob() {
     LogFlush(db_options_.info_log.get());
   }
   // flush metrics
-  RecordTick(stats_, BLOB_DB_BYTES_READ, metrics_.bytes_read);
-  RecordTick(stats_, BLOB_DB_BYTES_WRITTEN, metrics_.bytes_written);
-  RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_OVERWRITTEN,
+  RecordTick(statistics(stats_), BLOB_DB_BYTES_READ, metrics_.bytes_read);
+  RecordTick(statistics(stats_), BLOB_DB_BYTES_WRITTEN, metrics_.bytes_written);
+  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_KEYS_OVERWRITTEN,
              metrics_.gc_num_keys_overwritten);
-  RecordTick(stats_, BLOB_DB_GC_BYTES_OVERWRITTEN,
+  RecordTick(statistics(stats_), BLOB_DB_GC_BYTES_OVERWRITTEN,
              metrics_.gc_bytes_overwritten);
-  RecordTick(stats_, BLOB_DB_GC_NUM_KEYS_RELOCATED,
+  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_KEYS_RELOCATED,
              metrics_.gc_num_keys_relocated);
-  RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED, metrics_.gc_bytes_relocated);
-  RecordTick(stats_, BLOB_DB_GC_NUM_NEW_FILES, metrics_.gc_num_new_files);
-  RecordTick(stats_, BLOB_DB_GC_NUM_FILES, metrics_.gc_num_files);
-  RecordTick(stats_, TitanStats::GC_DISCARDABLE, metrics_.gc_discardable);
-  RecordTick(stats_, TitanStats::GC_SMALL_FILE, metrics_.gc_small_file);
-  RecordTick(stats_, TitanStats::GC_SAMPLE, metrics_.gc_sample);
+  RecordTick(statistics(stats_), BLOB_DB_GC_BYTES_RELOCATED,
+             metrics_.gc_bytes_relocated);
+  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_NEW_FILES,
+             metrics_.gc_num_new_files);
+  RecordTick(statistics(stats_), BLOB_DB_GC_NUM_FILES, metrics_.gc_num_files);
+  RecordTick(statistics(stats_), GC_DISCARDABLE, metrics_.gc_discardable);
+  RecordTick(statistics(stats_), GC_SMALL_FILE, metrics_.gc_small_file);
+  RecordTick(statistics(stats_), GC_SAMPLE, metrics_.gc_sample);
 }
 
 Status BlobGCJob::Prepare() {
@@ -494,7 +496,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
           0, 0, builder.second->GetSmallestKey(),
           builder.second->GetLargestKey());
       file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
-      RecordInHistogram(stats_, TitanStats::GC_OUTPUT_FILE_SIZE,
+      RecordInHistogram(statistics(stats_), GC_OUTPUT_FILE_SIZE,
                         file->file_size());
       if (!tmp.empty()) {
         tmp.append(" ");
@@ -600,7 +602,7 @@ Status BlobGCJob::DeleteInputBlobFiles() {
                    Slice(file->smallest_key()).ToString(true).c_str(),
                    Slice(file->largest_key()).ToString(true).c_str());
     metrics_.gc_num_files++;
-    RecordInHistogram(stats_, TitanStats::GC_INPUT_FILE_SIZE,
+    RecordInHistogram(statistics(stats_), GC_INPUT_FILE_SIZE,
                       file->file_size());
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
   }

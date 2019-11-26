@@ -72,7 +72,7 @@ void TitanDBImpl::BackgroundCallGC() {
 Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
                                  uint32_t column_family_id) {
   mutex_.AssertHeld();
-  StopWatch gc_sw(env_, stats_.get(), BLOB_DB_GC_MICROS);
+  StopWatch gc_sw(env_, statistics(stats_.get()), BLOB_DB_GC_MICROS);
 
   std::unique_ptr<BlobGC> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;
@@ -125,7 +125,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     if (blob_gc->trigger_next() &&
         (bg_gc_scheduled_ - 1 + gc_queue_.size() <
          2 * static_cast<uint32_t>(db_options_.max_background_gc))) {
-      RecordTick(stats_.get(), TitanStats::GC_TRIGGER_NEXT, 1);
+      RecordTick(statistics(stats_.get()), GC_TRIGGER_NEXT, 1);
       // There is still data remained to be GCed
       // and the queue is not overwhelmed
       // then put this cf to GC queue for next GC
@@ -134,11 +134,11 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
   }
 
   if (s.ok()) {
-    RecordTick(stats_.get(), TitanStats::GC_SUCCESS, 1);
+    RecordTick(statistics(stats_.get()), GC_SUCCESS, 1);
     // Done
   } else {
     SetBGError(s);
-    RecordTick(stats_.get(), TitanStats::GC_FAIL, 1);
+    RecordTick(statistics(stats_.get()), GC_FAIL, 1);
     ROCKS_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
                    s.ToString().c_str());
   }

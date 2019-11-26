@@ -46,36 +46,36 @@ class TitanDBIterator : public Iterator {
   void SeekToFirst() override {
     iter_->SeekToFirst();
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
-      RecordTick(stats_, BLOB_DB_NUM_SEEK);
+      RecordTick(statistics(stats_), BLOB_DB_NUM_SEEK);
     }
   }
 
   void SeekToLast() override {
     iter_->SeekToLast();
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
-      RecordTick(stats_, BLOB_DB_NUM_SEEK);
+      RecordTick(statistics(stats_), BLOB_DB_NUM_SEEK);
     }
   }
 
   void Seek(const Slice& target) override {
     iter_->Seek(target);
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
-      RecordTick(stats_, BLOB_DB_NUM_SEEK);
+      RecordTick(statistics(stats_), BLOB_DB_NUM_SEEK);
     }
   }
 
   void SeekForPrev(const Slice& target) override {
     iter_->SeekForPrev(target);
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, stats_, BLOB_DB_SEEK_MICROS);
+      StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
       GetBlobValue();
-      RecordTick(stats_, BLOB_DB_NUM_SEEK);
+      RecordTick(statistics(stats_), BLOB_DB_NUM_SEEK);
     }
   }
 
@@ -83,9 +83,9 @@ class TitanDBIterator : public Iterator {
     assert(Valid());
     iter_->Next();
     if (ShouldGetBlobValue()) {
-      StopWatch next_sw(env_, stats_, BLOB_DB_NEXT_MICROS);
+      StopWatch next_sw(env_, statistics(stats_), BLOB_DB_NEXT_MICROS);
       GetBlobValue();
-      RecordTick(stats_, BLOB_DB_NUM_NEXT);
+      RecordTick(statistics(stats_), BLOB_DB_NUM_NEXT);
     }
   }
 
@@ -93,9 +93,9 @@ class TitanDBIterator : public Iterator {
     assert(Valid());
     iter_->Prev();
     if (ShouldGetBlobValue()) {
-      StopWatch prev_sw(env_, stats_, BLOB_DB_PREV_MICROS);
+      StopWatch prev_sw(env_, statistics(stats_), BLOB_DB_PREV_MICROS);
       GetBlobValue();
-      RecordTick(stats_, BLOB_DB_NUM_PREV);
+      RecordTick(statistics(stats_), BLOB_DB_NUM_PREV);
     }
   }
 
