@@ -97,6 +97,11 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
           base_builder_->Add(index_key, index_value);
           return;
         }
+      } else {
+        ++error_read_cnt_;
+        ROCKS_LOG_DEBUG(db_options_.info_log,
+                        "Read file %" PRIu64 " error during level merge: %s",
+                        index.file_number, get_status.ToString().c_str());
       }
     }
     base_builder_->Add(key, value);
@@ -194,6 +199,11 @@ Status TitanTableBuilder::Finish() {
                     status_.ToString().c_str());
   }
   UpdateInternalOpStats();
+  if (error_read_cnt_ > 0) {
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "Read file error %" PRIu64 " times during level merge",
+                    error_read_cnt_);
+  }
   return status();
 }
 

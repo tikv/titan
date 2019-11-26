@@ -88,6 +88,7 @@ class TitanTableBuilder : public TableBuilder {
   uint64_t bytes_written_ = 0;
   uint64_t io_bytes_read_ = 0;
   uint64_t io_bytes_written_ = 0;
+  uint64_t error_read_cnt_ = 0;
 };
 
 }  // namespace titandb
