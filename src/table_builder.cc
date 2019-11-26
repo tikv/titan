@@ -35,11 +35,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
 
     BlobRecord record;
     PinnableSlice buffer;
-
-    auto storage = blob_storage_.lock();
-    assert(storage != nullptr);
-    ReadOptions options;  // dummy option
-    Status get_status = storage->Get(options, index, &record, &buffer);
+    Status get_status = GetBlobRecord(index, &record, &buffer);
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
     if (get_status.ok()) {
@@ -85,8 +81,11 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     if (ShouldMerge(blob_file)) {
       BlobRecord record;
       PinnableSlice buffer;
-      Status s = storage->Get(ReadOptions(), index, &record, &buffer);
-      if (s.ok()) {
+      Status get_status = GetBlobRecord(index, &record, &buffer);
+
+      // If not ok, write original blob index as compaction output without
+      // doing level merge.
+      if (get_status.ok()) {
         std::string index_value;
         AddBlob(ikey.user_key, record.value, &index_value);
         UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
@@ -98,6 +97,11 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
           base_builder_->Add(index_key, index_value);
           return;
         }
+      } else {
+        ++error_read_cnt_;
+        ROCKS_LOG_DEBUG(db_options_.info_log,
+                        "Read file %" PRIu64 " error during level merge: %s",
+                        index.file_number, get_status.ToString().c_str());
       }
     }
     base_builder_->Add(key, value);
@@ -195,6 +199,11 @@ Status TitanTableBuilder::Finish() {
                     status_.ToString().c_str());
   }
   UpdateInternalOpStats();
+  if (error_read_cnt_ > 0) {
+    ROCKS_LOG_ERROR(db_options_.info_log,
+                    "Read file error %" PRIu64 " times during level merge",
+                    error_read_cnt_);
+  }
   return status();
 }
 
@@ -264,6 +273,30 @@ void TitanTableBuilder::UpdateInternalOpStats() {
   if (blob_builder_ != nullptr) {
     AddStats(internal_op_stats, InternalOpStatsType::OUTPUT_FILE_NUM);
   }
+}
+
+Status TitanTableBuilder::GetBlobRecord(const BlobIndex& index,
+                                        BlobRecord* record,
+                                        PinnableSlice* buffer) {
+  Status s;
+
+  auto it = input_file_prefetchers_.find(index.file_number);
+  if (it == input_file_prefetchers_.end()) {
+    std::unique_ptr<BlobFilePrefetcher> prefetcher;
+    auto storage = blob_storage_.lock();
+    assert(storage != nullptr);
+    s = storage->NewPrefetcher(index.file_number, &prefetcher);
+    if (s.ok()) {
+      it = input_file_prefetchers_
+               .emplace(index.file_number, std::move(prefetcher))
+               .first;
+    }
+  }
+
+  if (s.ok()) {
+    s = it->second->Get(ReadOptions(), index.blob_handle, record, buffer);
+  }
+  return s;
 }
 
 }  // namespace titandb
