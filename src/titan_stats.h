@@ -161,11 +161,6 @@ enum HistogramType : uint32_t {
   TITAN_HISTOGRAM_ENUM_MAX,
 };
 
-std::shared_ptr<Statistics> CreateTitanStatistics() {
-  return std::make_shared<
-      StatisticsImpl<TITAN_TICKER_ENUM_MAX, TITAN_HISTOGRAM_ENUM_MAX>>(nullptr);
-}
-
 class TitanStats {
  public:
   TitanStats(Statistics* stats) : stats_(stats) {}
