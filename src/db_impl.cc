@@ -137,6 +137,7 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
   }
   dirname_ = db_options_.dirname;
   if (db_options_.statistics != nullptr) {
+    db_options_.statistics = CreateDBStatistics<TITAN_TICKER_ENUM_MAX, TITAN_HISTOGRAM_ENUM_MAX>();
     stats_.reset(new TitanStats(db_options_.statistics.get()));
   }
   blob_manager_.reset(new FileManager(this));
