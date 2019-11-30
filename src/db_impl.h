@@ -275,8 +275,6 @@ class TitanDBImpl : public TitanDB {
   int unscheduled_gc_ = 0;
   // REQUIRE: mutex_ held.
   int drop_cf_requests_ = 0;
-  // REQUIRE: mutex_ held.
-  uint32_t blob_gc_seqno_ = 0;
 
   std::atomic_bool shuting_down_{false};
 };

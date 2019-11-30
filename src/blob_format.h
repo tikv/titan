@@ -146,6 +146,9 @@ struct MergeBlobIndex : public BlobIndex {
   bool operator==(const MergeBlobIndex &rhs) const;
 };
 
+// NO.merge
+std::string MergeFileName(const std::string &blobdirname, uint64_t number);
+
 // Format of blob file meta (not fixed size):
 //
 //    +-------------+-----------+--------------+------------+

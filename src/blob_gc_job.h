@@ -20,12 +20,6 @@ class BlobGCJob {
   BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
             const TitanDBOptions& titan_db_options, Env* env,
             const EnvOptions& env_options, BlobFileManager* blob_file_manager,
-            BlobFileSet* blob_file_set, LogBuffer* log_buffer, uint32_t seqno,
-            std::atomic_bool* shuting_down, TitanStats* stats);
-
-  BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
-            const TitanDBOptions& titan_db_options, Env* env,
-            const EnvOptions& env_options, BlobFileManager* blob_file_manager,
             BlobFileSet* blob_file_set, LogBuffer* log_buffer,
             std::atomic_bool* shuting_down, TitanStats* stats);
 
@@ -75,7 +69,7 @@ class BlobGCJob {
   // Rewrite by merge
   std::vector<WriteBatch> rewrite_batches_without_callback_;
   // Rewrite by ingestion
-  std::string ingestion_file_path_;
+  std::string merge_file_name_;
   bool ingestion_file_ready_ = false;
 
   std::atomic_bool* shuting_down_{nullptr};

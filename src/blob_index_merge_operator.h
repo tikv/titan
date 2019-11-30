@@ -83,7 +83,6 @@ public:
                          const std::deque<Slice>& operand_list,
                          std::string* new_value,
                          Logger* logger) const override {
-    // std::cout << "PartialMergeMulti" << std::endl;
     return false;
   }
 

@@ -79,27 +79,14 @@ BlobGCJob::BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
                      const EnvOptions &env_options,
                      BlobFileManager *blob_file_manager,
                      BlobFileSet *blob_file_set, LogBuffer *log_buffer,
-                     uint32_t seqno, std::atomic_bool *shuting_down,
-                     TitanStats *stats)
+                     std::atomic_bool *shuting_down, TitanStats *stats)
     : blob_gc_(blob_gc), base_db_(db),
       base_db_impl_(reinterpret_cast<DBImpl *>(base_db_)), mutex_(mutex),
       db_options_(titan_db_options), env_(env), env_options_(env_options),
       blob_file_manager_(blob_file_manager), blob_file_set_(blob_file_set),
       log_buffer_(log_buffer),
-      ingestion_file_path_("/tmp/blob-index-ingest-" + std::to_string(seqno)),
-      shuting_down_(shuting_down), stats_(stats) {}
-
-BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
-                     const TitanDBOptions& titan_db_options, Env* env,
-                     const EnvOptions& env_options,
-                     BlobFileManager* blob_file_manager,
-                     BlobFileSet* blob_file_set, LogBuffer* log_buffer,
-                     std::atomic_bool* shuting_down, TitanStats* stats)
-    : blob_gc_(blob_gc), base_db_(db),
-      base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)), mutex_(mutex),
-      db_options_(titan_db_options), env_(env), env_options_(env_options),
-      blob_file_manager_(blob_file_manager), blob_file_set_(blob_file_set),
-      log_buffer_(log_buffer), ingestion_file_path_("/tmp/blob-index-ingest"),
+      merge_file_name_(MergeFileName(titan_db_options.dirname,
+                                     blob_gc->new_merge_file_number())),
       shuting_down_(shuting_down), stats_(stats) {}
 
 BlobGCJob::~BlobGCJob() {
@@ -284,7 +271,7 @@ Status BlobGCJob::DoRunGC() {
   SstFileWriter blob_index_table(EnvOptions(), options, cfh);
   uint32_t entry_count = 0;
   if (rewrite_opt_ >= kIngest) {
-    s = blob_index_table.Open(ingestion_file_path_);
+    s = blob_index_table.Open(merge_file_name_);
     assert(s.ok());
     ingestion_file_ready_ = false;
   }
@@ -584,6 +571,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
   WriteOptions wo;
   wo.low_pri = true;
   wo.ignore_missing_column_families = true;
+  // @TODO(tabokie): fix statistics here.
   switch (rewrite_opt_) {
     case kDefault:
       for (auto &write_batch : rewrite_batches_) {
@@ -651,7 +639,9 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
         auto *cfh = blob_gc_->column_family_handle();
         IngestExternalFileOptions ifo;
         ifo.skip_memtable_check = (rewrite_opt_ == kFastIngest);
-        s = db_impl->IngestExternalFile(cfh, {ingestion_file_path_}, ifo);
+        s = db_impl->IngestExternalFile(cfh, {merge_file_name_}, ifo);
+      } else {
+        s = Status::Corruption("External file not ready for GC.");
       }
       break;
   }

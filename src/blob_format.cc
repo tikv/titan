@@ -162,6 +162,14 @@ bool MergeBlobIndex::operator==(const MergeBlobIndex &rhs) const {
           BlobIndex::operator==(rhs));
 }
 
+std::string MergeFileName(const std::string &dirname, uint64_t number) {
+  assert(number > 0);
+  char buf[100];
+  snprintf(buf, sizeof(buf), "/%06llu.%s",
+           static_cast<unsigned long long>(number), "merge");
+  return dirname + buf;
+}
+
 void BlobFileMeta::EncodeTo(std::string* dst) const {
   PutVarint64(dst, file_number_);
   PutVarint64(dst, file_size_);
