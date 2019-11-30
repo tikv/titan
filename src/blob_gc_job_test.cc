@@ -451,6 +451,7 @@ TEST_F(BlobGCJobTest, PurgeBlobs) {
 
   db_->ReleaseSnapshot(snap4);
   RunGC(false);
+  // @TODO(tabokie): failed as 1
   CheckBlobNumber(3);
 
   db_->ReleaseSnapshot(snap5);

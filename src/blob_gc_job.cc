@@ -74,21 +74,19 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
   uint64_t read_bytes_;
 };
 
-BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
-                     const TitanDBOptions& titan_db_options, Env* env,
-                     const EnvOptions& env_options,
-                     BlobFileManager* blob_file_manager,
-                     BlobFileSet* blob_file_set, LogBuffer* log_buffer,
-                     uint32_t seqno, std::atomic_bool* pause_purging,
-                     std::atomic_bool* shuting_down,
-                     TitanStats* stats)
+BlobGCJob::BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
+                     const TitanDBOptions &titan_db_options, Env *env,
+                     const EnvOptions &env_options,
+                     BlobFileManager *blob_file_manager,
+                     BlobFileSet *blob_file_set, LogBuffer *log_buffer,
+                     uint32_t seqno, std::atomic_bool *shuting_down,
+                     TitanStats *stats)
     : blob_gc_(blob_gc), base_db_(db),
-      base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)), mutex_(mutex),
+      base_db_impl_(reinterpret_cast<DBImpl *>(base_db_)), mutex_(mutex),
       db_options_(titan_db_options), env_(env), env_options_(env_options),
       blob_file_manager_(blob_file_manager), blob_file_set_(blob_file_set),
       log_buffer_(log_buffer),
       ingestion_file_path_("/tmp/blob-index-ingest-" + std::to_string(seqno)),
-      pause_purging_(pause_purging),
       shuting_down_(shuting_down), stats_(stats) {}
 
 BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
@@ -288,6 +286,7 @@ Status BlobGCJob::DoRunGC() {
   if (rewrite_opt_ >= kIngest) {
     s = blob_index_table.Open(ingestion_file_path_);
     assert(s.ok());
+    ingestion_file_ready_ = false;
   }
 
   //  uint64_t drop_entry_num = 0;
@@ -365,14 +364,15 @@ Status BlobGCJob::DoRunGC() {
     // blob index's size is counted in `RewriteValidKeyToLSM`
     metrics_.bytes_written += blob_record.size();
 
-    VersionedBlobIndex new_blob_index;
+    MergeBlobIndex new_blob_index;
     new_blob_index.file_number = blob_file_handle->GetNumber();
     new_blob_index.sequence = gc_iter->sequence();
+    new_blob_index.source_file_number = blob_index.file_number;
     blob_file_builder->Add(blob_record, &new_blob_index.blob_handle);
     std::string index_entry;
 
     if (rewrite_opt_ == kDefault) {
-      new_blob_index.EncodeToUnversioned(&index_entry);
+      new_blob_index.EncodeToBase(&index_entry);
       // Store WriteBatch for rewriting new Key-Index pairs to LSM
       GarbageCollectionWriteCallback callback(cfh, blob_record.key.ToString(),
                                               std::move(blob_index));
@@ -488,14 +488,6 @@ Status BlobGCJob::Finish() {
   {
     mutex_->Unlock();
     s = InstallOutputBlobFiles();
-    if (pause_purging_) {
-      pause_purging_->store(true);
-    }
-    mutex_->Lock();
-    if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
-      s = DeleteInputBlobFiles();
-    }
-    mutex_->Unlock();
     if (s.ok()) {
       s = RewriteValidKeyToLSM();
       if (!s.ok()) {
@@ -512,11 +504,12 @@ Status BlobGCJob::Finish() {
     }
     mutex_->Lock();
   }
-  if (pause_purging_) {
-    pause_purging_->store(false);
-  }
 
   // TODO(@DorianZheng) cal discardable size for new blob file
+
+  if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
+    s = DeleteInputBlobFiles();
+  }
 
   if (s.ok()) {
     UpdateInternalOpStats();

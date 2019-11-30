@@ -126,30 +126,24 @@ struct BlobIndex {
   uint64_t file_number{0};
   BlobHandle blob_handle;
 
+  virtual ~BlobIndex() {}
+
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
 
-  friend bool operator==(const BlobIndex& lhs, const BlobIndex& rhs);
+  bool operator==(const BlobIndex &rhs) const;
 };
 
-struct VersionedBlobIndex {
-  enum Type : unsigned char {
-    kBlobRecord = 1,
-  };
-  uint64_t file_number{0};
-  BlobHandle blob_handle;
+struct MergeBlobIndex : public BlobIndex {
   SequenceNumber sequence;
+  uint64_t source_file_number{0};
 
   void EncodeTo(std::string* dst) const;
-  void EncodeToUnversioned(std::string* dst) const;
+  void EncodeToBase(std::string *dst) const;
   Status DecodeFrom(Slice* src);
-  Status DecodeFromUnversioned(Slice* src);
+  Status DecodeFromBase(Slice *src);
 
-  std::string ToString() {
-    return std::to_string(file_number) + ", " + std::to_string(sequence);
-  }
-
-  friend bool operator==(const BlobIndex& lhs, const BlobIndex& rhs);
+  bool operator==(const MergeBlobIndex &rhs) const;
 };
 
 // Format of blob file meta (not fixed size):

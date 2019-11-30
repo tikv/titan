@@ -248,8 +248,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       // Add TableProperties for collecting statistics GC
       base_descs[i].options.table_properties_collector_factories.emplace_back(
           std::make_shared<BlobFileSizeCollectorFactory>());
-      base_descs[i].options.merge_operator.reset(
-          new BlobIndexMergeOperator(&mutex_, blob_file_set_.get(), cf_id));
+      base_descs[i].options.merge_operator.reset(new BlobIndexMergeOperator());
     }
     handles->clear();
     s = db_->Close();
@@ -355,8 +354,7 @@ Status TitanDBImpl::CreateColumnFamilies(
     options.table_factory = titan_table_factory.back();
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
-    merge_operators.emplace_back(std::make_shared<BlobIndexMergeOperator>(
-        &mutex_, blob_file_set_.get(), 0));
+    merge_operators.emplace_back(std::make_shared<BlobIndexMergeOperator>());
     options.merge_operator = merge_operators.back();
     base_descs.emplace_back(desc.name, options);
   }
@@ -371,7 +369,6 @@ Status TitanDBImpl::CreateColumnFamilies(
       for (size_t i = 0; i < descs.size(); i++) {
         ColumnFamilyHandle* handle = (*handles)[i];
         uint32_t cf_id = handle->GetID();
-        merge_operators[i]->set_column_family_id(cf_id);
         column_families.emplace(cf_id, descs[i].options);
         cf_info_.emplace(
             cf_id,

@@ -127,57 +127,39 @@ Status BlobIndex::DecodeFrom(Slice* src) {
   return s;
 }
 
-bool operator==(const BlobIndex& lhs, const BlobIndex& rhs) {
-  return (lhs.file_number == rhs.file_number &&
-          lhs.blob_handle == rhs.blob_handle);
+bool BlobIndex::operator==(const BlobIndex &rhs) const {
+  return (file_number == rhs.file_number && blob_handle == rhs.blob_handle);
 }
 
-void VersionedBlobIndex::EncodeTo(std::string* dst) const {
-  dst->push_back(kBlobRecord);
-  PutVarint64(dst, file_number);
-  blob_handle.EncodeTo(dst);
+void MergeBlobIndex::EncodeTo(std::string *dst) const {
+  BlobIndex::EncodeTo(dst);
   PutVarint64(dst, sequence);
+  PutVarint64(dst, source_file_number);
 }
 
-void VersionedBlobIndex::EncodeToUnversioned(std::string* dst) const {
-  dst->push_back(kBlobRecord);
-  PutVarint64(dst, file_number);
-  blob_handle.EncodeTo(dst);
+void MergeBlobIndex::EncodeToBase(std::string *dst) const {
+  BlobIndex::EncodeTo(dst);
 }
 
-Status VersionedBlobIndex::DecodeFrom(Slice* src) {
-  unsigned char type;
-  if (!GetChar(src, &type) || type != kBlobRecord ||
-      !GetVarint64(src, &file_number)) {
-    return Status::Corruption("VersionedBlobIndex");
-  }
-  Status s = blob_handle.DecodeFrom(src);
+Status MergeBlobIndex::DecodeFrom(Slice *src) {
+  Status s = BlobIndex::DecodeFrom(src);
   if (!s.ok()) {
-    return Status::Corruption("VersionedBlobIndex", s.ToString());
+    return s;
   }
-  if (!GetVarint64(src, &sequence)) {
-    return Status::Corruption("VersionedBlobIndex(sequence)");
+  if (!GetVarint64(src, &sequence) || !GetVarint64(src, &source_file_number)) {
+    return Status::Corruption("MergeBlobIndex");
   }
   return s;
 }
 
-Status VersionedBlobIndex::DecodeFromUnversioned(Slice* src) {
-  unsigned char type;
-  if (!GetChar(src, &type) || type != kBlobRecord ||
-      !GetVarint64(src, &file_number)) {
-    return Status::Corruption("VersionedBlobIndex");
-  }
-  Status s = blob_handle.DecodeFrom(src);
-  if (!s.ok()) {
-    return Status::Corruption("VersionedBlobIndex", s.ToString());
-  }
-  sequence = 0;
-  return s;
+Status MergeBlobIndex::DecodeFromBase(Slice *src) {
+  return BlobIndex::DecodeFrom(src);
 }
 
-bool operator==(const VersionedBlobIndex& lhs, const VersionedBlobIndex& rhs) {
-  return (lhs.file_number == rhs.file_number &&
-          lhs.blob_handle == rhs.blob_handle && lhs.sequence == rhs.sequence);
+bool MergeBlobIndex::operator==(const MergeBlobIndex &rhs) const {
+  return (sequence == rhs.sequence &&
+          source_file_number == rhs.source_file_number &&
+          BlobIndex::operator==(rhs));
 }
 
 void BlobFileMeta::EncodeTo(std::string* dst) const {

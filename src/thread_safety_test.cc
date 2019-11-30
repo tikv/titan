@@ -132,7 +132,7 @@ class TitanThreadSafetyTest : public testing::Test {
 
 TEST_F(TitanThreadSafetyTest, Basic) {
   Open();
-  const uint64_t kNumEntries = 4;
+  const uint64_t kNumEntries = 100;
   std::vector<port::Thread> threads;
   std::map<std::string, ColumnFamilyHandle*> handles;
   std::map<std::string, uint32_t> ref_count;

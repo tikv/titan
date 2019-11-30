@@ -5,9 +5,6 @@ namespace titandb {
 
 Status TitanDBImpl::PurgeObsoleteFilesImpl() {
   Status s;
-  if (pause_purging_.load(std::memory_order_relaxed)) {
-    return s;
-  }
   std::vector<std::string> candidate_files;
   auto oldest_sequence = GetOldestSnapshotSequence();
   {

@@ -21,7 +21,6 @@ class BlobGCJob {
             const TitanDBOptions& titan_db_options, Env* env,
             const EnvOptions& env_options, BlobFileManager* blob_file_manager,
             BlobFileSet* blob_file_set, LogBuffer* log_buffer, uint32_t seqno,
-            std::atomic_bool* pause_purging,
             std::atomic_bool* shuting_down, TitanStats* stats);
 
   BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
@@ -79,7 +78,6 @@ class BlobGCJob {
   std::string ingestion_file_path_;
   bool ingestion_file_ready_ = false;
 
-  std::atomic_bool* pause_purging_{nullptr};
   std::atomic_bool* shuting_down_{nullptr};
 
   TitanStats* stats_;
