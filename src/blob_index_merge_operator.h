@@ -87,8 +87,6 @@ public:
   }
 
   const char *Name() const override { return "BlobGCOperator"; }
-private:
-  bool check_unique_ = false;
 };
 
 } // namespace titandb
