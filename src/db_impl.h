@@ -128,11 +128,15 @@ class TitanDBImpl : public TitanDB {
   bool GetIntProperty(ColumnFamilyHandle* column_family, const Slice& property,
                       uint64_t* value) override;
 
+  bool initialized() const { return initialized_; }
+
   void OnFlushCompleted(const FlushJobInfo& flush_job_info);
 
   void OnCompactionCompleted(const CompactionJobInfo& compaction_job_info);
 
   void StartBackgroundTasks();
+
+  void TEST_set_initialized(bool initialized) { initialized_ = initialized; }
 
   Status TEST_StartGC(uint32_t column_family_id);
   Status TEST_PurgeObsoleteFiles();
@@ -149,6 +153,9 @@ class TitanDBImpl : public TitanDB {
   friend class BaseDbListener;
   friend class TitanDBTest;
   friend class TitanThreadSafetyTest;
+
+  Status OpenImpl(const std::vector<TitanCFDescriptor>& descs,
+                  std::vector<ColumnFamilyHandle*>* handles);
 
   Status ValidateOptions(
       const TitanDBOptions& options,
@@ -242,6 +249,9 @@ class TitanDBImpl : public TitanDB {
   EnvOptions env_options_;
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
+
+  std::atomic<bool> initialized_{false};
+
   // Turn DB into read-only if background error happened
   Status bg_error_;
   std::atomic_bool has_bg_error_{false};

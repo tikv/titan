@@ -6,6 +6,7 @@
 #include "blob_file_manager.h"
 #include "blob_file_reader.h"
 #include "blob_file_set.h"
+#include "db_impl.h"
 #include "table_builder.h"
 #include "table_factory.h"
 
@@ -98,6 +99,60 @@ class FileManager : public BlobFileManager {
   BlobFileSet* blob_file_set_;
 };
 
+class TestTableFactory : public TableFactory {
+ private:
+  std::shared_ptr<TableFactory> base_factory_;
+  mutable TableBuilder* latest_table_builder_ = nullptr;
+
+ public:
+  TestTableFactory(std::shared_ptr<TableFactory>& base_factory)
+      : base_factory_(base_factory) {}
+
+  const char* Name() const override { return "TestTableFactory"; }
+
+  Status NewTableReader(
+      const TableReaderOptions& options,
+      std::unique_ptr<RandomAccessFileReader>&& file, uint64_t file_size,
+      std::unique_ptr<TableReader>* result,
+      bool prefetch_index_and_filter_in_cache) const override {
+    return base_factory_->NewTableReader(options, std::move(file), file_size,
+                                         result,
+                                         prefetch_index_and_filter_in_cache);
+  }
+
+  TableBuilder* NewTableBuilder(const TableBuilderOptions& options,
+                                uint32_t column_family_id,
+                                WritableFileWriter* file) const override {
+    latest_table_builder_ =
+        base_factory_->NewTableBuilder(options, column_family_id, file);
+    return latest_table_builder_;
+  }
+
+  std::string GetPrintableTableOptions() const override {
+    return base_factory_->GetPrintableTableOptions();
+  }
+
+  Status SanitizeOptions(const DBOptions& db_options,
+                         const ColumnFamilyOptions& cf_options) const override {
+    // Override this when we need to validate our options.
+    return base_factory_->SanitizeOptions(db_options, cf_options);
+  }
+
+  Status GetOptionString(std::string* opt_string,
+                         const std::string& delimiter) const override {
+    // Override this when we need to persist our options.
+    return base_factory_->GetOptionString(opt_string, delimiter);
+  }
+
+  void* GetOptions() override { return base_factory_->GetOptions(); }
+
+  bool IsDeleteRangeSupported() const override {
+    return base_factory_->IsDeleteRangeSupported();
+  }
+
+  TableBuilder* latest_table_builder() const { return latest_table_builder_; }
+};
+
 class TableBuilderTest : public testing::Test {
  public:
   TableBuilderTest()
@@ -110,11 +165,18 @@ class TableBuilderTest : public testing::Test {
     cf_options_.min_blob_size = kMinBlobSize;
     blob_file_set_.reset(new BlobFileSet(db_options_, nullptr));
     std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
+    db_impl_.reset(new TitanDBImpl(db_options_, tmpdir_));
+    db_impl_->TEST_set_initialized(true);
     blob_file_set_->AddColumnFamilies(cfs);
     blob_manager_.reset(new FileManager(db_options_, blob_file_set_.get()));
-    table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
-                                               blob_manager_, &mutex_,
-                                               blob_file_set_.get(), nullptr));
+    // Replace base table facotry.
+    base_table_factory_ =
+        std::make_shared<TestTableFactory>(cf_options_.table_factory);
+    cf_options_.table_factory = base_table_factory_;
+    cf_ioptions_.table_factory = base_table_factory_.get();
+    table_factory_.reset(new TitanTableFactory(
+        db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
+        blob_file_set_.get(), nullptr));
   }
 
   ~TableBuilderTest() {
@@ -205,10 +267,39 @@ class TableBuilderTest : public testing::Test {
   std::string tmpdir_;
   std::string base_name_;
   std::string blob_name_;
+  std::unique_ptr<TitanDBImpl> db_impl_;
+  std::shared_ptr<TestTableFactory> base_table_factory_;
   std::unique_ptr<TableFactory> table_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
   std::unique_ptr<BlobFileSet> blob_file_set_;
 };
+
+// Before TitanDBImpl initialized, table factory should return base table
+// builder.
+TEST_F(TableBuilderTest, BeforeDBInitialized) {
+  CompressionOptions compression_opts;
+  TableBuilderOptions opts(cf_ioptions_, cf_moptions_,
+                           cf_ioptions_.internal_comparator, &collectors_,
+                           kNoCompression, 0 /*sample_for_compression*/,
+                           compression_opts, false /*skip_filters*/,
+                           kDefaultColumnFamilyName, 0 /*target_level*/);
+
+  db_impl_->TEST_set_initialized(false);
+  std::unique_ptr<WritableFileWriter> file1;
+  NewBaseFileWriter(&file1);
+  std::unique_ptr<TableBuilder> builder1(
+      table_factory_->NewTableBuilder(opts, 0 /*cf_id*/, file1.get()));
+  ASSERT_EQ(builder1.get(), base_table_factory_->latest_table_builder());
+  builder1->Abandon();
+
+  db_impl_->TEST_set_initialized(true);
+  std::unique_ptr<WritableFileWriter> file2;
+  NewBaseFileWriter(&file2);
+  std::unique_ptr<TableBuilder> builder2(
+      table_factory_->NewTableBuilder(opts, 0 /*cf_id*/, file2.get()));
+  ASSERT_NE(builder2.get(), base_table_factory_->latest_table_builder());
+  builder2->Abandon();
+}
 
 TEST_F(TableBuilderTest, Basic) {
   std::unique_ptr<WritableFileWriter> base_file;
@@ -356,9 +447,9 @@ TEST_F(TableBuilderTest, NumEntries) {
 // To test size of each blob file is around blob_file_target_size after building
 TEST_F(TableBuilderTest, TargetSize) {
   cf_options_.blob_file_target_size = kTargetBlobFileSize;
-  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
-                                             blob_manager_, &mutex_,
-                                             blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
+      blob_file_set_.get(), nullptr));
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
@@ -387,9 +478,9 @@ TEST_F(TableBuilderTest, TargetSize) {
 // correct
 TEST_F(TableBuilderTest, LevelMerge) {
   cf_options_.level_merge = true;
-  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
-                                             blob_manager_, &mutex_,
-                                             blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
+      blob_file_set_.get(), nullptr));
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;

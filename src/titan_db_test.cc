@@ -310,6 +310,33 @@ class TitanDBTest : public testing::Test {
   std::vector<ColumnFamilyHandle*> cf_handles_;
 };
 
+TEST_F(TitanDBTest, Open) {
+  std::atomic<bool> checked_before_initialized{false};
+  std::atomic<bool> background_job_started{false};
+  SyncPoint::GetInstance()->SetCallBack(
+      "TitanDBImpl::OnFlushCompleted:Begin",
+      [&](void*) { background_job_started = true; });
+  SyncPoint::GetInstance()->SetCallBack(
+      "TitanDBImpl::OnCompactionCompleted:Begin",
+      [&](void*) { background_job_started = true; });
+  SyncPoint::GetInstance()->SetCallBack(
+      "TitanDBImpl::OpenImpl:BeforeInitialized", [&](void* arg) {
+        checked_before_initialized = true;
+        TitanDBImpl* db = reinterpret_cast<TitanDBImpl*>(arg);
+        // Try to trigger flush and compaction. Listeners should not be call.
+        ASSERT_OK(db->Put(WriteOptions(), "k1", "v1"));
+        ASSERT_OK(db->Flush(FlushOptions()));
+        ASSERT_OK(db->Put(WriteOptions(), "k1", "v2"));
+        ASSERT_OK(db->Put(WriteOptions(), "k2", "v3"));
+        ASSERT_OK(db->Flush(FlushOptions()));
+        ASSERT_OK(db->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+      });
+  SyncPoint::GetInstance()->EnableProcessing();
+  Open();
+  ASSERT_TRUE(checked_before_initialized.load());
+  ASSERT_FALSE(background_job_started.load());
+}
+
 TEST_F(TitanDBTest, Basic) {
   const uint64_t kNumKeys = 100;
   std::map<std::string, std::string> data;

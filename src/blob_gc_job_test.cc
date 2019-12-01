@@ -41,7 +41,8 @@ class BlobGCJobTest : public testing::Test {
     options_.env->CreateDirIfMissing(dbname_);
     options_.env->CreateDirIfMissing(options_.dirname);
   }
-  ~BlobGCJobTest() { DestroyDB(); }
+
+  ~BlobGCJobTest() { Close(); }
 
   void DisableMergeSmall() { options_.merge_small_file_threshold = 0; }
 
@@ -87,7 +88,7 @@ class BlobGCJobTest : public testing::Test {
   }
 
   void Reopen() {
-    DestroyDB();
+    Close();
     Open();
   }
 
@@ -119,9 +120,8 @@ class BlobGCJobTest : public testing::Test {
     b->ComputeGCScore();
   }
 
-  void DestroyDB() {
-    if (!db_)
-      return;
+  void Close() {
+    if (!db_) return;
     ASSERT_OK(db_->Close());
     delete db_;
     db_ = nullptr;
@@ -221,7 +221,6 @@ class BlobGCJobTest : public testing::Test {
     bool discardable = false;
     ASSERT_OK(blob_gc_job.DiscardEntry(key, blob_index, &discardable));
     ASSERT_FALSE(discardable);
-    DestroyDB();
   }
 
   void TestRunGC() {
@@ -278,7 +277,6 @@ class BlobGCJobTest : public testing::Test {
     }
     delete db_iter;
     ASSERT_FALSE(iter->Valid() || !iter->status().ok());
-    DestroyDB();
   }
 };
 
@@ -355,7 +353,7 @@ TEST_F(BlobGCJobTest, GCLimiter) {
   RunGC(true);
   ASSERT_TRUE(test_limiter->WriteRequested());
   ASSERT_FALSE(test_limiter->ReadRequested());
-  DestroyDB();
+  Close();
 
   test_limiter = new TestLimiter(RateLimiter::Mode::kReadsOnly);
   options_.rate_limiter.reset(test_limiter);
@@ -365,7 +363,7 @@ TEST_F(BlobGCJobTest, GCLimiter) {
   RunGC(true);
   ASSERT_FALSE(test_limiter->WriteRequested());
   ASSERT_TRUE(test_limiter->ReadRequested());
-  DestroyDB();
+  Close();
 
   test_limiter = new TestLimiter(RateLimiter::Mode::kAllIo);
   options_.rate_limiter.reset(test_limiter);
@@ -375,7 +373,7 @@ TEST_F(BlobGCJobTest, GCLimiter) {
   RunGC(true);
   ASSERT_TRUE(test_limiter->WriteRequested());
   ASSERT_TRUE(test_limiter->ReadRequested());
-  DestroyDB();
+  Close();
 }
 
 TEST_F(BlobGCJobTest, Reopen) {
@@ -398,8 +396,6 @@ TEST_F(BlobGCJobTest, Reopen) {
 
   RunGC(false, true);
   CheckBlobNumber(1);
-
-  DestroyDB();
 }
 
 // Tests blob file will be kept after GC, if it is still visible by active
@@ -457,8 +453,6 @@ TEST_F(BlobGCJobTest, PurgeBlobs) {
 
   RunGC(false);
   CheckBlobNumber(1);
-
-  DestroyDB();
 }
 
 TEST_F(BlobGCJobTest, DeleteFilesInRange) {
@@ -550,8 +544,6 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   }
   ASSERT_OK(iter->status());
   delete iter;
-
-  DestroyDB();
 }
 
 TEST_F(BlobGCJobTest, LevelMergeGC) {
@@ -603,8 +595,6 @@ TEST_F(BlobGCJobTest, LevelMergeGC) {
             BlobFileMeta::FileState::kObsolete);
   ASSERT_EQ(b->FindFile(5).lock()->file_state(),
             BlobFileMeta::FileState::kNormal);
-
-  DestroyDB();
 }
 
 TEST_F(BlobGCJobTest, RangeMergeScheduler) {
@@ -776,8 +766,6 @@ TEST_F(BlobGCJobTest, RangeMergeScheduler) {
       files[i]->FileStateTransit(BlobFileMeta::FileEvent::kReset);
     }
   }
-
-  DestroyDB();
 }
 
 TEST_F(BlobGCJobTest, RangeMerge) {
@@ -828,8 +816,6 @@ TEST_F(BlobGCJobTest, RangeMerge) {
     auto blob = b->FindFile(i).lock();
     ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kObsolete);
   }
-
-  DestroyDB();
 }
 }  // namespace titandb
 

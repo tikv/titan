@@ -33,6 +33,7 @@ class BlobFileIterator {
   SequenceNumber sequence() const;
   Slice value() const;
   Status status() const { return status_; }
+  uint64_t header_size() const { return header_size_; }
 
   void IterateForPrev(uint64_t);
 
@@ -65,6 +66,7 @@ class BlobFileIterator {
   BlobRecord cur_blob_record_;
   uint64_t cur_record_offset_;
   uint64_t cur_record_size_;
+  uint64_t header_size_;
 
   uint64_t readahead_begin_offset_{0};
   uint64_t readahead_end_offset_{0};

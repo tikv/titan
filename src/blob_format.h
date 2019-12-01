@@ -17,7 +17,15 @@ namespace titandb {
 // [record head + record 2]
 // ...
 // [record head + record N]
+// [blob file meta block 1]
+// [blob file meta block 2]
+// ...
+// [blob file meta block M]
+// [blob file meta index]
 // [blob file footer]
+//
+// For now, the only kind of meta block is an optional uncompression dictionary
+// indicated by a flag in the file header.
 
 // Format of blob head (9 bytes):
 //
@@ -27,7 +35,7 @@ namespace titandb {
 //    | Fixed32 | Fixed32 |    char     |
 //    +---------+---------+-------------+
 //
-const uint64_t kBlobHeaderSize = 8;
+const uint64_t kBlobMaxHeaderSize = 12;
 const uint64_t kRecordHeaderSize = 9;
 const uint64_t kBlobFooterSize = BlockHandle::kMaxEncodedLength + 8 + 4;
 
@@ -54,11 +62,13 @@ struct BlobRecord {
 
 class BlobEncoder {
  public:
-  BlobEncoder(CompressionType compression)
+  BlobEncoder(CompressionType compression,
+              const CompressionDict& compression_dict)
       : compression_ctx_(compression),
-        compression_info_(compression_opt_, compression_ctx_,
-                          CompressionDict::GetEmptyDict(), compression,
-                          0 /*sample_for_compression*/) {}
+        compression_info_(compression_opt_, compression_ctx_, compression_dict,
+                          compression, 0 /*sample_for_compression*/) {}
+  BlobEncoder(CompressionType compression)
+      : BlobEncoder(compression, CompressionDict::GetEmptyDict()) {}
 
   void EncodeRecord(const BlobRecord& record);
 
@@ -79,6 +89,10 @@ class BlobEncoder {
 
 class BlobDecoder {
  public:
+  BlobDecoder(const UncompressionDict& uncompression_dict)
+      : uncompression_dict_(uncompression_dict) {}
+  BlobDecoder() : BlobDecoder(UncompressionDict::GetEmptyDict()) {}
+
   Status DecodeHeader(Slice* src);
   Status DecodeRecord(Slice* src, BlobRecord* record, OwnedSlice* buffer);
 
@@ -89,6 +103,7 @@ class BlobDecoder {
   uint32_t header_crc_{0};
   uint32_t record_size_{0};
   CompressionType compression_{kNoCompression};
+  const UncompressionDict& uncompression_dict_;
 };
 
 // Format of blob handle (not fixed size):
@@ -237,7 +252,8 @@ class BlobFileMeta {
   void AddDiscardableSize(uint64_t _discardable_size);
   double GetDiscardableRatio() const;
   bool NoLiveData() {
-    return discardable_size_ == file_size_ - kBlobHeaderSize - kBlobFooterSize;
+    return discardable_size_ ==
+           file_size_ - kBlobMaxHeaderSize - kBlobFooterSize;
   }
   TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
 
@@ -262,7 +278,7 @@ class BlobFileMeta {
   bool gc_mark_{false};
 };
 
-// Format of blob file header (8 bytes):
+// Format of blob file header for version 1 (8 bytes):
 //
 //    +--------------+---------+
 //    | magic number | version |
@@ -270,15 +286,36 @@ class BlobFileMeta {
 //    |   Fixed32    | Fixed32 |
 //    +--------------+---------+
 //
+// For version 2, there are another 4 bytes for flags:
+//
+//    +--------------+---------+---------+
+//    | magic number | version |  flags  |
+//    +--------------+---------+---------+
+//    |   Fixed32    | Fixed32 | Fixed32 |
+//    +--------------+---------+---------+
+//
 // The header is mean to be compatible with header of BlobDB blob files, except
 // we use a different magic number.
 struct BlobFileHeader {
   // The first 32bits from $(echo titandb/blob | sha1sum).
   static const uint32_t kHeaderMagicNumber = 0x2be0a614ul;
   static const uint32_t kVersion1 = 1;
-  static const uint64_t kEncodedLength = 4 + 4;
+  static const uint32_t kVersion2 = 2;
 
-  uint32_t version = kVersion1;
+  static const uint64_t kMinEncodedLength = 4 + 4;
+  static const uint64_t kMaxEncodedLength = 4 + 4 + 4;
+
+  // Flags:
+  static const uint32_t kHasUncompressionDictionary = 1 << 0;
+
+  uint32_t version = kVersion2;
+  uint32_t flags = 0;
+
+  uint64_t size() const {
+    return version == BlobFileHeader::kVersion1
+               ? BlobFileHeader::kMinEncodedLength
+               : BlobFileHeader::kMaxEncodedLength;
+  }
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
@@ -300,6 +337,10 @@ struct BlobFileFooter {
   static const uint64_t kEncodedLength{kBlobFooterSize};
 
   BlockHandle meta_index_handle{BlockHandle::NullBlockHandle()};
+
+  // Points to a uncompression dictionary (which is also pointed to by the meta
+  // index) when `kHasUncompressionDictionary` is set in the header.
+  BlockHandle uncompression_dict_handle{BlockHandle::NullBlockHandle()};
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
