@@ -136,7 +136,7 @@ class TitanDBImpl : public TitanDB {
 
   void StartBackgroundTasks();
 
-  void TEST_set_initialized(bool initialized) { initialized_ = initialized; }
+  void TEST_set_initialized(bool initialize) { initialized_ = initialize; }
 
   Status TEST_StartGC(uint32_t column_family_id);
   Status TEST_PurgeObsoleteFiles();
