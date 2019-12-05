@@ -259,10 +259,12 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   }
   // Initialize GC thread pool.
   if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
-    thread_pool_.reset(NewThreadPool(db_options_.max_background_gc));
+    auto pool = NewThreadPool(0);
     // Hack: set thread priority to change the thread name
-    (reinterpret_cast<ThreadPoolImpl*>(thread_pool_.get()))
+    (reinterpret_cast<ThreadPoolImpl*>(pool))
         ->SetThreadPriority(Env::Priority::USER);
+    pool->SetBackgroundThreads(db_options_.max_background_gc);
+    thread_pool_.reset(pool);
   }
   // Open base DB.
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
