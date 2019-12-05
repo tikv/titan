@@ -20,7 +20,7 @@ void TitanDBImpl::MaybeScheduleGC() {
          bg_gc_scheduled_ < db_options_.max_background_gc) {
     unscheduled_gc_--;
     bg_gc_scheduled_++;
-    env_->Schedule(&TitanDBImpl::BGWorkGC, this, Env::Priority::USER, this);
+    thread_pool_->SubmitJob(std::bind(&TitanDBImpl::BGWorkGC, this));
   }
 }
 

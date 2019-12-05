@@ -259,8 +259,7 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   }
   // Initialize GC thread pool.
   if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
-    env_->IncBackgroundThreadsIfNeeded(db_options_.max_background_gc,
-                                       Env::Priority::USER);
+    thread_pool_.reset(NewThreadPool(db_options_.max_background_gc));
   }
   // Open base DB.
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
@@ -346,10 +345,13 @@ Status TitanDBImpl::CloseImpl() {
     shuting_down_.store(true, std::memory_order_release);
   }
 
-  int gc_unscheduled = env_->UnSchedule(this, Env::Priority::USER);
+  if (thread_pool_ != nullptr) {
+    thread_pool_->JoinAllThreads();
+  }
+
   {
     MutexLock l(&mutex_);
-    bg_gc_scheduled_ -= gc_unscheduled;
+    // `bg_gc_scheduled_` should be 0 after `JoinAllThreads`, double check here.
     while (bg_gc_scheduled_ > 0) {
       bg_cv_.Wait();
     }
