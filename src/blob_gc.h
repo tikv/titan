@@ -57,7 +57,7 @@ private:
   ColumnFamilyHandle* cfh_{nullptr};
   // Whether need to trigger gc after this gc or not
   const bool trigger_next_;
-  std::atomic<uint64_t> next_merge_file_number_{1};
+  static std::atomic<uint64_t> next_merge_file_number_;
 };
 
 struct GCScore {

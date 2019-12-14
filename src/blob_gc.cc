@@ -3,6 +3,8 @@
 namespace rocksdb {
 namespace titandb {
 
+std::atomic<uint64_t> BlobGC::next_merge_file_number_{1};
+
 BlobGC::BlobGC(std::vector<BlobFileMeta*>&& blob_files,
                TitanCFOptions&& _titan_cf_options, bool need_trigger_next)
     : inputs_(std::move(blob_files)),
