@@ -5,10 +5,10 @@
 #endif
 
 #include <inttypes.h>
-
 #include "logging/log_buffer.h"
 #include "port/port.h"
 #include "util/autovector.h"
+#include "util/threadpool_imp.h"
 
 #include "base_db_listener.h"
 #include "blob_file_builder.h"
@@ -261,8 +261,12 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   }
   // Initialize GC thread pool.
   if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
-    env_->IncBackgroundThreadsIfNeeded(db_options_.max_background_gc,
-                                       Env::Priority::BOTTOM);
+    auto pool = NewThreadPool(0);
+    // Hack: set thread priority to change the thread name
+    (reinterpret_cast<ThreadPoolImpl*>(pool))
+        ->SetThreadPriority(Env::Priority::USER);
+    pool->SetBackgroundThreads(db_options_.max_background_gc);
+    thread_pool_.reset(pool);
   }
   // Open base DB.
   s = DB::Open(db_options_, dbname_, base_descs, handles, &db_);
@@ -348,10 +352,13 @@ Status TitanDBImpl::CloseImpl() {
     shuting_down_.store(true, std::memory_order_release);
   }
 
-  int gc_unscheduled = env_->UnSchedule(this, Env::Priority::BOTTOM);
+  if (thread_pool_ != nullptr) {
+    thread_pool_->JoinAllThreads();
+  }
+
   {
     MutexLock l(&mutex_);
-    bg_gc_scheduled_ -= gc_unscheduled;
+    // `bg_gc_scheduled_` should be 0 after `JoinAllThreads`, double check here.
     while (bg_gc_scheduled_ > 0) {
       bg_cv_.Wait();
     }
