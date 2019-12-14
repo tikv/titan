@@ -958,22 +958,45 @@ Status TitanDBImpl::SetOptions(
     const std::unordered_map<std::string, std::string>& new_options) {
   Status s;
   auto opts = new_options;
-  auto p = opts.find("blob_run_mode");
-  bool set_blob_run_mode = (p != opts.end());
-  TitanBlobRunMode mode = TitanBlobRunMode::kNormal;
-  if (set_blob_run_mode) {
-    const std::string& blob_run_mode_string = p->second;
-    auto pm = blob_run_mode_string_map.find(blob_run_mode_string);
-    if (pm == blob_run_mode_string_map.end()) {
-      return Status::InvalidArgument("No blob_run_mode defined for " +
-                                     blob_run_mode_string);
-    } else {
-      mode = pm->second;
-      ROCKS_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
-                     column_family->GetName().c_str(),
-                     blob_run_mode_string.c_str());
+  bool set_blob_run_mode = false;
+  TitanBlobRunMode blob_run_mode = TitanBlobRunMode::kNormal;
+  bool set_gc_rewrite_mode = false;
+  TitanGcRewriteMode gc_rewrite_mode = TitanGcRewriteMode::kDefault;
+  {
+    auto p = opts.find("blob_run_mode");
+    set_blob_run_mode = (p != opts.end());
+    if (set_blob_run_mode) {
+      const std::string &blob_run_mode_string = p->second;
+      auto pm = blob_run_mode_string_map.find(blob_run_mode_string);
+      if (pm == blob_run_mode_string_map.end()) {
+        return Status::InvalidArgument("No blob_run_mode defined for " +
+                                       blob_run_mode_string);
+      } else {
+        blob_run_mode = pm->second;
+        ROCKS_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
+                       column_family->GetName().c_str(),
+                       blob_run_mode_string.c_str());
+      }
+      opts.erase(p);
     }
-    opts.erase(p);
+  }
+  {
+    auto p = opts.find("gc_rewrite_mode");
+    set_gc_rewrite_mode = (p != opts.end());
+    if (set_gc_rewrite_mode) {
+      const std::string &gc_rewrite_mode_string = p->second;
+      auto pm = gc_rewrite_mode_string_map.find(gc_rewrite_mode_string);
+      if (pm == gc_rewrite_mode_string_map.end()) {
+        return Status::InvalidArgument("No gc_rewrite_mode defined for " +
+                                       gc_rewrite_mode_string);
+      } else {
+        gc_rewrite_mode = pm->second;
+        ROCKS_LOG_INFO(db_options_.info_log, "[%s] Set gc_rewrite_mode: %s",
+                       column_family->GetName().c_str(),
+                       gc_rewrite_mode_string.c_str());
+      }
+      opts.erase(p);
+    }
   }
   if (opts.size() > 0) {
     s = db_->SetOptions(column_family, opts);
@@ -982,14 +1005,19 @@ Status TitanDBImpl::SetOptions(
     }
   }
   // Make sure base db's SetOptions success before setting blob_run_mode.
-  if (set_blob_run_mode) {
+  if (set_blob_run_mode || set_gc_rewrite_mode) {
     uint32_t cf_id = column_family->GetID();
     {
       MutexLock l(&mutex_);
-      assert(cf_info_.count(cf_id) > 0);
-      TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
-      cf_info.titan_table_factory->SetBlobRunMode(mode);
-      cf_info.mutable_cf_options.blob_run_mode = mode;
+      if (set_blob_run_mode) {
+        assert(cf_info_.count(cf_id) > 0);
+        TitanColumnFamilyInfo &cf_info = cf_info_[cf_id];
+        cf_info.titan_table_factory->SetBlobRunMode(blob_run_mode);
+        cf_info.mutable_cf_options.blob_run_mode = blob_run_mode;
+      }
+      if (set_gc_rewrite_mode) {
+        gc_rewrite_mode_ = gc_rewrite_mode;
+      }
     }
   }
   return Status::OK();

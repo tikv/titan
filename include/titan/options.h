@@ -59,16 +59,30 @@ enum class TitanBlobRunMode {
                   // and store the value in SST file.
 };
 
+enum class TitanGcRewriteMode {
+  kDefault = 0,
+  kMerge = 1,
+  kIngest = 2,
+  kFastIngest = 3,
+};
+
 struct TitanOptionsHelper {
   static std::map<TitanBlobRunMode, std::string> blob_run_mode_to_string;
   static std::unordered_map<std::string, TitanBlobRunMode>
       blob_run_mode_string_map;
+  static std::map<TitanGcRewriteMode, std::string> gc_rewrite_mode_to_string;
+  static std::unordered_map<std::string, TitanGcRewriteMode>
+      gc_rewrite_mode_string_map;
 };
 
 static auto& blob_run_mode_to_string =
     TitanOptionsHelper::blob_run_mode_to_string;
 static auto& blob_run_mode_string_map =
     TitanOptionsHelper::blob_run_mode_string_map;
+static auto &gc_rewrite_mode_to_string =
+    TitanOptionsHelper::gc_rewrite_mode_to_string;
+static auto &gc_rewrite_mode_string_map =
+    TitanOptionsHelper::gc_rewrite_mode_string_map;
 
 struct ImmutableTitanCFOptions;
 struct MutableTitanCFOptions;

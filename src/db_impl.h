@@ -250,6 +250,7 @@ class TitanDBImpl : public TitanDB {
   EnvOptions env_options_;
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
+  TitanGcRewriteMode gc_rewrite_mode_{TitanGcRewriteMode::kDefault};
 
   std::atomic<bool> initialized_{false};
 

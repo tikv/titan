@@ -98,5 +98,19 @@ std::unordered_map<std::string, TitanBlobRunMode>
         {"kReadOnly", TitanBlobRunMode::kReadOnly},
         {"kFallback", TitanBlobRunMode::kFallback}};
 
+std::map<TitanGcRewriteMode, std::string>
+    TitanOptionsHelper::gc_rewrite_mode_to_string = {
+        {TitanGcRewriteMode::kDefault, "kDefault"},
+        {TitanGcRewriteMode::kMerge, "kMerge"},
+        {TitanGcRewriteMode::kIngest, "kIngest"},
+        {TitanGcRewriteMode::kFastIngest, "kFastIngest"}};
+
+std::unordered_map<std::string, TitanGcRewriteMode>
+    TitanOptionsHelper::gc_rewrite_mode_string_map = {
+        {"kDefault", TitanGcRewriteMode::kDefault},
+        {"kMerge", TitanGcRewriteMode::kMerge},
+        {"kIngest", TitanGcRewriteMode::kIngest},
+        {"kFastIngest", TitanGcRewriteMode::kFastIngest}};
+
 }  // namespace titandb
 }  // namespace rocksdb

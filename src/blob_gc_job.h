@@ -17,37 +17,37 @@ namespace titandb {
 
 class BlobGCJob {
  public:
-  BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
-            const TitanDBOptions& titan_db_options, Env* env,
-            const EnvOptions& env_options, BlobFileManager* blob_file_manager,
-            BlobFileSet* blob_file_set, LogBuffer* log_buffer,
-            std::atomic_bool* shuting_down, TitanStats* stats);
+   BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
+             const TitanDBOptions &titan_db_options, Env *env,
+             const EnvOptions &env_options, TitanGcRewriteMode mode,
+             BlobFileManager *blob_file_manager, BlobFileSet *blob_file_set,
+             LogBuffer *log_buffer, std::atomic_bool *shuting_down,
+             TitanStats *stats);
 
-  // No copying allowed
-  BlobGCJob(const BlobGCJob&) = delete;
-  void operator=(const BlobGCJob&) = delete;
+   BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
+             const TitanDBOptions &titan_db_options, Env *env,
+             const EnvOptions &env_options, BlobFileManager *blob_file_manager,
+             BlobFileSet *blob_file_set, LogBuffer *log_buffer,
+             std::atomic_bool *shuting_down, TitanStats *stats);
 
-  ~BlobGCJob();
+   // No copying allowed
+   BlobGCJob(const BlobGCJob &) = delete;
+   void operator=(const BlobGCJob &) = delete;
 
-  // REQUIRE: mutex held
-  Status Prepare();
-  // REQUIRE: mutex not held
-  Status Run();
-  // REQUIRE: mutex held
-  Status Finish();
+   ~BlobGCJob();
+
+   // REQUIRE: mutex held
+   Status Prepare();
+   // REQUIRE: mutex not held
+   Status Run();
+   // REQUIRE: mutex held
+   Status Finish();
 
  private:
   class GarbageCollectionWriteCallback;
   friend class BlobGCJobTest;
 
   void UpdateInternalOpStats();
-
-  enum RewriteOption {
-    kDefault = 0,
-    kMerge = 1,
-    kIngest = 2,
-    kFastIngest = 3,
-  } rewrite_opt_ = kMerge;
 
   BlobGC* blob_gc_;
   DB* base_db_;
@@ -56,6 +56,7 @@ class BlobGCJob {
   TitanDBOptions db_options_;
   Env* env_;
   EnvOptions env_options_;
+  TitanGcRewriteMode gc_rewrite_mode_;
   BlobFileManager* blob_file_manager_;
   BlobFileSet* blob_file_set_;
   LogBuffer* log_buffer_{nullptr};
