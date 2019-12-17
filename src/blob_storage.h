@@ -69,11 +69,9 @@ class BlobStorage {
   // corruption if the file doesn't exist.
   std::weak_ptr<BlobFileMeta> FindFile(uint64_t file_number) const;
 
-  // Marks all the blob files so that they can be picked by GC job.
-  void MarkAllFilesForGC() {
-    MutexLock l(&mutex_);
+  // Must call before TitanDBImpl initialized.
+  void InitializeAllFiles() {
     for (auto& file : files_) {
-      file.second->set_gc_mark(true);
       file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
       auto level = file.second->GetDiscardableRatioLevel();
       AddStats(stats_, cf_id_, level, 1);

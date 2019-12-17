@@ -216,6 +216,8 @@ class BlobFileMeta {
 
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }
+  uint64_t live_data_size() const { return live_data_size_; }
+  void set_live_data_size(uint64_t size) { live_data_size_ = size; }
   uint64_t file_entries() const { return file_entries_; }
   uint32_t file_level() const { return file_level_; }
   const std::string& smallest_key() const { return smallest_key_; }
@@ -223,18 +225,22 @@ class BlobFileMeta {
 
   FileState file_state() const { return state_; }
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
-  uint64_t discardable_size() const { return discardable_size_; }
-
-  bool gc_mark() const { return gc_mark_; }
-  void set_gc_mark(bool mark) { gc_mark_ = mark; }
 
   void FileStateTransit(const FileEvent& event);
 
-  void AddDiscardableSize(uint64_t _discardable_size);
-  double GetDiscardableRatio() const;
-  bool NoLiveData() {
-    return discardable_size_ ==
-           file_size_ - kBlobMaxHeaderSize - kBlobFooterSize;
+  bool UpdateLiveDataSize(int64_t delta) {
+    int64_t result = static_cast<int64_t>(live_data_size_) + delta;
+    if (result < 0) {
+      live_data_size_ = 0;
+      return false;
+    }
+    live_data_size_ = static_cast<uint64_t>(result);
+    return true;
+  }
+  bool NoLiveData() { return live_data_size_ == 0; }
+  double GetDiscardableRatio() const {
+    // TODO: Exclude metadata size from file size.
+    return 1 - (static_cast<double>(live_data_size_) / file_size_);
   }
   TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
 
@@ -242,6 +248,8 @@ class BlobFileMeta {
   // Persistent field
   uint64_t file_number_{0};
   uint64_t file_size_{0};
+  // Size of data with reference from SST files.
+  uint64_t live_data_size_{0};
   uint64_t file_entries_;
   // Target level of compaction/flush which generates this blob file
   uint32_t file_level_;
@@ -252,11 +260,6 @@ class BlobFileMeta {
 
   // Not persistent field
   FileState state_{FileState::kInit};
-
-  uint64_t discardable_size_{0};
-  // gc_mark is set to true when this file is recovered from re-opening the DB
-  // that means this file needs to be checked for GC
-  bool gc_mark_{false};
 };
 
 // Format of blob file header for version 1 (8 bytes):

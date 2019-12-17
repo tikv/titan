@@ -174,6 +174,16 @@ class TitanDBImpl : public TitanDB {
                             ColumnFamilyHandle* handle,
                             std::shared_ptr<ManagedSnapshot> snapshot);
 
+  Status InitializeGC(const std::vector<ColumnFamilyHandle*>& cf_handles);
+
+  Status ExtractGCStatsFromTableProperty(
+      const std::shared_ptr<const TableProperties>& table_properties,
+      bool to_add, std::map<uint64_t, int64_t>* blob_file_size_diff);
+
+  Status ExtractGCStatsFromTableProperty(
+      const TableProperties& table_properties, bool to_add,
+      std::map<uint64_t, int64_t>* blob_file_size_diff);
+
   // REQUIRE: mutex_ held
   void AddToGCQueue(uint32_t column_family_id) {
     mutex_.AssertHeld();

@@ -76,13 +76,6 @@ class BlobFileSet {
                         SequenceNumber oldest_sequence);
 
   // REQUIRES: mutex is held
-  void MarkAllFilesForGC() {
-    for (auto& cf : column_families_) {
-      cf.second->MarkAllFilesForGC();
-    }
-  }
-
-  // REQUIRES: mutex is held
   bool IsColumnFamilyObsolete(uint32_t cf_id) {
     return obsolete_columns_.count(cf_id) > 0;
   }

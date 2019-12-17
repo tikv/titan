@@ -113,7 +113,7 @@ void BlobStorage::MarkFileObsoleteLocked(std::shared_ptr<BlobFileMeta> file,
       std::make_pair(file->file_number(), obsolete_sequence));
   file->FileStateTransit(BlobFileMeta::FileEvent::kDelete);
   SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
-           file->file_size() - file->discardable_size());
+           file->live_data_size());
   SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
            file->file_size());
   SubStats(stats_, cf_id_, TitanInternalStats::NUM_LIVE_BLOB_FILE, 1);
@@ -189,8 +189,7 @@ void BlobStorage::ComputeGCScore() {
     gc_score_.push_back({});
     auto& gcs = gc_score_.back();
     gcs.file_number = file.first;
-    if (file.second->file_size() < cf_options_.merge_small_file_threshold ||
-        file.second->gc_mark()) {
+    if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
       // for the small file or file with gc mark (usually the file that just
       // recovered) we want gc these file but more hope to gc other file with
       // more invalid data

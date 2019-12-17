@@ -1207,13 +1207,13 @@ TEST_F(TitanDBTest, GCBeforeFlushCommit) {
   flush_opts.wait = false;
   ASSERT_OK(db_->Flush(flush_opts));
   TEST_SYNC_POINT("TitanDBTest::GCBeforeFlushCommit:WaitSecondFlush");
-  // Set GC mark to force GC select the file.
+  // Set live data size to force GC select the file.
   auto blob_storage = GetBlobStorage().lock();
   std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
   blob_storage->ExportBlobFiles(blob_files);
   ASSERT_EQ(2, blob_files.size());
   auto second_file = blob_files.rbegin()->second.lock();
-  second_file->set_gc_mark(true);
+  second_file->set_live_data_size(0);
   ASSERT_OK(db_impl_->TEST_StartGC(cf_id));
   ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
   t1.join();
