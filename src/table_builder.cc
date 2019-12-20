@@ -110,7 +110,7 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
                                 std::string* index_value) {
   if (!ok()) return;
   StopWatch write_sw(db_options_.env, statistics(stats_),
-                     BLOB_DB_BLOB_FILE_WRITE_MICROS);
+                     TITAN_BLOB_FILE_WRITE_MICROS);
 
   if (!blob_builder_) {
     status_ = blob_manager_->NewFile(&blob_handle_);
@@ -122,9 +122,9 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
         new BlobFileBuilder(db_options_, cf_options_, blob_handle_->GetFile()));
   }
 
-  RecordTick(statistics(stats_), BLOB_DB_NUM_KEYS_WRITTEN);
-  RecordInHistogram(statistics(stats_), BLOB_DB_KEY_SIZE, key.size());
-  RecordInHistogram(statistics(stats_), BLOB_DB_VALUE_SIZE, value.size());
+  RecordTick(statistics(stats_), TITAN_NUM_KEYS_WRITTEN);
+  RecordInHistogram(statistics(stats_), TITAN_KEY_SIZE, key.size());
+  RecordInHistogram(statistics(stats_), TITAN_VALUE_SIZE, value.size());
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE, value.size());
   bytes_written_ += key.size() + value.size();
 
@@ -134,7 +134,7 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
   record.value = value;
   index.file_number = blob_handle_->GetNumber();
   blob_builder_->Add(record, &index.blob_handle);
-  RecordTick(statistics(stats_), BLOB_DB_BLOB_FILE_BYTES_WRITTEN,
+  RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
              index.blob_handle.size);
   bytes_written_ += record.size();
   if (ok()) {

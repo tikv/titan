@@ -13,6 +13,7 @@
 #include "rocksdb/statistics.h"
 
 #include "titan/options.h"
+#include "titan/statistics.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -133,32 +134,6 @@ class TitanInternalStats {
   std::array<InternalOpStats,
              static_cast<size_t>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
       internal_op_stats_;
-};
-
-enum TickerType : uint32_t {
-  BLOB_CACHE_HIT = TICKER_ENUM_MAX,
-  BLOB_CACHE_MISS,
-
-  GC_NO_NEED,
-  GC_REMAIN,
-
-  GC_DISCARDABLE,
-  GC_SAMPLE,
-  GC_SMALL_FILE,
-
-  GC_FAIL,
-  GC_SUCCESS,
-  GC_TRIGGER_NEXT,
-
-  TITAN_TICKER_ENUM_MAX,
-};
-
-enum HistogramType : uint32_t {
-  TITAN_MANIFEST_FILE_SYNC_MICROS = HISTOGRAM_ENUM_MAX,
-  GC_INPUT_FILE_SIZE,
-  GC_OUTPUT_FILE_SIZE,
-
-  TITAN_HISTOGRAM_ENUM_MAX,
 };
 
 class TitanStats {
