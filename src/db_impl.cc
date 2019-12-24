@@ -606,7 +606,7 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
     StopWatch read_sw(env_, statistics(stats_.get()),
                       TITAN_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
-    RecordTick(statistics(stats_.get()), TITAN_NUM_KEYS_READ);
+    RecordTick(statistics(stats_.get()), TITAN_BLOB_FILE_NUM_KEYS_READ);
     RecordTick(statistics(stats_.get()), TITAN_BLOB_FILE_BYTES_READ,
                index.blob_handle.size);
   } else {

@@ -97,8 +97,8 @@ BlobGCJob::~BlobGCJob() {
     LogFlush(db_options_.info_log.get());
   }
   // flush metrics
-  RecordTick(statistics(stats_), TITAN_BYTES_READ, metrics_.bytes_read);
-  RecordTick(statistics(stats_), TITAN_BYTES_WRITTEN, metrics_.bytes_written);
+  RecordTick(statistics(stats_), TITAN_GC_BYTES_READ, metrics_.gc_bytes_read);
+  RecordTick(statistics(stats_), TITAN_GC_BYTES_WRITTEN, metrics_.gc_bytes_written);
   RecordTick(statistics(stats_), TITAN_GC_NUM_KEYS_OVERWRITTEN,
              metrics_.gc_num_keys_overwritten);
   RecordTick(statistics(stats_), TITAN_GC_BYTES_OVERWRITTEN,
@@ -184,6 +184,7 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
     *selected = true;
   }
   if (*selected) return Status::OK();
+  metrics_.gc_sample += 1;
 
   // TODO: add do sample count metrics
   // `records_size` won't be accurate if the file is version 1, but this method
@@ -240,7 +241,7 @@ Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
       discardable_size += total_length;
     }
   }
-  metrics_.bytes_read += iterated_size;
+  metrics_.gc_bytes_read += iterated_size;
   assert(iter.status().ok());
 
   *selected =
@@ -289,7 +290,7 @@ Status BlobGCJob::DoRunGC() {
     }
     BlobIndex blob_index = gc_iter->GetBlobIndex();
     // count read bytes for blob record of gc candidate files
-    metrics_.bytes_read += blob_index.blob_handle.size;
+    metrics_.gc_bytes_read += blob_index.blob_handle.size;
 
     if (!last_key.empty() && !gc_iter->key().compare(last_key)) {
       if (last_key_valid) {
@@ -343,7 +344,7 @@ Status BlobGCJob::DoRunGC() {
     blob_record.value = gc_iter->value();
     // count written bytes for new blob record,
     // blob index's size is counted in `RewriteValidKeyToLSM`
-    metrics_.bytes_written += blob_record.size();
+    metrics_.gc_bytes_written += blob_record.size();
 
     BlobIndex new_blob_index;
     new_blob_index.file_number = blob_file_handle->GetNumber();
@@ -420,7 +421,7 @@ Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
     return s;
   }
   // count read bytes for checking LSM entry
-  metrics_.bytes_read += key.size() + index_entry.size();
+  metrics_.gc_bytes_read += key.size() + index_entry.size();
   if (s.IsNotFound() || !is_blob_index) {
     // Either the key is deleted or updated with a newer version which is
     // inlined in LSM.
@@ -562,7 +563,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
     s = db_impl->WriteWithCallback(wo, &write_batch.first, &write_batch.second);
     if (s.ok()) {
       // count written bytes for new blob index.
-      metrics_.bytes_written += write_batch.first.GetDataSize();
+      metrics_.gc_bytes_written += write_batch.first.GetDataSize();
       metrics_.gc_num_keys_relocated++;
       metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
       // Key is successfully written to LSM.
@@ -575,7 +576,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
       break;
     }
     // count read bytes in write callback
-    metrics_.bytes_read += write_batch.second.read_bytes();
+    metrics_.gc_bytes_read += write_batch.second.read_bytes();
   }
   if (s.IsBusy()) {
     s = Status::OK();
@@ -632,9 +633,9 @@ void BlobGCJob::UpdateInternalOpStats() {
   assert(internal_op_stats != nullptr);
   AddStats(internal_op_stats, InternalOpStatsType::COUNT);
   AddStats(internal_op_stats, InternalOpStatsType::BYTES_READ,
-           metrics_.bytes_read);
+           metrics_.gc_bytes_read);
   AddStats(internal_op_stats, InternalOpStatsType::BYTES_WRITTEN,
-           metrics_.bytes_written);
+           metrics_.gc_bytes_written);
   AddStats(internal_op_stats, InternalOpStatsType::IO_BYTES_READ,
            io_bytes_read_);
   AddStats(internal_op_stats, InternalOpStatsType::IO_BYTES_WRITTEN,

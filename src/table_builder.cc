@@ -126,7 +126,7 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
         new BlobFileBuilder(db_options_, cf_options_, blob_handle_->GetFile()));
   }
 
-  RecordTick(statistics(stats_), TITAN_NUM_KEYS_WRITTEN);
+  RecordTick(statistics(stats_), TITAN_BLOB_FILE_NUM_KEYS_WRITTEN);
   RecordInHistogram(statistics(stats_), TITAN_KEY_SIZE, key.size());
   RecordInHistogram(statistics(stats_), TITAN_VALUE_SIZE, value.size());
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE, value.size());
