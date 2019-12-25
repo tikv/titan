@@ -5,6 +5,8 @@
 namespace rocksdb {
 namespace titandb {
 
+std::shared_ptr<Statistics> CreateDBStatistics();
+
 enum TickerType : uint32_t {
   TITAN_NUM_GET = TICKER_ENUM_MAX,
   TITAN_NUM_SEEK,
