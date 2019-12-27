@@ -89,6 +89,7 @@ void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   MutexLock l(&mutex_);
   files_.emplace(std::make_pair(file->file_number(), file));
   blob_ranges_.emplace(std::make_pair(Slice(file->smallest_key()), file));
+  AddStats(stats_, cf_id_, file->GetDiscardableRatioLevel(), 1);
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
            file->file_size());
   AddStats(stats_, cf_id_, TitanInternalStats::NUM_LIVE_BLOB_FILE, 1);
@@ -112,6 +113,7 @@ void BlobStorage::MarkFileObsoleteLocked(std::shared_ptr<BlobFileMeta> file,
   obsolete_files_.push_back(
       std::make_pair(file->file_number(), obsolete_sequence));
   file->FileStateTransit(BlobFileMeta::FileEvent::kDelete);
+  SubStats(stats_, cf_id_, file->GetDiscardableRatioLevel(), 1);
   SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
            file->file_size() - file->discardable_size());
   SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
