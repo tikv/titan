@@ -72,7 +72,6 @@ void TitanDBImpl::BackgroundCallGC() {
 Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
                                  uint32_t column_family_id) {
   mutex_.AssertHeld();
-  StopWatch gc_sw(env_, statistics(stats_.get()), TITAN_GC_MICROS);
 
   std::unique_ptr<BlobGC> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;
@@ -108,6 +107,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     // Nothing to do
     ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
+    StopWatch gc_sw(env_, statistics(stats_.get()), TITAN_GC_MICROS);
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
                           env_options_, blob_manager_.get(),
                           blob_file_set_.get(), log_buffer, &shuting_down_,
