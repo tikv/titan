@@ -411,6 +411,12 @@ Status BlobGCJob::DoRunGC() {
     s = blob_index_table.Finish();
     if (s.ok()) {
       ingestion_file_ready_ = true;
+    } else {
+      ROCKS_LOG_ERROR(
+          db_options_.info_log,
+          "[%s] GC job failed to finish external file to ingest: %s",
+          blob_gc_->column_family_handle()->GetName().c_str(),
+          s.ToString().c_str());
     }
   }
 
