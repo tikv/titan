@@ -292,13 +292,13 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
       cf_with_compaction.push_back((*handles)[i]);
     }
   }
-  // Initialize Titan internals.
-  if (stats_ != nullptr) {
-    stats_->Initialize(column_families);
-  }
   s = blob_file_set_->Open(column_families);
   if (!s.ok()) {
     return s;
+  }
+  // Initialize Titan internals.
+  if (stats_ != nullptr) {
+    stats_->Initialize(column_families, blob_file_set_.get());
   }
   TEST_SYNC_POINT_CALLBACK("TitanDBImpl::OpenImpl:BeforeInitialized", db_);
   // Initialization done.

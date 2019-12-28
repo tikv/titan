@@ -103,7 +103,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
   // TODO(@DorianZheng) Make sure enough room for GC
 
   if (UNLIKELY(!blob_gc)) {
-    RecordTick(statistics(stats_), TITAN_GC_NO_NEED, 1);
+    RecordTick(statistics(stats_.get()), TITAN_GC_NO_NEED, 1);
     // Nothing to do
     ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
