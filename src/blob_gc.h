@@ -45,9 +45,7 @@ class BlobGC {
 
   bool trigger_next() { return trigger_next_; }
 
-  uint64_t new_merge_file_number() {
-    return next_merge_file_number_.fetch_add(1);
-  }
+  uint64_t NewMergeFileNumber() { return next_merge_file_number_.fetch_add(1); }
 
  private:
   std::vector<BlobFileMeta*> inputs_;

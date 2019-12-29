@@ -18,17 +18,11 @@ namespace titandb {
 class BlobGCJob {
  public:
   BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
-            const TitanDBOptions &titan_db_options, Env *env,
-            const EnvOptions &env_options, TitanGcRewriteMode mode,
+            const TitanDBOptions &titan_db_options, TitanGcRewriteMode mode,
+            Env *env, const EnvOptions &env_options,
             BlobFileManager *blob_file_manager, BlobFileSet *blob_file_set,
             LogBuffer *log_buffer, std::atomic_bool *shuting_down,
             TitanStats *stats);
-
-  BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
-            const TitanDBOptions &titan_db_options, Env *env,
-            const EnvOptions &env_options, BlobFileManager *blob_file_manager,
-            BlobFileSet *blob_file_set, LogBuffer *log_buffer,
-            std::atomic_bool *shuting_down, TitanStats *stats);
 
   // No copying allowed
   BlobGCJob(const BlobGCJob &) = delete;
@@ -54,9 +48,9 @@ class BlobGCJob {
   DBImpl* base_db_impl_;
   port::Mutex* mutex_;
   TitanDBOptions db_options_;
+  const TitanGcRewriteMode gc_rewrite_mode_;
   Env *env_;
   EnvOptions env_options_;
-  TitanGcRewriteMode gc_rewrite_mode_;
   BlobFileManager *blob_file_manager_;
   BlobFileSet *blob_file_set_;
   LogBuffer *log_buffer_{nullptr};
@@ -71,7 +65,8 @@ class BlobGCJob {
   std::vector<WriteBatch> rewrite_batches_without_callback_;
   // Rewrite by ingestion
   std::string merge_file_name_;
-  bool ingestion_file_ready_ = false;
+  Status ingestion_file_status_;
+  bool ingestion_file_ready_{false};
 
   std::atomic_bool *shuting_down_{nullptr};
 

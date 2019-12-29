@@ -74,48 +74,24 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
   uint64_t read_bytes_;
 };
 
-BlobGCJob::BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
-                     const TitanDBOptions &titan_db_options, Env *env,
-                     const EnvOptions &env_options,
-                     TitanGcRewriteMode gc_rewrite_mode,
-                     BlobFileManager *blob_file_manager,
-                     BlobFileSet *blob_file_set, LogBuffer *log_buffer,
-                     std::atomic_bool *shuting_down, TitanStats *stats)
+BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
+                     const TitanDBOptions& titan_db_options,
+                     TitanGcRewriteMode gc_rewrite_mode, Env* env,
+                     const EnvOptions& env_options,
+                     BlobFileManager* blob_file_manager,
+                     BlobFileSet* blob_file_set, LogBuffer* log_buffer,
+                     std::atomic_bool* shuting_down, TitanStats* stats)
     : blob_gc_(blob_gc),
       base_db_(db),
-      base_db_impl_(reinterpret_cast<DBImpl *>(base_db_)),
+      base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)),
       mutex_(mutex),
       db_options_(titan_db_options),
-      env_(env),
-      env_options_(env_options),
       gc_rewrite_mode_(gc_rewrite_mode),
-      blob_file_manager_(blob_file_manager),
-      blob_file_set_(blob_file_set),
-      log_buffer_(log_buffer),
-      merge_file_name_(MergeFileName(titan_db_options.dirname,
-                                     blob_gc->new_merge_file_number())),
-      shuting_down_(shuting_down),
-      stats_(stats) {}
-
-BlobGCJob::BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
-                     const TitanDBOptions &titan_db_options, Env *env,
-                     const EnvOptions &env_options,
-                     BlobFileManager *blob_file_manager,
-                     BlobFileSet *blob_file_set, LogBuffer *log_buffer,
-                     std::atomic_bool *shuting_down, TitanStats *stats)
-    : blob_gc_(blob_gc),
-      base_db_(db),
-      base_db_impl_(reinterpret_cast<DBImpl *>(base_db_)),
-      mutex_(mutex),
-      db_options_(titan_db_options),
       env_(env),
       env_options_(env_options),
-      gc_rewrite_mode_(TitanGcRewriteMode::kDefault),
       blob_file_manager_(blob_file_manager),
       blob_file_set_(blob_file_set),
       log_buffer_(log_buffer),
-      merge_file_name_(MergeFileName(titan_db_options.dirname,
-                                     blob_gc->new_merge_file_number())),
       shuting_down_(shuting_down),
       stats_(stats) {}
 
@@ -303,6 +279,8 @@ Status BlobGCJob::DoRunGC() {
   SstFileWriter blob_index_table(EnvOptions(), options, cfh);
   uint32_t entry_count = 0;
   if (gc_rewrite_mode_ >= TitanGcRewriteMode::kIngest) {
+    merge_file_name_ =
+        MergeFileName(db_options_.dirname, blob_gc_->NewMergeFileNumber());
     s = blob_index_table.Open(merge_file_name_);
     assert(s.ok());
     ingestion_file_ready_ = false;
@@ -419,17 +397,19 @@ Status BlobGCJob::DoRunGC() {
     }
   }
 
-  if (s.ok() && gc_rewrite_mode_ >= TitanGcRewriteMode::kIngest &&
-      entry_count > 0) {
-    s = blob_index_table.Finish();
-    if (s.ok()) {
-      ingestion_file_ready_ = true;
-    } else {
-      ROCKS_LOG_ERROR(
-          db_options_.info_log,
-          "[%s] GC job failed to finish external file to ingest: %s",
-          blob_gc_->column_family_handle()->GetName().c_str(),
-          s.ToString().c_str());
+  if (s.ok() && gc_rewrite_mode_ >= TitanGcRewriteMode::kIngest) {
+    if (entry_count > 0) {
+      ingestion_file_status_ = blob_index_table.Finish();
+      if (s.ok()) {
+        ingestion_file_ready_ = true;
+      } else {
+        ROCKS_LOG_ERROR(
+            db_options_.info_log,
+            "[%s] GC job failed to finish external file to ingest: %s",
+            blob_gc_->column_family_handle()->GetName().c_str(),
+            ingestion_file_status_.ToString().c_str());
+        return ingestion_file_status_;
+      }
     }
   }
 
@@ -690,8 +670,9 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
         ifo.skip_memtable_check =
             (gc_rewrite_mode_ == TitanGcRewriteMode::kFastIngest);
         s = db_impl->IngestExternalFile(cfh, {merge_file_name_}, ifo);
-      } else {
-        s = Status::Corruption("External file not ready for GC.");
+      } else if (!ingestion_file_status_.ok()) {
+        // s = Status::Corruption("External file not ready for GC.");
+        s = ingestion_file_status_;
       }
       break;
   }
