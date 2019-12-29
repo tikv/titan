@@ -46,7 +46,6 @@ using InternalOpStats =
                    InternalOpStatsType::INTERNAL_OP_STATS_ENUM_MAX)>;
 
 class BlobStorage;
-class BlobFileSet;
 
 // Titan internal stats does NOT optimize race
 // condition by making thread local copies of
@@ -136,8 +135,7 @@ class TitanStats {
  public:
   TitanStats(Statistics* stats) : stats_(stats) {}
 
-  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options,
-                    BlobFileSet* blob_file_set);
+  void InitializeCF(uint32_t cf_id, std::shared_ptr<BlobStorage> blob_storage);
 
   Statistics* statistics() { return stats_; }
 

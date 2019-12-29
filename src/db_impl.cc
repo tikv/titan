@@ -296,10 +296,6 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   if (!s.ok()) {
     return s;
   }
-  // Initialize Titan internals.
-  if (stats_ != nullptr) {
-    stats_->Initialize(column_families, blob_file_set_.get());
-  }
   TEST_SYNC_POINT_CALLBACK("TitanDBImpl::OpenImpl:BeforeInitialized", db_);
   // Initialization done.
   initialized_ = true;

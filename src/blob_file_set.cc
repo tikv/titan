@@ -236,6 +236,9 @@ void BlobFileSet::AddColumnFamilies(
                                                       file_cache_, stats_);
     auto blob_storage = std::make_shared<BlobStorage>(
         db_options_, cf.second, cf.first, file_cache, stats_);
+    if (stats_ != nullptr) {
+      stats_->InitializeCF(cf.first, blob_storage);
+    }
     column_families_.emplace(cf.first, blob_storage);
   }
 }

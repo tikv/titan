@@ -205,13 +205,9 @@ void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
   }
 }
 
-Status TitanStats::Initialize(std::map<uint32_t, TitanCFOptions> cf_options,
-                              BlobFileSet* blob_file_set) {
-  for (auto& opts : cf_options) {
-    internal_stats_[opts.first] = std::make_shared<TitanInternalStats>(
-        blob_file_set->GetBlobStorage(opts.first).lock());
-  }
-  return Status::OK();
+void TitanStats::InitializeCF(uint32_t cf_id,
+                              std::shared_ptr<BlobStorage> blob_storage) {
+  internal_stats_[cf_id] = std::make_shared<TitanInternalStats>(blob_storage);
 }
 
 }  // namespace titandb
