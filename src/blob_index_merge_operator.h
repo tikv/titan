@@ -8,7 +8,7 @@ namespace rocksdb {
 namespace titandb {
 
 class BlobIndexMergeOperator : public MergeOperator {
-public:
+ public:
   BlobIndexMergeOperator() = default;
 
   bool FullMergeV2(const MergeOperationInput& merge_in,
@@ -89,8 +89,8 @@ public:
     return false;
   }
 
-  const char *Name() const override { return "BlobGCOperator"; }
+  const char* Name() const override { return "BlobGCOperator"; }
 };
 
-} // namespace titandb
-} // namespace rocksdb
+}  // namespace titandb
+}  // namespace rocksdb

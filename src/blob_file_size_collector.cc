@@ -54,9 +54,9 @@ Status BlobFileSizeCollector::AddUserKey(const Slice& /* key */,
   MergeBlobIndex index;
 
   if (type == kEntryMerge) {
-    s = index.DecodeFrom(const_cast<Slice *>(&value));
+    s = index.DecodeFrom(const_cast<Slice*>(&value));
   } else {
-    s = index.DecodeFromBase(const_cast<Slice *>(&value));
+    s = index.DecodeFromBase(const_cast<Slice*>(&value));
   }
   if (!s.ok()) {
     return s;

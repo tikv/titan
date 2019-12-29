@@ -966,7 +966,7 @@ Status TitanDBImpl::SetOptions(
     auto p = opts.find("blob_run_mode");
     set_blob_run_mode = (p != opts.end());
     if (set_blob_run_mode) {
-      const std::string &blob_run_mode_string = p->second;
+      const std::string& blob_run_mode_string = p->second;
       auto pm = blob_run_mode_string_map.find(blob_run_mode_string);
       if (pm == blob_run_mode_string_map.end()) {
         return Status::InvalidArgument("No blob_run_mode defined for " +
@@ -984,7 +984,7 @@ Status TitanDBImpl::SetOptions(
     auto p = opts.find("gc_rewrite_mode");
     set_gc_rewrite_mode = (p != opts.end());
     if (set_gc_rewrite_mode) {
-      const std::string &gc_rewrite_mode_string = p->second;
+      const std::string& gc_rewrite_mode_string = p->second;
       auto pm = gc_rewrite_mode_string_map.find(gc_rewrite_mode_string);
       if (pm == gc_rewrite_mode_string_map.end()) {
         return Status::InvalidArgument("No gc_rewrite_mode defined for " +
@@ -1011,7 +1011,7 @@ Status TitanDBImpl::SetOptions(
       MutexLock l(&mutex_);
       if (set_blob_run_mode) {
         assert(cf_info_.count(cf_id) > 0);
-        TitanColumnFamilyInfo &cf_info = cf_info_[cf_id];
+        TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
         cf_info.titan_table_factory->SetBlobRunMode(blob_run_mode);
         cf_info.mutable_cf_options.blob_run_mode = blob_run_mode;
       }

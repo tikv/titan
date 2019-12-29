@@ -127,21 +127,21 @@ Status BlobIndex::DecodeFrom(Slice* src) {
   return s;
 }
 
-bool BlobIndex::operator==(const BlobIndex &rhs) const {
+bool BlobIndex::operator==(const BlobIndex& rhs) const {
   return (file_number == rhs.file_number && blob_handle == rhs.blob_handle);
 }
 
-void MergeBlobIndex::EncodeTo(std::string *dst) const {
+void MergeBlobIndex::EncodeTo(std::string* dst) const {
   BlobIndex::EncodeTo(dst);
   PutVarint64(dst, sequence);
   PutVarint64(dst, source_file_number);
 }
 
-void MergeBlobIndex::EncodeToBase(std::string *dst) const {
+void MergeBlobIndex::EncodeToBase(std::string* dst) const {
   BlobIndex::EncodeTo(dst);
 }
 
-Status MergeBlobIndex::DecodeFrom(Slice *src) {
+Status MergeBlobIndex::DecodeFrom(Slice* src) {
   Status s = BlobIndex::DecodeFrom(src);
   if (!s.ok()) {
     return s;
@@ -152,17 +152,17 @@ Status MergeBlobIndex::DecodeFrom(Slice *src) {
   return s;
 }
 
-Status MergeBlobIndex::DecodeFromBase(Slice *src) {
+Status MergeBlobIndex::DecodeFromBase(Slice* src) {
   return BlobIndex::DecodeFrom(src);
 }
 
-bool MergeBlobIndex::operator==(const MergeBlobIndex &rhs) const {
+bool MergeBlobIndex::operator==(const MergeBlobIndex& rhs) const {
   return (sequence == rhs.sequence &&
           source_file_number == rhs.source_file_number &&
           BlobIndex::operator==(rhs));
 }
 
-std::string MergeFileName(const std::string &dirname, uint64_t number) {
+std::string MergeFileName(const std::string& dirname, uint64_t number) {
   assert(number > 0);
   char buf[100];
   snprintf(buf, sizeof(buf), "/%06llu.%s",

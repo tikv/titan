@@ -81,14 +81,21 @@ BlobGCJob::BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
                      BlobFileManager *blob_file_manager,
                      BlobFileSet *blob_file_set, LogBuffer *log_buffer,
                      std::atomic_bool *shuting_down, TitanStats *stats)
-    : blob_gc_(blob_gc), base_db_(db),
-      base_db_impl_(reinterpret_cast<DBImpl *>(base_db_)), mutex_(mutex),
-      db_options_(titan_db_options), env_(env), env_options_(env_options),
-      gc_rewrite_mode_(gc_rewrite_mode), blob_file_manager_(blob_file_manager),
-      blob_file_set_(blob_file_set), log_buffer_(log_buffer),
+    : blob_gc_(blob_gc),
+      base_db_(db),
+      base_db_impl_(reinterpret_cast<DBImpl *>(base_db_)),
+      mutex_(mutex),
+      db_options_(titan_db_options),
+      env_(env),
+      env_options_(env_options),
+      gc_rewrite_mode_(gc_rewrite_mode),
+      blob_file_manager_(blob_file_manager),
+      blob_file_set_(blob_file_set),
+      log_buffer_(log_buffer),
       merge_file_name_(MergeFileName(titan_db_options.dirname,
                                      blob_gc->new_merge_file_number())),
-      shuting_down_(shuting_down), stats_(stats) {}
+      shuting_down_(shuting_down),
+      stats_(stats) {}
 
 BlobGCJob::BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
                      const TitanDBOptions &titan_db_options, Env *env,
@@ -96,15 +103,21 @@ BlobGCJob::BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
                      BlobFileManager *blob_file_manager,
                      BlobFileSet *blob_file_set, LogBuffer *log_buffer,
                      std::atomic_bool *shuting_down, TitanStats *stats)
-    : blob_gc_(blob_gc), base_db_(db),
-      base_db_impl_(reinterpret_cast<DBImpl *>(base_db_)), mutex_(mutex),
-      db_options_(titan_db_options), env_(env), env_options_(env_options),
+    : blob_gc_(blob_gc),
+      base_db_(db),
+      base_db_impl_(reinterpret_cast<DBImpl *>(base_db_)),
+      mutex_(mutex),
+      db_options_(titan_db_options),
+      env_(env),
+      env_options_(env_options),
       gc_rewrite_mode_(TitanGcRewriteMode::kDefault),
-      blob_file_manager_(blob_file_manager), blob_file_set_(blob_file_set),
+      blob_file_manager_(blob_file_manager),
+      blob_file_set_(blob_file_set),
       log_buffer_(log_buffer),
       merge_file_name_(MergeFileName(titan_db_options.dirname,
                                      blob_gc->new_merge_file_number())),
-      shuting_down_(shuting_down), stats_(stats) {}
+      shuting_down_(shuting_down),
+      stats_(stats) {}
 
 BlobGCJob::~BlobGCJob() {
   if (log_buffer_) {
@@ -282,7 +295,7 @@ Status BlobGCJob::DoRunGC() {
   std::unique_ptr<BlobFileHandle> blob_file_handle;
   std::unique_ptr<BlobFileBuilder> blob_file_builder;
 
-  auto* cfh = blob_gc_->column_family_handle();
+  auto *cfh = blob_gc_->column_family_handle();
 
   Options options;
   options.table_properties_collector_factories.emplace_back(
@@ -394,7 +407,7 @@ Status BlobGCJob::DoRunGC() {
       auto &wb = rewrite_batches_without_callback_.back();
       s = WriteBatchInternal::Merge(&wb, cfh->GetID(), blob_record.key,
                                     index_entry);
-    } else { // TitanGcRewriteMode::kIngest / TitanGcRewriteMode::kFastIngest
+    } else {  // TitanGcRewriteMode::kIngest / TitanGcRewriteMode::kFastIngest
       new_blob_index.EncodeTo(&index_entry);
       s = blob_index_table.Merge(blob_record.key, index_entry);
       if (s.ok()) {
@@ -607,78 +620,80 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
   wo.ignore_missing_column_families = true;
   // @TODO(tabokie): fix statistics here.
   switch (gc_rewrite_mode_) {
-  case TitanGcRewriteMode::kDefault:
-    for (auto &write_batch : rewrite_batches_) {
-      if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
-        s = Status::Aborted("Column family drop");
-        break;
+    case TitanGcRewriteMode::kDefault:
+      for (auto &write_batch : rewrite_batches_) {
+        if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
+          s = Status::Aborted("Column family drop");
+          break;
+        }
+        if (IsShutingDown()) {
+          s = Status::ShutdownInProgress();
+          break;
+        }
+        s = db_impl->WriteWithCallback(wo, &write_batch.first,
+                                       &write_batch.second);
+        if (s.ok()) {
+          // count written bytes for new blob index.
+          metrics_.bytes_written += write_batch.first.GetDataSize();
+          metrics_.gc_num_keys_relocated++;
+          metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
+          // Key is successfully written to LSM.
+        } else if (s.IsBusy()) {
+          metrics_.gc_num_keys_overwritten++;
+          metrics_.gc_bytes_overwritten +=
+              write_batch.second.blob_record_size();
+          // The key is overwritten in the meanwhile. Drop the blob record.
+        } else {
+          // We hit an error.
+          break;
+        }
+        // count read bytes in write callback
+        metrics_.bytes_read += write_batch.second.read_bytes();
       }
-      if (IsShutingDown()) {
-        s = Status::ShutdownInProgress();
-        break;
+      break;
+    case TitanGcRewriteMode::kMerge:
+      for (auto &write_batch : rewrite_batches_without_callback_) {
+        if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
+          s = Status::Aborted("Column family drop");
+          break;
+        }
+        if (IsShutingDown()) {
+          s = Status::ShutdownInProgress();
+          break;
+        }
+        s = db_impl->Write(wo, &write_batch);
+        if (s.ok()) {
+          // count written bytes for new blob index.
+          metrics_.bytes_written += write_batch.GetDataSize();
+          metrics_.gc_num_keys_relocated++;
+          // metrics_.gc_bytes_relocated +=
+          // write_batch.second.blob_record_size();
+          // Key is successfully written to LSM.
+        } else if (s.IsBusy()) {
+          metrics_.gc_num_keys_overwritten++;
+          // metrics_.gc_bytes_overwritten +=
+          // write_batch.second.blob_record_size();
+          // The key is overwritten in the meanwhile. Drop the blob record.
+        } else {
+          // We hit an error.
+          break;
+        }
+        // count read bytes in write callback
+        // metrics_.bytes_read += write_batch.second.read_bytes();
       }
-      s = db_impl->WriteWithCallback(wo, &write_batch.first,
-                                     &write_batch.second);
-      if (s.ok()) {
-        // count written bytes for new blob index.
-        metrics_.bytes_written += write_batch.first.GetDataSize();
-        metrics_.gc_num_keys_relocated++;
-        metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
-        // Key is successfully written to LSM.
-      } else if (s.IsBusy()) {
-        metrics_.gc_num_keys_overwritten++;
-        metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
-        // The key is overwritten in the meanwhile. Drop the blob record.
+      break;
+    case TitanGcRewriteMode::kIngest:
+    case TitanGcRewriteMode::kFastIngest:
+      if (ingestion_file_ready_) {
+        auto *cfh = blob_gc_->column_family_handle();
+        IngestExternalFileOptions ifo;
+        ifo.skip_memtable_check =
+            (gc_rewrite_mode_ == TitanGcRewriteMode::kFastIngest);
+        s = db_impl->IngestExternalFile(cfh, {merge_file_name_}, ifo);
       } else {
-        // We hit an error.
-        break;
+        s = Status::Corruption("External file not ready for GC.");
       }
-      // count read bytes in write callback
-      metrics_.bytes_read += write_batch.second.read_bytes();
-    }
-    break;
-  case TitanGcRewriteMode::kMerge:
-    for (auto &write_batch : rewrite_batches_without_callback_) {
-      if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
-        s = Status::Aborted("Column family drop");
-        break;
-      }
-      if (IsShutingDown()) {
-        s = Status::ShutdownInProgress();
-        break;
-      }
-      s = db_impl->Write(wo, &write_batch);
-      if (s.ok()) {
-        // count written bytes for new blob index.
-        metrics_.bytes_written += write_batch.GetDataSize();
-        metrics_.gc_num_keys_relocated++;
-        // metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
-        // Key is successfully written to LSM.
-      } else if (s.IsBusy()) {
-        metrics_.gc_num_keys_overwritten++;
-        // metrics_.gc_bytes_overwritten +=
-        // write_batch.second.blob_record_size();
-        // The key is overwritten in the meanwhile. Drop the blob record.
-      } else {
-        // We hit an error.
-        break;
-      }
-      // count read bytes in write callback
-      // metrics_.bytes_read += write_batch.second.read_bytes();
-    }
-    break;
-  case TitanGcRewriteMode::kIngest:
-  case TitanGcRewriteMode::kFastIngest:
-    if (ingestion_file_ready_) {
-      auto *cfh = blob_gc_->column_family_handle();
-      IngestExternalFileOptions ifo;
-      ifo.skip_memtable_check =
-          (gc_rewrite_mode_ == TitanGcRewriteMode::kFastIngest);
-      s = db_impl->IngestExternalFile(cfh, {merge_file_name_}, ifo);
-    } else {
-      s = Status::Corruption("External file not ready for GC.");
-    }
-    break;
+      break;
   }
   if (s.IsBusy()) {
     s = Status::OK();

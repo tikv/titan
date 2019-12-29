@@ -49,7 +49,7 @@ class BlobGC {
     return next_merge_file_number_.fetch_add(1);
   }
 
-private:
+ private:
   std::vector<BlobFileMeta*> inputs_;
   std::vector<BlobFileMeta*> sampled_inputs_;
   std::vector<BlobFileMeta*> outputs_;

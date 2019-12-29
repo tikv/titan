@@ -146,7 +146,7 @@ struct BlobIndex {
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
 
-  bool operator==(const BlobIndex &rhs) const;
+  bool operator==(const BlobIndex& rhs) const;
 };
 
 struct MergeBlobIndex : public BlobIndex {
@@ -154,15 +154,15 @@ struct MergeBlobIndex : public BlobIndex {
   uint64_t source_file_number{0};
 
   void EncodeTo(std::string* dst) const;
-  void EncodeToBase(std::string *dst) const;
+  void EncodeToBase(std::string* dst) const;
   Status DecodeFrom(Slice* src);
-  Status DecodeFromBase(Slice *src);
+  Status DecodeFromBase(Slice* src);
 
-  bool operator==(const MergeBlobIndex &rhs) const;
+  bool operator==(const MergeBlobIndex& rhs) const;
 };
 
 // NO.merge
-std::string MergeFileName(const std::string &blobdirname, uint64_t number);
+std::string MergeFileName(const std::string& blobdirname, uint64_t number);
 
 // Format of blob file meta (not fixed size):
 //

@@ -79,9 +79,9 @@ static auto& blob_run_mode_to_string =
     TitanOptionsHelper::blob_run_mode_to_string;
 static auto& blob_run_mode_string_map =
     TitanOptionsHelper::blob_run_mode_string_map;
-static auto &gc_rewrite_mode_to_string =
+static auto& gc_rewrite_mode_to_string =
     TitanOptionsHelper::gc_rewrite_mode_to_string;
-static auto &gc_rewrite_mode_string_map =
+static auto& gc_rewrite_mode_string_map =
     TitanOptionsHelper::gc_rewrite_mode_string_map;
 
 struct ImmutableTitanCFOptions;

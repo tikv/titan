@@ -17,31 +17,31 @@ namespace titandb {
 
 class BlobGCJob {
  public:
-   BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
-             const TitanDBOptions &titan_db_options, Env *env,
-             const EnvOptions &env_options, TitanGcRewriteMode mode,
-             BlobFileManager *blob_file_manager, BlobFileSet *blob_file_set,
-             LogBuffer *log_buffer, std::atomic_bool *shuting_down,
-             TitanStats *stats);
+  BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
+            const TitanDBOptions &titan_db_options, Env *env,
+            const EnvOptions &env_options, TitanGcRewriteMode mode,
+            BlobFileManager *blob_file_manager, BlobFileSet *blob_file_set,
+            LogBuffer *log_buffer, std::atomic_bool *shuting_down,
+            TitanStats *stats);
 
-   BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
-             const TitanDBOptions &titan_db_options, Env *env,
-             const EnvOptions &env_options, BlobFileManager *blob_file_manager,
-             BlobFileSet *blob_file_set, LogBuffer *log_buffer,
-             std::atomic_bool *shuting_down, TitanStats *stats);
+  BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
+            const TitanDBOptions &titan_db_options, Env *env,
+            const EnvOptions &env_options, BlobFileManager *blob_file_manager,
+            BlobFileSet *blob_file_set, LogBuffer *log_buffer,
+            std::atomic_bool *shuting_down, TitanStats *stats);
 
-   // No copying allowed
-   BlobGCJob(const BlobGCJob &) = delete;
-   void operator=(const BlobGCJob &) = delete;
+  // No copying allowed
+  BlobGCJob(const BlobGCJob &) = delete;
+  void operator=(const BlobGCJob &) = delete;
 
-   ~BlobGCJob();
+  ~BlobGCJob();
 
-   // REQUIRE: mutex held
-   Status Prepare();
-   // REQUIRE: mutex not held
-   Status Run();
-   // REQUIRE: mutex held
-   Status Finish();
+  // REQUIRE: mutex held
+  Status Prepare();
+  // REQUIRE: mutex not held
+  Status Run();
+  // REQUIRE: mutex held
+  Status Finish();
 
  private:
   class GarbageCollectionWriteCallback;
@@ -54,12 +54,12 @@ class BlobGCJob {
   DBImpl* base_db_impl_;
   port::Mutex* mutex_;
   TitanDBOptions db_options_;
-  Env* env_;
+  Env *env_;
   EnvOptions env_options_;
   TitanGcRewriteMode gc_rewrite_mode_;
-  BlobFileManager* blob_file_manager_;
-  BlobFileSet* blob_file_set_;
-  LogBuffer* log_buffer_{nullptr};
+  BlobFileManager *blob_file_manager_;
+  BlobFileSet *blob_file_set_;
+  LogBuffer *log_buffer_{nullptr};
 
   std::vector<std::pair<std::unique_ptr<BlobFileHandle>,
                         std::unique_ptr<BlobFileBuilder>>>
@@ -73,7 +73,7 @@ class BlobGCJob {
   std::string merge_file_name_;
   bool ingestion_file_ready_ = false;
 
-  std::atomic_bool* shuting_down_{nullptr};
+  std::atomic_bool *shuting_down_{nullptr};
 
   TitanStats* stats_;
 
