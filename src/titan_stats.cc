@@ -13,12 +13,14 @@ namespace rocksdb {
 namespace titandb {
 
 std::shared_ptr<Statistics> CreateDBStatistics() {
-  return rocksdb::CreateDBStatistics<TITAN_TICKER_ENUM_MAX, TITAN_HISTOGRAM_ENUM_MAX>();
+  return rocksdb::CreateDBStatistics<TITAN_TICKER_ENUM_MAX,
+                                     TITAN_HISTOGRAM_ENUM_MAX>();
 }
 
 static const std::string titandb_prefix = "rocksdb.titandb.";
 
-static const std::string num_blob_files_at_level_prefix = "num-blob-files-at-level";
+static const std::string num_blob_files_at_level_prefix =
+    "num-blob-files-at-level";
 static const std::string live_blob_size = "live-blob-size";
 static const std::string num_live_blob_file = "num-live-blob-file";
 static const std::string num_obsolete_blob_file = "num-obsolete-blob-file";
@@ -58,31 +60,50 @@ const std::string TitanDB::Properties::kNumDiscardableRatioLE80File =
 const std::string TitanDB::Properties::kNumDiscardableRatioLE100File =
     titandb_prefix + num_discardable_ratio_le100_file;
 
-const std::unordered_map<std::string, std::function<int(const TitanInternalStats*, Slice)>>
+const std::unordered_map<std::string,
+                         std::function<int(const TitanInternalStats*, Slice)>>
     TitanInternalStats::stats_type_string_map = {
         {TitanDB::Properties::kNumBlobFilesAtLevelPrefix,
-        &TitanInternalStats::HandleNumBlobFilesAtLevel
-         },
+         &TitanInternalStats::HandleNumBlobFilesAtLevel},
         {TitanDB::Properties::kLiveBlobSize,
-         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1, TitanInternalStats::LIVE_BLOB_SIZE, std::placeholders::_2)},
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::LIVE_BLOB_SIZE, std::placeholders::_2)},
         {TitanDB::Properties::kNumLiveBlobFile,
-         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1, TitanInternalStats::NUM_LIVE_BLOB_FILE, std::placeholders::_2)},
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::NUM_LIVE_BLOB_FILE,
+                   std::placeholders::_2)},
         {TitanDB::Properties::kNumObsoleteBlobFile,
-         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1, TitanInternalStats::NUM_OBSOLETE_BLOB_FILE, std::placeholders::_2)},
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::NUM_OBSOLETE_BLOB_FILE,
+                   std::placeholders::_2)},
         {TitanDB::Properties::kLiveBlobFileSize,
-         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1, TitanInternalStats::LIVE_BLOB_FILE_SIZE, std::placeholders::_2)},
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::LIVE_BLOB_FILE_SIZE,
+                   std::placeholders::_2)},
         {TitanDB::Properties::kObsoleteBlobFileSize,
-         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1, TitanInternalStats::OBSOLETE_BLOB_FILE_SIZE, std::placeholders::_2)},
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::OBSOLETE_BLOB_FILE_SIZE,
+                   std::placeholders::_2)},
         {TitanDB::Properties::kNumDiscardableRatioLE0File,
-         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1, TitanInternalStats::NUM_DISCARDABLE_RATIO_LE0, std::placeholders::_2)},
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::NUM_DISCARDABLE_RATIO_LE0,
+                   std::placeholders::_2)},
         {TitanDB::Properties::kNumDiscardableRatioLE20File,
-         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1, TitanInternalStats::NUM_DISCARDABLE_RATIO_LE20, std::placeholders::_2)},
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::NUM_DISCARDABLE_RATIO_LE20,
+                   std::placeholders::_2)},
         {TitanDB::Properties::kNumDiscardableRatioLE50File,
-         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1, TitanInternalStats::NUM_DISCARDABLE_RATIO_LE50, std::placeholders::_2)},
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::NUM_DISCARDABLE_RATIO_LE50,
+                   std::placeholders::_2)},
         {TitanDB::Properties::kNumDiscardableRatioLE80File,
-         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1, TitanInternalStats::NUM_DISCARDABLE_RATIO_LE80, std::placeholders::_2)},
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::NUM_DISCARDABLE_RATIO_LE80,
+                   std::placeholders::_2)},
         {TitanDB::Properties::kNumDiscardableRatioLE100File,
-         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1, TitanInternalStats::NUM_DISCARDABLE_RATIO_LE100, std::placeholders::_2)},
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::NUM_DISCARDABLE_RATIO_LE100,
+                   std::placeholders::_2)},
 };
 
 const std::array<std::string,
@@ -107,33 +128,36 @@ std::pair<Slice, Slice> GetPropertyNameAndArg(const Slice& property) {
   return {name, arg};
 }
 
-bool TitanInternalStats::GetIntProperty(const Slice& property, uint64_t* value) const {
-    auto ppt = GetPropertyNameAndArg(property);
-    auto p = stats_type_string_map.find(ppt.first.ToString());
-    if (p != stats_type_string_map.end()) {
-        *value = (p->second)(this, ppt.second);
-        return true;
-    }
-    return false;
+bool TitanInternalStats::GetIntProperty(const Slice& property,
+                                        uint64_t* value) const {
+  auto ppt = GetPropertyNameAndArg(property);
+  auto p = stats_type_string_map.find(ppt.first.ToString());
+  if (p != stats_type_string_map.end()) {
+    *value = (p->second)(this, ppt.second);
+    return true;
+  }
+  return false;
 }
 
-bool TitanInternalStats::GetStringProperty(const Slice& property, std::string* value) const {
-    uint64_t int_value;
-    if (GetIntProperty(property, &int_value)) {
-        *value = std::to_string(int_value);
-        return true;
-    }
-    return false;
+bool TitanInternalStats::GetStringProperty(const Slice& property,
+                                           std::string* value) const {
+  uint64_t int_value;
+  if (GetIntProperty(property, &int_value)) {
+    *value = std::to_string(int_value);
+    return true;
+  }
+  return false;
 }
-  
-uint64_t TitanInternalStats::HandleStatsValue(TitanInternalStats::StatsType type, Slice _arg) const {
-    return stats_[type].load(std::memory_order_relaxed);
+
+uint64_t TitanInternalStats::HandleStatsValue(
+    TitanInternalStats::StatsType type, Slice _arg) const {
+  return stats_[type].load(std::memory_order_relaxed);
 }
 
 uint64_t TitanInternalStats::HandleNumBlobFilesAtLevel(Slice arg) const {
-    auto s = arg.ToString();
-    int level = ParseInt(s);
-    return blob_storage_->NumBlobFilesAtLevel(level);
+  auto s = arg.ToString();
+  int level = ParseInt(s);
+  return blob_storage_->NumBlobFilesAtLevel(level);
 }
 
 void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
@@ -181,12 +205,14 @@ void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
   }
 }
 
-Status TitanStats::Initialize(std::map<uint32_t, TitanCFOptions> cf_options, BlobFileSet* blob_file_set) {
-    for (auto& opts : cf_options) {
-      internal_stats_[opts.first] = std::make_shared<TitanInternalStats>(blob_file_set->GetBlobStorage(opts.first).lock());
-    }
-    return Status::OK();
+Status TitanStats::Initialize(std::map<uint32_t, TitanCFOptions> cf_options,
+                              BlobFileSet* blob_file_set) {
+  for (auto& opts : cf_options) {
+    internal_stats_[opts.first] = std::make_shared<TitanInternalStats>(
+        blob_file_set->GetBlobStorage(opts.first).lock());
   }
+  return Status::OK();
+}
 
 }  // namespace titandb
 }  // namespace rocksdb

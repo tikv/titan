@@ -69,7 +69,10 @@ class TitanInternalStats {
     INTERNAL_STATS_ENUM_MAX,
   };
 
-  TitanInternalStats(std::shared_ptr<BlobStorage> blob_storage) : blob_storage_(blob_storage) { Clear(); }
+  TitanInternalStats(std::shared_ptr<BlobStorage> blob_storage)
+      : blob_storage_(blob_storage) {
+    Clear();
+  }
 
   void Clear() {
     for (int stat = 0; stat < INTERNAL_STATS_ENUM_MAX; stat++) {
@@ -111,11 +114,13 @@ class TitanInternalStats {
 
   bool GetIntProperty(const Slice& property, uint64_t* value) const;
   bool GetStringProperty(const Slice& property, std::string* value) const;
-  uint64_t HandleStatsValue(TitanInternalStats::StatsType type, Slice _arg) const;
+  uint64_t HandleStatsValue(TitanInternalStats::StatsType type,
+                            Slice _arg) const;
   uint64_t HandleNumBlobFilesAtLevel(Slice arg) const;
 
  private:
-  static const std::unordered_map<std::string, std::function<int(const TitanInternalStats*, Slice)>>
+  static const std::unordered_map<
+      std::string, std::function<int(const TitanInternalStats*, Slice)>>
       stats_type_string_map;
   static const std::array<
       std::string, static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
@@ -131,7 +136,8 @@ class TitanStats {
  public:
   TitanStats(Statistics* stats) : stats_(stats) {}
 
-  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options, BlobFileSet* blob_file_set);
+  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options,
+                    BlobFileSet* blob_file_set);
 
   Statistics* statistics() { return stats_; }
 
