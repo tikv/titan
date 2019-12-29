@@ -43,10 +43,10 @@ class BlobGCJob {
 
   void UpdateInternalOpStats();
 
-  BlobGC* blob_gc_;
-  DB* base_db_;
-  DBImpl* base_db_impl_;
-  port::Mutex* mutex_;
+  BlobGC *blob_gc_;
+  DB *base_db_;
+  DBImpl *base_db_impl_;
+  port::Mutex *mutex_;
   TitanDBOptions db_options_;
   const TitanGcRewriteMode gc_rewrite_mode_;
   Env *env_;
@@ -70,7 +70,7 @@ class BlobGCJob {
 
   std::atomic_bool *shuting_down_{nullptr};
 
-  TitanStats* stats_;
+  TitanStats *stats_;
 
   struct {
     uint64_t bytes_read = 0;

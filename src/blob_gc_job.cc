@@ -271,7 +271,7 @@ Status BlobGCJob::DoRunGC() {
   std::unique_ptr<BlobFileHandle> blob_file_handle;
   std::unique_ptr<BlobFileBuilder> blob_file_builder;
 
-  auto *cfh = blob_gc_->column_family_handle();
+  auto* cfh = blob_gc_->column_family_handle();
 
   Options options;
   options.table_properties_collector_factories.emplace_back(
@@ -376,13 +376,13 @@ Status BlobGCJob::DoRunGC() {
       callback.value = index_entry;
       rewrite_batches_.emplace_back(
           std::make_pair(WriteBatch(), std::move(callback)));
-      auto &wb = rewrite_batches_.back().first;
+      auto& wb = rewrite_batches_.back().first;
       s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), blob_record.key,
                                            index_entry);
     } else if (gc_rewrite_mode_ == TitanGcRewriteMode::kMerge) {
       new_blob_index.EncodeTo(&index_entry);
       rewrite_batches_without_callback_.emplace_back(WriteBatch());
-      auto &wb = rewrite_batches_without_callback_.back();
+      auto& wb = rewrite_batches_without_callback_.back();
       s = WriteBatchInternal::Merge(&wb, cfh->GetID(), blob_record.key,
                                     index_entry);
     } else {  // TitanGcRewriteMode::kIngest / TitanGcRewriteMode::kFastIngest
@@ -601,7 +601,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
   // @TODO(tabokie): fix statistics here.
   switch (gc_rewrite_mode_) {
     case TitanGcRewriteMode::kDefault:
-      for (auto &write_batch : rewrite_batches_) {
+      for (auto& write_batch : rewrite_batches_) {
         if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
           s = Status::Aborted("Column family drop");
           break;
@@ -632,7 +632,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
       }
       break;
     case TitanGcRewriteMode::kMerge:
-      for (auto &write_batch : rewrite_batches_without_callback_) {
+      for (auto& write_batch : rewrite_batches_without_callback_) {
         if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
           s = Status::Aborted("Column family drop");
           break;
@@ -665,7 +665,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
     case TitanGcRewriteMode::kIngest:
     case TitanGcRewriteMode::kFastIngest:
       if (ingestion_file_ready_) {
-        auto *cfh = blob_gc_->column_family_handle();
+        auto* cfh = blob_gc_->column_family_handle();
         IngestExternalFileOptions ifo;
         ifo.skip_memtable_check =
             (gc_rewrite_mode_ == TitanGcRewriteMode::kFastIngest);
