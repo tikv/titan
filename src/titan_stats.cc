@@ -60,8 +60,8 @@ const std::string TitanDB::Properties::kNumDiscardableRatioLE80File =
 const std::string TitanDB::Properties::kNumDiscardableRatioLE100File =
     titandb_prefix + num_discardable_ratio_le100_file;
 
-const std::unordered_map<std::string,
-                         std::function<int(const TitanInternalStats*, Slice)>>
+const std::unordered_map<
+    std::string, std::function<uint64_t(const TitanInternalStats*, Slice)>>
     TitanInternalStats::stats_type_string_map = {
         {TitanDB::Properties::kNumBlobFilesAtLevelPrefix,
          &TitanInternalStats::HandleNumBlobFilesAtLevel},

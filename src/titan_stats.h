@@ -9,11 +9,11 @@
 #include "logging/log_buffer.h"
 #include "monitoring/histogram.h"
 #include "monitoring/statistics.h"
-#include "util/string_util.h"
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
 #include "titan/options.h"
 #include "titan/statistics.h"
+#include "util/string_util.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -119,7 +119,7 @@ class TitanInternalStats {
 
  private:
   static const std::unordered_map<
-      std::string, std::function<int(const TitanInternalStats*, Slice)>>
+      std::string, std::function<uint64_t(const TitanInternalStats*, Slice)>>
       stats_type_string_map;
   static const std::array<
       std::string, static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
