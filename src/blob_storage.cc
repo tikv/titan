@@ -91,7 +91,6 @@ void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   blob_ranges_.emplace(std::make_pair(Slice(file->smallest_key()), file));
   levels_file_count_[file->file_level()]++;
   AddStats(stats_, cf_id_, file->GetDiscardableRatioLevel(), 1);
-  AddStats(stats_, cf_id_, file->GetDiscardableRatioLevel(), 1);
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
            file->file_size());
   AddStats(stats_, cf_id_, TitanInternalStats::NUM_LIVE_BLOB_FILE, 1);
