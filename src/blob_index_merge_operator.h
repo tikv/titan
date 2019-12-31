@@ -61,13 +61,13 @@ class BlobIndexMergeOperator : public MergeOperator {
           merge_index = index;
           latest_sequence = index.sequence;
           filled = true;
-        } else if (latest_sequence < index.sequence) {
+        } else if (latest_sequence <= index.sequence) {
+          // notice the equal case here, merge on merge is possible
           latest_sequence = index.sequence;
           // Discard(merge_index);
           merge_index = index;
         } else {
           // the merge comes from an older modify.
-          assert(latest_sequence != index.sequence);
         }
       }
     }
