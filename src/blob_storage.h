@@ -76,6 +76,7 @@ class BlobStorage {
       auto level = file.second->GetDiscardableRatioLevel();
       AddStats(stats_, cf_id_, level, 1);
     }
+    ComputeGCScore();
   }
 
   // The corresponding column family is dropped, so mark destroyed and we can

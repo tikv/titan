@@ -126,7 +126,8 @@ class BlobGCJobTest : public testing::Test {
     db_ = nullptr;
   }
 
-  void RunGC(bool expected, bool disable_merge_small = false) {
+  // TODO: unifiy this and TitanDBImpl::TEST_StartGC
+  void RunGC(bool expect_gc, bool disable_merge_small = false) {
     MutexLock l(mutex_);
     Status s;
     auto* cfh = base_db_->DefaultColumnFamily();
@@ -150,7 +151,7 @@ class BlobGCJobTest : public testing::Test {
           blob_file_set_->GetBlobStorage(cfh->GetID()).lock().get());
     }
 
-    ASSERT_TRUE((blob_gc != nullptr) == expected);
+    ASSERT_TRUE((blob_gc != nullptr) == expect_gc);
 
     if (blob_gc) {
       blob_gc->SetColumnFamily(cfh);
@@ -166,7 +167,7 @@ class BlobGCJobTest : public testing::Test {
       {
         mutex_->Unlock();
         s = blob_gc_job.Run();
-        if (expected) {
+        if (expect_gc) {
           ASSERT_OK(s);
         }
         mutex_->Lock();
@@ -378,22 +379,25 @@ TEST_F(BlobGCJobTest, GCLimiter) {
 TEST_F(BlobGCJobTest, Reopen) {
   DisableMergeSmall();
   NewDB();
-
   for (int i = 0; i < 10; i++) {
-    db_->Put(WriteOptions(), GenKey(i), GenValue(i));
+    ASSERT_OK(db_->Put(WriteOptions(), GenKey(i), GenValue(i)));
   }
   Flush();
   CheckBlobNumber(1);
 
   Reopen();
-
-  RunGC(true, true);
+  RunGC(false/*expect_gc*/, true/*disable_merge_small*/);
+  CheckBlobNumber(1);
+  for (int i = 0; i < 5; i++) {
+    ASSERT_OK(db_->Delete(WriteOptions(), GenKey(i)));
+  }
+  Flush();
+  CompactAll();
   CheckBlobNumber(1);
 
-  // trigger compute gc score
-  ReComputeGCScore();
-
-  RunGC(false, true);
+  // Should recover GC stats after reopen.
+  Reopen();
+  RunGC(true/*expect_gc*/, true/*dissable_merge_small*/);
   CheckBlobNumber(1);
 }
 
