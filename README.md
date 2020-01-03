@@ -1,7 +1,7 @@
 # Titan: A RocksDB Plugin to Reduce Write Amplification
 
-[![Build Status](https://travis-ci.org/pingcap/titan.svg?branch=master)](https://travis-ci.org/pingcap/titan)
-[![codecov](https://codecov.io/gh/pingcap/titan/branch/master/graph/badge.svg)](https://codecov.io/gh/pingcap/titan)
+[![Build Status](https://travis-ci.org/tikv/titan.svg?branch=master)](https://travis-ci.org/tikv/titan)
+[![codecov](https://codecov.io/gh/tikv/titan/branch/master/graph/badge.svg)](https://codecov.io/gh/tikv/titan)
 
 Titan is a RocksDB Plugin for key-value separation, inspired by 
 [WiscKey](https://www.usenix.org/system/files/conference/fast16/fast16-papers-lu.pdf).
