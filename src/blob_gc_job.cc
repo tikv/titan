@@ -493,6 +493,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
           builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(),
           0, 0, builder.second->GetSmallestKey(),
           builder.second->GetLargestKey());
+      file->set_live_data_size(builder.second->live_data_size());
       file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
       RecordInHistogram(stats_, TitanStats::GC_OUTPUT_FILE_SIZE,
                         file->file_size());
