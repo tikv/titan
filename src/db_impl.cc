@@ -1198,7 +1198,8 @@ void TitanDBImpl::OnCompactionCompleted(
             ", live data size %" PRIu64 ".",
             compaction_job_info.job_id, file->file_number(),
             file->live_data_size());
-      } else if (file->file_state() == BlobFileMeta::FileState::kNormal) {
+      } else if (file->file_state() == BlobFileMeta::FileState::kNormal ||
+                 file->file_state() == BlobFileMeta::FileState::kToMerge) {
         if (delta > 0) {
           assert(false);
           ROCKS_LOG_WARN(db_options_.info_log,

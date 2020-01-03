@@ -171,7 +171,7 @@ struct BlobIndex {
 //
 class BlobFileMeta {
  public:
-  enum class FileEvent {
+  enum class FileEvent : int {
     kInit,
     kFlushCompleted,
     kCompactionCompleted,
@@ -185,7 +185,7 @@ class BlobFileMeta {
     kReset,  // reset file to normal for test
   };
 
-  enum class FileState {
+  enum class FileState : int {
     kInit,  // file never at this state
     kNormal,
     kPendingLSM,  // waiting keys adding to LSM

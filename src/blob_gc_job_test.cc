@@ -386,7 +386,7 @@ TEST_F(BlobGCJobTest, Reopen) {
   CheckBlobNumber(1);
 
   Reopen();
-  RunGC(false/*expect_gc*/, true/*disable_merge_small*/);
+  RunGC(false /*expect_gc*/, true /*disable_merge_small*/);
   CheckBlobNumber(1);
   for (int i = 0; i < 5; i++) {
     ASSERT_OK(db_->Delete(WriteOptions(), GenKey(i)));
@@ -397,7 +397,7 @@ TEST_F(BlobGCJobTest, Reopen) {
 
   // Should recover GC stats after reopen.
   Reopen();
-  RunGC(true/*expect_gc*/, true/*dissable_merge_small*/);
+  RunGC(true /*expect_gc*/, true /*dissable_merge_small*/);
   CheckBlobNumber(1);
 }
 
@@ -816,8 +816,9 @@ TEST_F(BlobGCJobTest, RangeMerge) {
   // after last level compaction, marked blob files are merged to new blob
   // files and obsoleted.
   for (int i = 2; i < 12; i++) {
-    auto blob = b->FindFile(i).lock();
-    ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kObsolete);
+    auto file = b->FindFile(i).lock();
+    ASSERT_TRUE(file->NoLiveData());
+    ASSERT_EQ(file->file_state(), BlobFileMeta::FileState::kObsolete);
   }
 }
 }  // namespace titandb
