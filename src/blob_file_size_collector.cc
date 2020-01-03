@@ -61,6 +61,9 @@ Status BlobFileSizeCollector::AddUserKey(const Slice& /* key */,
   if (!s.ok()) {
     return s;
   }
+  if (BlobIndex::IsDeletionMarker(index)) {
+    return Status::OK();
+  }
 
   auto iter = blob_files_size_.find(index.file_number);
   if (iter == blob_files_size_.end()) {

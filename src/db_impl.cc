@@ -597,6 +597,9 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   s = index.DecodeFrom(value);
   assert(s.ok());
   if (!s.ok()) return s;
+  if (BlobIndex::IsDeletionMarker(index)) {
+    return Status::NotFound("encounter deletion marker");
+  }
 
   BlobRecord record;
   PinnableSlice buffer;

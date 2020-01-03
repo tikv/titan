@@ -14,16 +14,9 @@ class BlobIndexMergeOperator : public MergeOperator {
   bool FullMergeV2(const MergeOperationInput& merge_in,
                    MergeOperationOutput* merge_out) const override {
     Status s;
-    MergeBlobIndex index;
     if (merge_in.existing_value && merge_in.value_type == kTypeValue) {
-      merge_out->new_type = merge_in.value_type;
+      merge_out->new_type = kTypeValue;
       merge_out->existing_operand = *merge_in.existing_value;
-      for (auto operand : merge_in.operand_list) {
-        s = index.DecodeFrom(&operand);
-        if (!s.ok()) {
-          return false;
-        }
-      }
       return true;
     }
 
@@ -37,8 +30,15 @@ class BlobIndexMergeOperator : public MergeOperator {
         return false;
       }
       existing_index_valid = true;
+    } else {
+      // this must be a deleted key
+      merge_out->new_type = kTypeBlobIndex;
+      merge_out->new_value.clear();
+      BlobIndex::EncodeDeletionMarkerTo(&merge_out->new_value);
+      return true;
     }
 
+    MergeBlobIndex index;
     BlobIndex merge_index;
     SequenceNumber latest_sequence;
     bool filled = false;
@@ -51,7 +51,6 @@ class BlobIndexMergeOperator : public MergeOperator {
       // be stale.
       if (existing_index_valid &&
           index.source_file_number == existing_index.file_number) {
-        // Discard(existing_index);
         existing_index_valid = false;
       }
       // if base index is still valid, merges must be sourced from older
@@ -64,7 +63,6 @@ class BlobIndexMergeOperator : public MergeOperator {
         } else if (latest_sequence <= index.sequence) {
           // notice the equal case here, merge on merge is possible
           latest_sequence = index.sequence;
-          // Discard(merge_index);
           merge_index = index;
         } else {
           // the merge comes from an older modify.
@@ -72,11 +70,11 @@ class BlobIndexMergeOperator : public MergeOperator {
       }
     }
     merge_out->new_type = kTypeBlobIndex;
-    merge_out->new_value.clear();
     if (existing_index_valid) {
-      existing_index.EncodeTo(&merge_out->new_value);
+      merge_out->existing_operand = *merge_in.existing_value;
     } else {
       assert(filled);
+      merge_out->new_value.clear();
       merge_index.EncodeTo(&merge_out->new_value);
     }
     return true;

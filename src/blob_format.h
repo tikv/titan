@@ -145,6 +145,8 @@ struct BlobIndex {
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
+  static void EncodeDeletionMarkerTo(std::string* dst);
+  static bool IsDeletionMarker(const BlobIndex& index);
 
   bool operator==(const BlobIndex& rhs) const;
 };

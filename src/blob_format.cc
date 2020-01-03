@@ -127,6 +127,17 @@ Status BlobIndex::DecodeFrom(Slice* src) {
   return s;
 }
 
+void BlobIndex::EncodeDeletionMarkerTo(std::string* dst) {
+  dst->push_back(kBlobRecord);
+  PutVarint64(dst, 0);
+  BlobHandle dummy;
+  dummy.EncodeTo(dst);
+}
+
+bool BlobIndex::IsDeletionMarker(const BlobIndex& index) {
+  return index.file_number == 0;
+}
+
 bool BlobIndex::operator==(const BlobIndex& rhs) const {
   return (file_number == rhs.file_number && blob_handle == rhs.blob_handle);
 }
