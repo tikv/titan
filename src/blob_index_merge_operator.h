@@ -29,8 +29,9 @@ class BlobIndexMergeOperator : public MergeOperator {
       if (!s.ok()) {
         return false;
       }
-      existing_index_valid = true;
-    } else {
+      existing_index_valid = !BlobIndex::IsDeletionMarker(existing_index);
+    }
+    if (!existing_index_valid) {
       // this must be a deleted key
       merge_out->new_type = kTypeBlobIndex;
       merge_out->new_value.clear();
