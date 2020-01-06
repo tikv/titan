@@ -1,6 +1,7 @@
 #include "test_util/sync_point.h"
 #include "test_util/testharness.h"
 #include "util/coding.h"
+#include "util/random.h"
 #include "util/string_util.h"
 
 #include "blob_file_set.h"
@@ -63,6 +64,19 @@ class TitanGCStatsTest : public testing::Test {
     Status s = Close();
     if (s.ok()) {
       s = Open();
+    }
+    return s;
+  }
+
+  Status KeyExists(uint32_t key, bool* exists) {
+    PinnableSlice value;
+    Status s = db_->Get(ReadOptions(), db_->DefaultColumnFamily(), gen_key(key),
+                        &value);
+    if (s.ok()) {
+      *exists = true;
+    } else if (s.IsNotFound()) {
+      *exists = false;
+      s = Status::OK();
     }
     return s;
   }
@@ -239,6 +253,75 @@ TEST_F(TitanGCStatsTest, GCOutput) {
   std::shared_ptr<BlobFileMeta> file2 = blob_files.rbegin()->second.lock();
   ASSERT_TRUE(file2 != nullptr);
   ASSERT_EQ(blob_size * num_remaining_keys, file2->live_data_size());
+}
+
+TEST_F(TitanGCStatsTest, Reopen) {
+  constexpr size_t kValueSize = 123;
+  constexpr size_t kNumKeysPerFile = 456;
+  constexpr size_t kNumFiles = 5;
+  constexpr size_t kDelKeys = 789;
+  std::string value(kValueSize, 'v');
+  uint64_t blob_size = get_blob_size(value);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  uint64_t expected_size[kNumFiles];
+
+  // Generate blob files.
+  ASSERT_OK(Open());
+  for (size_t idx = 0; idx < kNumFiles; idx++) {
+    for (uint32_t k = 0; k < kNumKeysPerFile; k++) {
+      uint32_t key = static_cast<uint32_t>(idx * kNumKeysPerFile + k);
+      ASSERT_OK(Put(key, value));
+    }
+    ASSERT_OK(Flush());
+  }
+  GetBlobFiles(&blob_files);
+  ASSERT_EQ(kNumFiles, blob_files.size());
+  auto iter = blob_files.begin();
+  for (size_t idx = 0; idx < kNumFiles; idx++) {
+    ASSERT_TRUE(iter != blob_files.end());
+    std::shared_ptr<BlobFileMeta> file = iter->second.lock();
+    ASSERT_TRUE(file != nullptr);
+    expected_size[idx] = blob_size * kNumKeysPerFile;
+    ASSERT_EQ(expected_size[idx], file->live_data_size());
+    iter++;
+  }
+
+  // Delete some keys.
+  Random rand(666);
+  for (size_t d = 0; d < kDelKeys; d++) {
+    uint32_t key = rand.Next() % (kNumKeysPerFile * kNumFiles);
+    bool key_exists = false;
+    ASSERT_OK(KeyExists(key, &key_exists));
+    if (key_exists) {
+      ASSERT_OK(Delete(key));
+      expected_size[key / kNumKeysPerFile] -= blob_size;
+    }
+  }
+  ASSERT_OK(Flush());
+  ASSERT_OK(CompactAll());
+  GetBlobFiles(&blob_files);
+  ASSERT_EQ(kNumFiles, blob_files.size());
+  iter = blob_files.begin();
+  for (size_t idx = 0; idx < kNumFiles; idx++) {
+    ASSERT_TRUE(iter != blob_files.end());
+    std::shared_ptr<BlobFileMeta> file = iter->second.lock();
+    ASSERT_TRUE(file != nullptr);
+    ASSERT_EQ(expected_size[idx], file->live_data_size());
+    iter++;
+  }
+
+  // Check live data size after reopen.
+  ASSERT_OK(Reopen());
+  GetBlobFiles(&blob_files);
+  ASSERT_EQ(kNumFiles, blob_files.size());
+  iter = blob_files.begin();
+  for (size_t idx = 0; idx < kNumFiles; idx++) {
+    ASSERT_TRUE(iter != blob_files.end());
+    std::shared_ptr<BlobFileMeta> file = iter->second.lock();
+    ASSERT_TRUE(file != nullptr);
+    ASSERT_EQ(expected_size[idx], file->live_data_size());
+    iter++;
+  }
 }
 
 TEST_F(TitanGCStatsTest, DeleteFilesInRange) {
