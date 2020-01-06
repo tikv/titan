@@ -30,6 +30,7 @@ class TitanGCStatsTest : public testing::Test {
     options_.create_if_missing = true;
     options_.min_blob_size = 0;
     options_.merge_small_file_threshold = 0;
+    options_.min_gc_batch_size = 0;
     options_.disable_background_gc = true;
     options_.blob_file_compression = CompressionType::kNoCompression;
   }
@@ -68,6 +69,10 @@ class TitanGCStatsTest : public testing::Test {
 
   Status Put(uint32_t key, const Slice& value) {
     return db_->Put(WriteOptions(), gen_key(key), value);
+  }
+
+  Status Delete(uint32_t key) {
+    return db_->Delete(WriteOptions(), gen_key(key));
   }
 
   Status Flush() { return db_->Flush(FlushOptions()); }
@@ -187,6 +192,53 @@ TEST_F(TitanGCStatsTest, Compaction) {
   ASSERT_EQ(blob_size * live_keys1, file1->live_data_size());
   ASSERT_EQ(blob_size * live_keys2, file2->live_data_size());
   ASSERT_EQ(blob_size * live_keys3, file3->live_data_size());
+}
+
+TEST_F(TitanGCStatsTest, GCOutput) {
+  constexpr size_t kValueSize = 123;
+  constexpr size_t kNumKeys = 10;
+  std::string value(kValueSize, 'v');
+  uint64_t blob_size = get_blob_size(value);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+
+  // Generate one blob file.
+  options_.blob_file_discardable_ratio = 0.01;
+  ASSERT_OK(Open());
+  for (uint32_t k = 0; k < kNumKeys; k++) {
+    ASSERT_OK(Put(k, value));
+  }
+  ASSERT_OK(Flush());
+  GetBlobFiles(&blob_files);
+  ASSERT_EQ(1, blob_files.size());
+  std::shared_ptr<BlobFileMeta> file1 = blob_files.begin()->second.lock();
+  ASSERT_TRUE(file1 != nullptr);
+  ASSERT_EQ(blob_size * kNumKeys, file1->live_data_size());
+
+  // Delete some keys and run GC.
+  size_t num_remaining_keys = kNumKeys;
+  for (uint32_t k = 0; k < kNumKeys; k++) {
+    if (k % 7 == 0) {
+      ASSERT_OK(Delete(k));
+      num_remaining_keys--;
+    }
+  }
+  ASSERT_OK(Flush());
+  ASSERT_OK(CompactAll());
+  // Check file1 live data size updated after compaction.
+  GetBlobFiles(&blob_files);
+  ASSERT_EQ(1, blob_files.size());
+  ASSERT_EQ(file1.get(), blob_files.begin()->second.lock().get());
+  ASSERT_EQ(blob_size * num_remaining_keys, file1->live_data_size());
+  ASSERT_EQ(file1.get(), blob_files.begin()->second.lock().get());
+  ASSERT_OK(db_impl_->TEST_StartGC(db_->DefaultColumnFamily()->GetID()));
+  // Check file2 live data size is set after GC.
+  GetBlobFiles(&blob_files);
+  ASSERT_EQ(2, blob_files.size());
+  ASSERT_EQ(file1.get(), blob_files.begin()->second.lock().get());
+  ASSERT_TRUE(file1->is_obsolete());
+  std::shared_ptr<BlobFileMeta> file2 = blob_files.rbegin()->second.lock();
+  ASSERT_TRUE(file2 != nullptr);
+  ASSERT_EQ(blob_size * num_remaining_keys, file2->live_data_size());
 }
 
 TEST_F(TitanGCStatsTest, DeleteFilesInRange) {
