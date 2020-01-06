@@ -437,10 +437,85 @@ TEST_F(TitanGCStatsTest, LevelMerge) {
     iter++;
   }
   ASSERT_TRUE(iter != blob_files.end());
-  std::shared_ptr<BlobFileMeta> new_file = iter->second.lock();
+  std::shared_ptr<BlobFileMeta> new_file = blob_files.rbegin()->second.lock();
   ASSERT_TRUE(new_file != nullptr);
   ASSERT_EQ(blob_size * kNumKeys, new_file->live_data_size());
   ASSERT_EQ(options_.num_levels - 1, new_file->file_level());
+}
+
+TEST_F(TitanGCStatsTest, RangeMerge) {
+  constexpr size_t kLargeValueSize = 123;
+  constexpr size_t kNumKeys = 456;
+  constexpr size_t kNumFiles = 3;
+  std::string small_value = "v";
+  std::string large_value(kLargeValueSize, 'v');
+  uint64_t blob_size = get_blob_size(large_value);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  Random rand(666);
+  uint64_t expected_size[kNumFiles];
+
+  // Enable level merge and range merge. Generate some files and compact them
+  // to bottom level.
+  options_.min_blob_size = 10;
+  options_.level_merge = true;
+  options_.range_merge = true;
+  options_.max_sorted_runs = static_cast<int>(kNumFiles - 1);
+  ASSERT_OK(Open());
+  for (size_t idx = 0; idx < kNumFiles; idx++) {
+    expected_size[idx] = 0;
+    for (size_t k = 1; k <= kNumKeys; k++) {
+      if (k % kNumFiles == idx) {
+        ASSERT_OK(Put(k, large_value));
+        expected_size[idx] += blob_size;
+      }
+    }
+    ASSERT_OK(Flush());
+    // Generate an extra overlapping files to disable trivial move.
+    ASSERT_OK(Put(0, small_value));
+    ASSERT_OK(Put(kNumKeys + 1, small_value));
+    ASSERT_OK(Flush());
+    ASSERT_OK(CompactAll());
+  }
+
+  // Verify file at bottom level equals to kNumFiles.
+  size_t num_live_files = 0;
+  GetBlobFiles(&blob_files);
+  ASSERT_EQ(kNumFiles * 2, blob_files.size());
+  size_t ptr = 0;
+  for (auto iter = blob_files.begin(); iter != blob_files.end(); iter++) {
+    std::shared_ptr<BlobFileMeta> file = iter->second.lock();
+    ASSERT_TRUE(file != nullptr);
+    if (!file->is_obsolete()) {
+      ASSERT_EQ(options_.num_levels - 1, file->file_level());
+      ASSERT_EQ(BlobFileMeta::FileState::kToMerge, file->file_state());
+      ASSERT_EQ(expected_size[ptr], file->live_data_size());
+      ASSERT_LT(num_live_files, kNumFiles);
+      num_live_files++;
+      ptr++;
+    }
+  }
+  ASSERT_EQ(kNumFiles, num_live_files);
+
+  // Generate an extra overlapping files to disable trivial move.
+  ASSERT_OK(Put(0, small_value));
+  ASSERT_OK(Put(kNumKeys + 1, small_value));
+  ASSERT_OK(Flush());
+  // Trigger a compaction to run range merge.
+  ASSERT_OK(CompactAll());
+  GetBlobFiles(&blob_files);
+  ASSERT_EQ(kNumFiles * 2 + 1, blob_files.size());
+  for (auto iter = blob_files.begin(); iter != blob_files.end();) {
+    std::shared_ptr<BlobFileMeta> file = iter->second.lock();
+    iter++;
+    // check all files except the last one.
+    if (iter != blob_files.end()) {
+      ASSERT_TRUE(file != nullptr);
+      ASSERT_TRUE(file->is_obsolete());
+    }
+  }
+  std::shared_ptr<BlobFileMeta> new_file = blob_files.rbegin()->second.lock();
+  ASSERT_TRUE(new_file != nullptr);
+  ASSERT_EQ(blob_size * kNumKeys, new_file->live_data_size());
 }
 
 }  // namespace titandb
