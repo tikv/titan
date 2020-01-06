@@ -389,6 +389,60 @@ TEST_F(TitanGCStatsTest, DeleteFilesInRange) {
   ASSERT_EQ(blob_size * (kNumKeys - 4), blob_file->live_data_size());
 }
 
+TEST_F(TitanGCStatsTest, LevelMerge) {
+  constexpr size_t kValueSize = 123;
+  constexpr size_t kNumKeys = 456;
+  constexpr size_t kNumFiles = 3;
+  std::string value(kValueSize, 'v');
+  uint64_t blob_size = get_blob_size(value);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  Random rand(666);
+  uint64_t expected_size[kNumFiles];
+
+  // Enable level merge and load 3 files at L0.
+  options_.level_merge = true;
+  ASSERT_OK(Open());
+  for (size_t idx = 0; idx < kNumFiles; idx++) {
+    expected_size[idx] = 0;
+    for (uint32_t k = 0; k < kNumKeys; k++) {
+      if (k % kNumFiles == idx) {
+        ASSERT_OK(Put(k, value));
+        expected_size[idx] += blob_size;
+      }
+    }
+    ASSERT_OK(Flush());
+  }
+  GetBlobFiles(&blob_files);
+  ASSERT_EQ(kNumFiles, blob_files.size());
+  auto iter = blob_files.begin();
+  for (size_t idx = 0; idx < kNumFiles; idx++) {
+    ASSERT_TRUE(iter != blob_files.end());
+    std::shared_ptr<BlobFileMeta> file = iter->second.lock();
+    ASSERT_TRUE(file != nullptr);
+    ASSERT_EQ(expected_size[idx], file->live_data_size());
+    iter++;
+  }
+
+  // Compact to trigger level merge. New blob file should be generated, and
+  // existing ones will be obsolete.
+  ASSERT_OK(CompactAll());
+  GetBlobFiles(&blob_files);
+  ASSERT_EQ(kNumFiles + 1, blob_files.size());
+  iter = blob_files.begin();
+  for (size_t idx = 0; idx < kNumFiles; idx++) {
+    ASSERT_TRUE(iter != blob_files.end());
+    std::shared_ptr<BlobFileMeta> file = iter->second.lock();
+    ASSERT_TRUE(file != nullptr);
+    ASSERT_TRUE(file->is_obsolete());
+    iter++;
+  }
+  ASSERT_TRUE(iter != blob_files.end());
+  std::shared_ptr<BlobFileMeta> new_file = iter->second.lock();
+  ASSERT_TRUE(new_file != nullptr);
+  ASSERT_EQ(blob_size * kNumKeys, new_file->live_data_size());
+  ASSERT_EQ(options_.num_levels - 1, new_file->file_level());
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
 
