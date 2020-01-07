@@ -88,6 +88,13 @@ Status TitanDBImpl::InitializeGC(
     }
     blob_storage->InitializeAllFiles();
   }
+  {
+    MutexLock l(&mutex_);
+    for (ColumnFamilyHandle* cf_handle : cf_handles) {
+      AddToGCQueue(cf_handle->GetID());
+    }
+    MaybeScheduleGC();
+  }
   return s;
 }
 
@@ -258,6 +265,13 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
     }
   }
   return s;
+}
+
+void TitanDBImpl::TEST_WaitForBackgroundGC() {
+  MutexLock l(&mutex_);
+  while (bg_gc_scheduled_ > 0) {
+    bg_cv_.Wait();
+  }
 }
 
 }  // namespace titandb

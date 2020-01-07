@@ -300,7 +300,7 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
     return s;
   }
   s = InitializeGC(*handles);
-  TEST_SYNC_POINT_CALLBACK("TitanDBImpl::OpenImpl:BeforeInitialized", db_);
+  TEST_SYNC_POINT_CALLBACK("TitanDBImpl::OpenImpl:BeforeInitialized", this);
   // Initialization done.
   initialized_ = true;
   // Enable compaction and background tasks after initilization.

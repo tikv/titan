@@ -1227,6 +1227,72 @@ TEST_F(TitanDBTest, GCBeforeFlushCommit) {
   SyncPoint::GetInstance()->ClearAllCallBacks();
 }
 
+// Test GC stats will be recover on DB reopen and GC resume after reopen.
+TEST_F(TitanDBTest, GCAfterReopen) {
+  options_.min_blob_size = 0;
+  options_.blob_file_discardable_ratio = 0.01;
+  options_.disable_background_gc = true;
+  options_.blob_file_compression = CompressionType::kNoCompression;
+
+  // Generate a blob file and delete half of keys in it.
+  Open();
+  for (int i = 0; i < 100; i++) {
+    std::string key = GenKey(i);
+    ASSERT_OK(db_->Put(WriteOptions(), key, "v"));
+  }
+  Flush();
+  for (int i = 0; i < 100; i++) {
+    if (i % 2 == 0) {
+      Delete(i);
+    }
+  }
+  Flush();
+  CompactAll();
+  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(1, blob_files.size());
+  std::shared_ptr<BlobFileMeta> file1 = blob_files.begin()->second.lock();
+  ASSERT_TRUE(file1 != nullptr);
+  ASSERT_TRUE(abs(file1->GetDiscardableRatio() - 0.5) < 0.01);
+  uint64_t file_number1 = file1->file_number();
+  file1.reset();
+  blob_files.clear();
+  blob_storage.reset();
+
+  // Sync point to verify GC stat recovered after reopen.
+  std::atomic<int> num_gc_job{0};
+  SyncPoint::GetInstance()->SetCallBack(
+      "TitanDBImpl::OpenImpl:BeforeInitialized", [&](void* arg) {
+        TitanDBImpl* db_impl = reinterpret_cast<TitanDBImpl*>(arg);
+        blob_storage =
+            db_impl->TEST_GetBlobStorage(db_impl->DefaultColumnFamily());
+        ASSERT_TRUE(blob_storage != nullptr);
+        blob_storage->ExportBlobFiles(blob_files);
+        ASSERT_EQ(1, blob_files.size());
+        std::shared_ptr<BlobFileMeta> file = blob_files.begin()->second.lock();
+        ASSERT_TRUE(file != nullptr);
+        ASSERT_TRUE(abs(file->GetDiscardableRatio() - 0.5) < 0.01);
+      });
+  SyncPoint::GetInstance()->SetCallBack("TitanDBImpl::BackgroundGC:Finish",
+                                        [&](void*) { num_gc_job++; });
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  // Re-enable background GC and Reopen. See if GC resume.
+  options_.disable_background_gc = false;
+  Reopen();
+  db_impl_->TEST_WaitForBackgroundGC();
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+  ASSERT_EQ(1, num_gc_job);
+  blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(1, blob_files.size());
+  std::shared_ptr<BlobFileMeta> file2 = blob_files.begin()->second.lock();
+  ASSERT_GT(file2->file_number(), file_number1);
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
 
