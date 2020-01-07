@@ -34,6 +34,10 @@ class TitanGCStatsTest : public testing::Test {
     options_.min_gc_batch_size = 0;
     options_.disable_background_gc = true;
     options_.blob_file_compression = CompressionType::kNoCompression;
+
+    // Clear directory.
+    DeleteDir(env_, options_.dirname);
+    DeleteDir(env_, dbname_);
   }
 
   ~TitanGCStatsTest() {
