@@ -1158,14 +1158,15 @@ TEST_F(TitanDBTest, GCAfterDropCF) {
 }
 
 TEST_F(TitanDBTest, GCBeforeFlushCommit) {
+  port::Mutex mu;
+  port::CondVar cv(&mu);
   std::atomic<bool> is_first_flush{true};
+  std::atomic<int> flush_completed{0};
   DBImpl* db_impl = nullptr;
 
   SyncPoint::GetInstance()->LoadDependency(
       {{"TitanDBTest::GCBeforeFlushCommit:PauseInstall",
-        "TitanDBTest::GCBeforeFlushCommit:WaitFlushPause"},
-       {"TitanDBImpl::OnFlushCompleted:Finished",
-        "TitanDBTest::GCBeforeFlushCommit:WaitSecondFlush"}});
+        "TitanDBTest::GCBeforeFlushCommit:WaitFlushPause"}});
   SyncPoint::GetInstance()->SetCallBack("FlushJob::InstallResults", [&](void*) {
     if (is_first_flush) {
       is_first_flush = false;
@@ -1179,6 +1180,19 @@ TEST_F(TitanDBTest, GCBeforeFlushCommit) {
     Env::Default()->SleepForMicroseconds(1000 * 1000);  // 1s
     db_mutex->Lock();
   });
+  SyncPoint::GetInstance()->SetCallBack(
+      "TitanDBImpl::OnFlushCompleted:Finished", [&](void*) {
+        MutexLock l(&mu);
+        flush_completed++;
+        cv.SignalAll();
+      });
+  SyncPoint::GetInstance()->SetCallBack(
+      "TitanDBTest::GCBeforeFlushCommit:WaitSecondFlush", [&](void*) {
+        MutexLock l(&mu);
+        while (flush_completed < 2) {
+          cv.Wait();
+        }
+      });
 
   options_.create_if_missing = true;
   // Setting max_flush_jobs = max_background_jobs / 4 = 2.
@@ -1212,6 +1226,7 @@ TEST_F(TitanDBTest, GCBeforeFlushCommit) {
   std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
   blob_storage->ExportBlobFiles(blob_files);
   ASSERT_EQ(2, blob_files.size());
+  // Set live data size to 0 to force GC.
   auto second_file = blob_files.rbegin()->second.lock();
   second_file->set_live_data_size(0);
   ASSERT_OK(db_impl_->TEST_StartGC(cf_id));
