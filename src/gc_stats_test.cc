@@ -12,6 +12,8 @@
 namespace rocksdb {
 namespace titandb {
 
+using namespace rocksdb;
+
 void DeleteDir(Env* env, const std::string& dirname) {
   std::vector<std::string> filenames;
   env->GetChildren(dirname, &filenames);
