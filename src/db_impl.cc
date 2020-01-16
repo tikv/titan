@@ -1239,7 +1239,8 @@ void TitanDBImpl::OnCompactionCompleted(
           }
         }
       }
-      if (file->file_state() == BlobFileMeta::FileState::kNormal) {
+      if (file->file_state() == BlobFileMeta::FileState::kNormal ||
+          file->file_state() == BlobFileMeta::FileState::kToMerge) {
         auto after = file->GetDiscardableRatioLevel();
         AddStats(stats_.get(), compaction_job_info.cf_id, after, 1);
       }
