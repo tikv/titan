@@ -2,6 +2,7 @@
 
 #include "db/db_impl.h"
 #include "rocksdb/statistics.h"
+#include "rocksdb/threadpool.h"
 #include "util/repeatable_thread.h"
 
 #include "blob_file_manager.h"
@@ -239,6 +240,9 @@ class TitanDBImpl : public TitanDB {
   // Turn DB into read-only if background error happened
   Status bg_error_;
   std::atomic_bool has_bg_error_{false};
+
+  // Thread pool for running background GC.
+  std::unique_ptr<ThreadPool> thread_pool_;
 
   // TitanStats is turned on only if statistics field of DBOptions
   // is not null.
