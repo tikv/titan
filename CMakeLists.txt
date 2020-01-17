@@ -9,7 +9,7 @@ if (NOT ROCKSDB_GIT_REPO)
 endif()
 
 if (NOT ROCKSDB_GIT_BRANCH)
-  set(ROCKSDB_GIT_BRANCH "tikv-3.0")
+  set(ROCKSDB_GIT_BRANCH "tikv-3.x")
 endif()
 
 if (NOT DEFINED ROCKSDB_DIR)
