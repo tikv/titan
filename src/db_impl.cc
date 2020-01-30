@@ -742,8 +742,8 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     // Get all the files within range except L0, cause `DeleteFilesInRanges`
     // would not delete the files in L0.
     for (int level = 1; level < vstorage->num_non_empty_levels(); level++) {
-      if (vstorage->LevelFiles(i).empty() ||
-          !vstorage->OverlapInLevel(i, begin, end)) {
+      if (vstorage->LevelFiles(level).empty() ||
+          !vstorage->OverlapInLevel(level, begin, end)) {
         continue;
       }
       std::vector<FileMetaData*> level_files;
