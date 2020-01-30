@@ -1,8 +1,8 @@
-#include "test_util/sync_point.h"
-#include "test_util/testharness.h"
 #include "util/coding.h"
 #include "util/random.h"
 #include "util/string_util.h"
+#include "util/sync_point.h"
+#include "util/testharness.h"
 
 #include "blob_file_set.h"
 #include "blob_format.h"
