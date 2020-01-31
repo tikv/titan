@@ -150,8 +150,6 @@ void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                                    SequenceNumber oldest_sequence) {
   MutexLock l(&mutex_);
 
-  uint32_t file_dropped = 0;
-  uint64_t file_dropped_size = 0;
   for (auto it = obsolete_files_.begin(); it != obsolete_files_.end();) {
     auto& file_number = it->first;
     auto& obsolete_sequence = it->second;
