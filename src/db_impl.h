@@ -143,6 +143,12 @@ class TitanDBImpl : public TitanDB {
     return bg_gc_running_;
   }
 
+  std::shared_ptr<BlobStorage> TEST_GetBlobStorage(
+      ColumnFamilyHandle* column_family) {
+    MutexLock l(&mutex_);
+    return blob_file_set_->GetBlobStorage(column_family->GetID()).lock();
+  }
+
  private:
   class FileManager;
   friend class FileManager;
