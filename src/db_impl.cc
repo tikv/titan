@@ -71,6 +71,10 @@ class TitanDBImpl::FileManager : public BlobFileManager {
                      file.first->file_number());
       edit.AddBlobFile(file.first);
     }
+    s = db_->directory_->Fsync();
+    if (!s.ok()) {
+      return s;
+    }
 
     {
       MutexLock l(&db_->mutex_);
@@ -177,7 +181,13 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
     if (!s.ok()) return s;
   }
   s = env_->CreateDirIfMissing(dirname_);
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    return s;
+  }
+  s = env_->NewDirectory(dirname_, &directory_);
+  if (!s.ok()) {
+    return s;
+  }
   s = env_->LockFile(LockFileName(dirname_), &lock_);
   if (!s.ok()) return s;
 
