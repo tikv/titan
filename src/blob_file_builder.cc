@@ -21,6 +21,7 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
   encoder_.EncodeRecord(record);
   handle->offset = file_->GetFileSize();
   handle->size = encoder_.GetEncodedSize();
+  live_data_size_ += handle->size;
 
   status_ = file_->Append(encoder_.GetHeader());
   if (ok()) {

@@ -140,6 +140,8 @@ class TitanDBImpl : public TitanDB {
   void TEST_set_initialized(bool _initialized) { initialized_ = _initialized; }
 
   Status TEST_StartGC(uint32_t column_family_id);
+  void TEST_WaitForBackgroundGC();
+
   Status TEST_PurgeObsoleteFiles();
 
   int TEST_bg_gc_running() {
@@ -179,6 +181,16 @@ class TitanDBImpl : public TitanDB {
   Iterator* NewIteratorImpl(const TitanReadOptions& options,
                             ColumnFamilyHandle* handle,
                             std::shared_ptr<ManagedSnapshot> snapshot);
+
+  Status InitializeGC(const std::vector<ColumnFamilyHandle*>& cf_handles);
+
+  Status ExtractGCStatsFromTableProperty(
+      const std::shared_ptr<const TableProperties>& table_properties,
+      bool to_add, std::map<uint64_t, int64_t>* blob_file_size_diff);
+
+  Status ExtractGCStatsFromTableProperty(
+      const TableProperties& table_properties, bool to_add,
+      std::map<uint64_t, int64_t>* blob_file_size_diff);
 
   // REQUIRE: mutex_ held
   void AddToGCQueue(uint32_t column_family_id) {
