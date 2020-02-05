@@ -243,6 +243,8 @@ class TitanDBImpl : public TitanDB {
   EnvOptions env_options_;
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
+  std::unique_ptr<Directory> directory_;
+
   // Turn DB into read-only if background error happened
   Status bg_error_;
   std::atomic_bool has_bg_error_{false};
