@@ -93,6 +93,7 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         blob_format_test
         blob_gc_job_test
         blob_gc_picker_test
+        gc_stats_test
         table_builder_test
         thread_safety_test
         titan_db_test
@@ -104,12 +105,12 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         rocksdb
         testutillib
         gtest)
-        
+
   foreach(test ${TESTS})
     add_executable(titan_${test} src/${test}.cc $<TARGET_OBJECTS:testharness>)
       target_link_libraries(titan_${test} ${TEST_LIBS})
       add_test(titan_${test} titan_${test})
-  endforeach(test ${TESTS})  
+  endforeach(test ${TESTS})
 endif()
 
 if (WITH_TITAN_TOOLS)
@@ -137,3 +138,16 @@ if (WITH_TITAN_TOOLS)
   target_include_directories(titandb_bench PRIVATE ${gflags_INCLUDE_DIR})
   target_link_libraries(titandb_bench ${TOOLS_LIBS})
 endif()
+
+# Installation - copy lib/ and include/
+
+include(GNUInstallDirs)
+install(DIRECTORY include/titan
+  COMPONENT devel
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+)
+install(TARGETS titan
+  COMPONENT devel
+  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+)

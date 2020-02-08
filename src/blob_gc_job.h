@@ -94,8 +94,6 @@ class BlobGCJob {
   uint64_t io_bytes_read_ = 0;
   uint64_t io_bytes_written_ = 0;
 
-  Status SampleCandidateFiles();
-  Status DoSample(const BlobFileMeta* file, bool* selected);
   Status DoRunGC();
   Status BuildIterator(std::unique_ptr<BlobFileMergeIterator>* result);
   Status DiscardEntry(const Slice& key, const BlobIndex& blob_index,

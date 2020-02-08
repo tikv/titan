@@ -284,12 +284,6 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
   }
 }
 
-void BlobFileMeta::AddDiscardableSize(uint64_t _discardable_size) {
-  assert(_discardable_size < file_size_);
-  discardable_size_ += _discardable_size;
-  assert(discardable_size_ < file_size_);
-}
-
 TitanInternalStats::StatsType BlobFileMeta::GetDiscardableRatioLevel() const {
   auto ratio = GetDiscardableRatio();
   TitanInternalStats::StatsType type;
@@ -309,11 +303,6 @@ TitanInternalStats::StatsType BlobFileMeta::GetDiscardableRatioLevel() const {
     abort();
   }
   return type;
-}
-
-double BlobFileMeta::GetDiscardableRatio() const {
-  return static_cast<double>(discardable_size_) /
-         static_cast<double>(file_size_);
 }
 
 void BlobFileHeader::EncodeTo(std::string* dst) const {

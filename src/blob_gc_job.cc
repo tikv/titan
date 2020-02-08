@@ -123,11 +123,6 @@ Status BlobGCJob::Prepare() {
 }
 
 Status BlobGCJob::Run() {
-  Status s = SampleCandidateFiles();
-  if (!s.ok()) {
-    return s;
-  }
-
   std::string tmp;
   for (const auto& f : blob_gc_->inputs()) {
     if (!tmp.empty()) {
@@ -135,121 +130,10 @@ Status BlobGCJob::Run() {
     }
     tmp.append(std::to_string(f->file_number()));
   }
-
-  std::string tmp2;
-  for (const auto& f : blob_gc_->sampled_inputs()) {
-    if (!tmp2.empty()) {
-      tmp2.append(" ");
-    }
-    tmp2.append(std::to_string(f->file_number()));
-  }
-
-  ROCKS_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s] selected[%s]",
+  ROCKS_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s]",
                    blob_gc_->column_family_handle()->GetName().c_str(),
-                   tmp.c_str(), tmp2.c_str());
-
-  if (blob_gc_->sampled_inputs().empty()) {
-    return Status::OK();
-  }
-
+                   tmp.c_str());
   return DoRunGC();
-}
-
-Status BlobGCJob::SampleCandidateFiles() {
-  TitanStopWatch sw(env_, metrics_.gc_sampling_micros);
-  std::vector<BlobFileMeta*> result;
-  for (const auto& file : blob_gc_->inputs()) {
-    bool selected = false;
-    Status s = DoSample(file, &selected);
-    if (!s.ok()) {
-      return s;
-    }
-    if (selected) {
-      result.push_back(file);
-    }
-  }
-  if (!result.empty()) {
-    blob_gc_->set_sampled_inputs(std::move(result));
-  }
-  return Status::OK();
-}
-
-Status BlobGCJob::DoSample(const BlobFileMeta* file, bool* selected) {
-  assert(selected != nullptr);
-  if (file->file_size() <=
-      blob_gc_->titan_cf_options().merge_small_file_threshold) {
-    metrics_.gc_small_file += 1;
-    *selected = true;
-  } else if (file->GetDiscardableRatio() >=
-             blob_gc_->titan_cf_options().blob_file_discardable_ratio) {
-    metrics_.gc_discardable += 1;
-    *selected = true;
-  }
-  if (*selected) return Status::OK();
-
-  // TODO: add do sample count metrics
-  // `records_size` won't be accurate if the file is version 1, but this method
-  // is planned to be removed soon.
-  auto records_size = file->file_size() - BlobFileHeader::kMaxEncodedLength -
-                      BlobFileFooter::kEncodedLength;
-  Status s;
-  uint64_t sample_size_window = static_cast<uint64_t>(
-      records_size * blob_gc_->titan_cf_options().sample_file_size_ratio);
-  uint64_t sample_begin_offset = BlobFileHeader::kMaxEncodedLength;
-  if (records_size != sample_size_window) {
-    Random64 random64(records_size);
-    sample_begin_offset += random64.Uniform(records_size - sample_size_window);
-  }
-  std::unique_ptr<RandomAccessFileReader> file_reader;
-  const int readahead = 256 << 10;
-  s = NewBlobFileReader(file->file_number(), readahead, db_options_,
-                        env_options_, env_, &file_reader);
-  if (!s.ok()) {
-    return s;
-  }
-  BlobFileIterator iter(std::move(file_reader), file->file_number(),
-                        file->file_size(), blob_gc_->titan_cf_options());
-  iter.IterateForPrev(sample_begin_offset);
-  // TODO(@DorianZheng) sample_begin_offset maybe out of data block size, need
-  // more elegant solution
-  if (iter.status().IsInvalidArgument()) {
-    iter.IterateForPrev(BlobFileHeader::kMaxEncodedLength);
-  }
-  if (!iter.status().ok()) {
-    s = iter.status();
-    ROCKS_LOG_ERROR(db_options_.info_log,
-                    "IterateForPrev failed, file number[%" PRIu64
-                    "] size[%" PRIu64 "] status[%s]",
-                    file->file_number(), file->file_size(),
-                    s.ToString().c_str());
-    return s;
-  }
-
-  uint64_t iterated_size{0};
-  uint64_t discardable_size{0};
-  for (iter.Next();
-       iterated_size < sample_size_window && iter.status().ok() && iter.Valid();
-       iter.Next()) {
-    BlobIndex blob_index = iter.GetBlobIndex();
-    uint64_t total_length = blob_index.blob_handle.size;
-    iterated_size += total_length;
-    bool discardable = false;
-    s = DiscardEntry(iter.key(), blob_index, &discardable);
-    if (!s.ok()) {
-      return s;
-    }
-    if (discardable) {
-      discardable_size += total_length;
-    }
-  }
-  metrics_.bytes_read += iterated_size;
-  assert(iter.status().ok());
-
-  *selected =
-      discardable_size >=
-      std::ceil(sample_size_window *
-                blob_gc_->titan_cf_options().blob_file_discardable_ratio);
-  return s;
 }
 
 Status BlobGCJob::DoRunGC() {
@@ -432,7 +316,7 @@ Status BlobGCJob::DoRunGC() {
 Status BlobGCJob::BuildIterator(
     std::unique_ptr<BlobFileMergeIterator>* result) {
   Status s;
-  const auto& inputs = blob_gc_->sampled_inputs();
+  const auto& inputs = blob_gc_->inputs();
   assert(!inputs.empty());
   std::vector<std::unique_ptr<BlobFileIterator>> list;
   for (std::size_t i = 0; i < inputs.size(); ++i) {
@@ -543,6 +427,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
           builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(),
           0, 0, builder.second->GetSmallestKey(),
           builder.second->GetLargestKey());
+      file->set_live_data_size(builder.second->live_data_size());
       file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
       RecordInHistogram(stats_, TitanStats::GC_OUTPUT_FILE_SIZE,
                         file->file_size());
@@ -694,7 +579,7 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   Status s;
   VersionEdit edit;
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
-  for (const auto& file : blob_gc_->sampled_inputs()) {
+  for (const auto& file : blob_gc_->inputs()) {
     ROCKS_LOG_INFO(db_options_.info_log,
                    "Titan add obsolete file [%" PRIu64 "] range [%s, %s]",
                    file->file_number(),
