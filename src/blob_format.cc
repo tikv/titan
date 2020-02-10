@@ -19,12 +19,11 @@ bool GetChar(Slice* src, unsigned char* value) {
 
 void BlobRecord::EncodeTo(std::string* dst) const {
   PutLengthPrefixedSlice(dst, key);
-  PutVarint64(dst, sequence);
   PutLengthPrefixedSlice(dst, value);
 }
 
 Status BlobRecord::DecodeFrom(Slice* src) {
-  if (!GetLengthPrefixedSlice(src, &key) || !GetVarint64(src, &sequence) ||
+  if (!GetLengthPrefixedSlice(src, &key) ||
       !GetLengthPrefixedSlice(src, &value)) {
     return Status::Corruption("BlobRecord");
   }
@@ -32,8 +31,7 @@ Status BlobRecord::DecodeFrom(Slice* src) {
 }
 
 bool operator==(const BlobRecord& lhs, const BlobRecord& rhs) {
-  return lhs.key == rhs.key && lhs.sequence == rhs.sequence &&
-         lhs.value == rhs.value;
+  return lhs.key == rhs.key && lhs.value == rhs.value;
 }
 
 void BlobEncoder::EncodeRecord(const BlobRecord& record) {
@@ -171,14 +169,6 @@ bool MergeBlobIndex::operator==(const MergeBlobIndex& rhs) const {
   return (sequence == rhs.sequence &&
           source_file_number == rhs.source_file_number &&
           BlobIndex::operator==(rhs));
-}
-
-std::string MergeFileName(const std::string& dirname, uint64_t number) {
-  assert(number > 0);
-  char buf[100];
-  snprintf(buf, sizeof(buf), "/%06llu.%s",
-           static_cast<unsigned long long>(number), "merge");
-  return dirname + buf;
 }
 
 void BlobFileMeta::EncodeTo(std::string* dst) const {

@@ -30,6 +30,7 @@ class BlobFileIterator {
   void SeekToFirst();
   void Next();
   Slice key() const;
+  // returns sequence number of original modify, not implemented.
   SequenceNumber sequence() const;
   Slice value() const;
   Status status() const { return status_; }

@@ -22,7 +22,7 @@ std::string GenValue(int i) {
   return buffer;
 }
 
-class BlobGCJobTest : public testing::TestWithParam<TitanGcRewriteMode> {
+class BlobGCJobTest : public testing::TestWithParam<bool /*gc_merge_mode*/> {
  public:
   std::string dbname_;
   TitanDB* db_;
@@ -824,9 +824,7 @@ TEST_P(BlobGCJobTest, RangeMerge) {
 }
 
 INSTANTIATE_TEST_CASE_P(BlobGCJobTestParameterized, BlobGCJobTest,
-                        ::testing::Values(TitanGcRewriteMode::kDefault,
-                                          TitanGcRewriteMode::kMerge,
-                                          TitanGcRewriteMode::kFastIngest));
+                        ::testing::Values(false, true));
 }  // namespace titandb
 
 }  // namespace rocksdb

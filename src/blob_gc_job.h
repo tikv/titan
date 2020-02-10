@@ -18,7 +18,7 @@ namespace titandb {
 class BlobGCJob {
  public:
   BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
-            const TitanDBOptions &titan_db_options, TitanGcRewriteMode mode,
+            const TitanDBOptions &titan_db_options, bool gc_merge_rewrite,
             Env *env, const EnvOptions &env_options,
             BlobFileManager *blob_file_manager, BlobFileSet *blob_file_set,
             LogBuffer *log_buffer, std::atomic_bool *shuting_down,
@@ -48,7 +48,7 @@ class BlobGCJob {
   DBImpl *base_db_impl_;
   port::Mutex *mutex_;
   TitanDBOptions db_options_;
-  const TitanGcRewriteMode gc_rewrite_mode_;
+  const bool gc_merge_rewrite_;
   Env *env_;
   EnvOptions env_options_;
   BlobFileManager *blob_file_manager_;
@@ -58,15 +58,10 @@ class BlobGCJob {
   std::vector<std::pair<std::unique_ptr<BlobFileHandle>,
                         std::unique_ptr<BlobFileBuilder>>>
       blob_file_builders_;
-  // Default rewrite
   std::vector<std::pair<WriteBatch, GarbageCollectionWriteCallback>>
       rewrite_batches_;
-  // Rewrite by merge
-  std::vector<WriteBatch> rewrite_batches_without_callback_;
-  // Rewrite by ingestion
-  std::string merge_file_name_;
-  Status ingestion_file_status_;
-  bool ingestion_file_ready_{false};
+  std::vector<std::pair<WriteBatch, uint64_t /*blob_record_size*/>>
+      rewrite_batches_without_callback_;
 
   std::atomic_bool *shuting_down_{nullptr};
 

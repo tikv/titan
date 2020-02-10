@@ -42,7 +42,8 @@ TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
       blob_file_discardable_ratio(immutable_opts.blob_file_discardable_ratio),
       sample_file_size_ratio(immutable_opts.sample_file_size_ratio),
       merge_small_file_threshold(immutable_opts.merge_small_file_threshold),
-      blob_run_mode(mutable_opts.blob_run_mode) {}
+      blob_run_mode(mutable_opts.blob_run_mode),
+      gc_merge_rewrite(mutable_opts.gc_merge_rewrite) {}
 
 void TitanCFOptions::Dump(Logger* logger) const {
   ROCKS_LOG_HEADER(logger,
@@ -97,20 +98,6 @@ std::unordered_map<std::string, TitanBlobRunMode>
         {"kNormal", TitanBlobRunMode::kNormal},
         {"kReadOnly", TitanBlobRunMode::kReadOnly},
         {"kFallback", TitanBlobRunMode::kFallback}};
-
-std::map<TitanGcRewriteMode, std::string>
-    TitanOptionsHelper::gc_rewrite_mode_to_string = {
-        {TitanGcRewriteMode::kDefault, "kDefault"},
-        {TitanGcRewriteMode::kMerge, "kMerge"},
-        {TitanGcRewriteMode::kIngest, "kIngest"},
-        {TitanGcRewriteMode::kFastIngest, "kFastIngest"}};
-
-std::unordered_map<std::string, TitanGcRewriteMode>
-    TitanOptionsHelper::gc_rewrite_mode_string_map = {
-        {"kDefault", TitanGcRewriteMode::kDefault},
-        {"kMerge", TitanGcRewriteMode::kMerge},
-        {"kIngest", TitanGcRewriteMode::kIngest},
-        {"kFastIngest", TitanGcRewriteMode::kFastIngest}};
 
 }  // namespace titandb
 }  // namespace rocksdb

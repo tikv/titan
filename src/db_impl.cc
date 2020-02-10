@@ -15,7 +15,6 @@
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc.h"
-#include "blob_index_merge_operator.h"
 #include "db_iter.h"
 #include "table_factory.h"
 #include "titan_build_version.h"
@@ -145,6 +144,7 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
     stats_.reset(new TitanStats(db_options_.statistics.get()));
   }
   blob_manager_.reset(new FileManager(this));
+  shared_merge_operator_ = std::make_shared<BlobIndexMergeOperator>();
 }
 
 TitanDBImpl::~TitanDBImpl() { Close(); }
@@ -265,7 +265,7 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
         db_options_, desc.options, this, blob_manager_, &mutex_,
         blob_file_set_.get(), stats_.get()));
     cf_opts.table_factory = titan_table_factories.back();
-    cf_opts.merge_operator.reset(new BlobIndexMergeOperator());
+    cf_opts.merge_operator = shared_merge_operator_;
   }
   // Initialize GC thread pool.
   if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
@@ -389,7 +389,6 @@ Status TitanDBImpl::CreateColumnFamilies(
   std::vector<ColumnFamilyDescriptor> base_descs;
   std::vector<std::shared_ptr<TableFactory>> base_table_factory;
   std::vector<std::shared_ptr<TitanTableFactory>> titan_table_factory;
-  std::vector<std::shared_ptr<BlobIndexMergeOperator>> merge_operators;
   for (auto& desc : descs) {
     ColumnFamilyOptions options = desc.options;
     // Replaces the provided table factory with TitanTableFactory.
@@ -400,8 +399,7 @@ Status TitanDBImpl::CreateColumnFamilies(
     options.table_factory = titan_table_factory.back();
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
-    merge_operators.emplace_back(std::make_shared<BlobIndexMergeOperator>());
-    options.merge_operator = merge_operators.back();
+    options.merge_operator = shared_merge_operator_;
     base_descs.emplace_back(desc.name, options);
   }
 
@@ -965,8 +963,8 @@ Status TitanDBImpl::SetOptions(
   auto opts = new_options;
   bool set_blob_run_mode = false;
   TitanBlobRunMode blob_run_mode = TitanBlobRunMode::kNormal;
-  bool set_gc_rewrite_mode = false;
-  TitanGcRewriteMode gc_rewrite_mode = TitanGcRewriteMode::kDefault;
+  bool set_gc_merge_rewrite = false;
+  bool gc_merge_rewrite = false;
   {
     auto p = opts.find("blob_run_mode");
     set_blob_run_mode = (p != opts.end());
@@ -986,19 +984,14 @@ Status TitanDBImpl::SetOptions(
     }
   }
   {
-    auto p = opts.find("gc_rewrite_mode");
-    set_gc_rewrite_mode = (p != opts.end());
-    if (set_gc_rewrite_mode) {
-      const std::string& gc_rewrite_mode_string = p->second;
-      auto pm = gc_rewrite_mode_string_map.find(gc_rewrite_mode_string);
-      if (pm == gc_rewrite_mode_string_map.end()) {
-        return Status::InvalidArgument("No gc_rewrite_mode defined for " +
-                                       gc_rewrite_mode_string);
-      } else {
-        gc_rewrite_mode = pm->second;
-        ROCKS_LOG_INFO(db_options_.info_log, "[%s] Set gc_rewrite_mode: %s",
-                       column_family->GetName().c_str(),
-                       gc_rewrite_mode_string.c_str());
+    auto p = opts.find("gc_merge_rewrite");
+    set_gc_merge_rewrite = (p != opts.end());
+    if (set_gc_merge_rewrite) {
+      try {
+        gc_merge_rewrite = ParseBoolean("", p->second);
+      } catch (std::exception& e) {
+        return Status::InvalidArgument("Error parsing " + p->second + ":" +
+                                       std::string(e.what()));
       }
       opts.erase(p);
     }
@@ -1010,18 +1003,18 @@ Status TitanDBImpl::SetOptions(
     }
   }
   // Make sure base db's SetOptions success before setting blob_run_mode.
-  if (set_blob_run_mode || set_gc_rewrite_mode) {
+  if (set_blob_run_mode || set_gc_merge_rewrite) {
     uint32_t cf_id = column_family->GetID();
     {
       MutexLock l(&mutex_);
+      assert(cf_info_.count(cf_id) > 0);
+      TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
       if (set_blob_run_mode) {
-        assert(cf_info_.count(cf_id) > 0);
-        TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
         cf_info.titan_table_factory->SetBlobRunMode(blob_run_mode);
         cf_info.mutable_cf_options.blob_run_mode = blob_run_mode;
       }
-      if (set_gc_rewrite_mode) {
-        gc_rewrite_mode_ = gc_rewrite_mode;
+      if (set_gc_merge_rewrite) {
+        cf_info.mutable_cf_options.gc_merge_rewrite = gc_merge_rewrite;
       }
     }
   }

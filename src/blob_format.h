@@ -49,13 +49,12 @@ const uint64_t kBlobFooterSize = BlockHandle::kMaxEncodedLength + 8 + 4;
 //
 struct BlobRecord {
   Slice key;
-  SequenceNumber sequence;
   Slice value;
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
 
-  size_t size() const { return key.size() + value.size() + 8; }
+  size_t size() const { return key.size() + value.size(); }
 
   friend bool operator==(const BlobRecord& lhs, const BlobRecord& rhs);
 };
@@ -162,9 +161,6 @@ struct MergeBlobIndex : public BlobIndex {
 
   bool operator==(const MergeBlobIndex& rhs) const;
 };
-
-// NO.merge
-std::string MergeFileName(const std::string& blobdirname, uint64_t number);
 
 // Format of blob file meta (not fixed size):
 //

@@ -59,30 +59,16 @@ enum class TitanBlobRunMode {
                   // and store the value in SST file.
 };
 
-enum class TitanGcRewriteMode {
-  kDefault = 0,
-  kMerge = 1,
-  kIngest = 2,
-  kFastIngest = 3,
-};
-
 struct TitanOptionsHelper {
   static std::map<TitanBlobRunMode, std::string> blob_run_mode_to_string;
   static std::unordered_map<std::string, TitanBlobRunMode>
       blob_run_mode_string_map;
-  static std::map<TitanGcRewriteMode, std::string> gc_rewrite_mode_to_string;
-  static std::unordered_map<std::string, TitanGcRewriteMode>
-      gc_rewrite_mode_string_map;
 };
 
 static auto& blob_run_mode_to_string =
     TitanOptionsHelper::blob_run_mode_to_string;
 static auto& blob_run_mode_string_map =
     TitanOptionsHelper::blob_run_mode_string_map;
-static auto& gc_rewrite_mode_to_string =
-    TitanOptionsHelper::gc_rewrite_mode_to_string;
-static auto& gc_rewrite_mode_string_map =
-    TitanOptionsHelper::gc_rewrite_mode_string_map;
 
 struct ImmutableTitanCFOptions;
 struct MutableTitanCFOptions;
@@ -169,6 +155,16 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: 20
   int max_sorted_runs{20};
 
+  // If set true, Titan will rewrite valid blob index from GC output as merge
+  // operands back to data store.
+  //
+  // With this feature enabled, Titan background GC won't block online write,
+  // trade-off being read performance slightly reduced compared to normal
+  // rewrite mode.
+  //
+  // Default: false
+  bool gc_merge_rewrite{false};
+
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}
@@ -223,9 +219,11 @@ struct MutableTitanCFOptions {
   MutableTitanCFOptions() : MutableTitanCFOptions(TitanCFOptions()) {}
 
   explicit MutableTitanCFOptions(const TitanCFOptions& opts)
-      : blob_run_mode(opts.blob_run_mode) {}
+      : blob_run_mode(opts.blob_run_mode),
+        gc_merge_rewrite(opts.gc_merge_rewrite) {}
 
   TitanBlobRunMode blob_run_mode;
+  bool gc_merge_rewrite;
 };
 
 struct TitanOptions : public TitanDBOptions, public TitanCFOptions {

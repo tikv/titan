@@ -53,7 +53,6 @@ class BlobFileTest : public testing::Test {
       auto value = GenValue(i);
       BlobRecord record;
       record.key = key;
-      record.sequence = 0;
       record.value = value;
       builder->Add(record, &handles[i]);
       ASSERT_OK(builder->status());
@@ -72,7 +71,6 @@ class BlobFileTest : public testing::Test {
       auto value = GenValue(i);
       BlobRecord expect;
       expect.key = key;
-      expect.sequence = 0;
       expect.value = value;
       BlobRecord record;
       PinnableSlice buffer;
@@ -116,7 +114,6 @@ class BlobFileTest : public testing::Test {
       auto value = GenValue(i);
       BlobRecord record;
       record.key = key;
-      record.sequence = 0;
       record.value = value;
       builder->Add(record, &handles[i]);
       ASSERT_OK(builder->status());
@@ -140,7 +137,6 @@ class BlobFileTest : public testing::Test {
       auto value = GenValue(i);
       BlobRecord expect;
       expect.key = key;
-      expect.sequence = 0;
       expect.value = value;
       BlobRecord record;
       PinnableSlice buffer;

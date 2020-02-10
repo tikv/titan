@@ -39,8 +39,6 @@ class BlobGC {
 
   bool trigger_next() { return trigger_next_; }
 
-  uint64_t NewMergeFileNumber() { return next_merge_file_number_.fetch_add(1); }
-
  private:
   std::vector<BlobFileMeta*> inputs_;
   std::vector<BlobFileMeta*> outputs_;
@@ -48,7 +46,6 @@ class BlobGC {
   ColumnFamilyHandle* cfh_{nullptr};
   // Whether need to trigger gc after this gc or not
   const bool trigger_next_;
-  static std::atomic<uint64_t> next_merge_file_number_;
 };
 
 struct GCScore {

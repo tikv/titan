@@ -110,7 +110,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   }
 }
 
-void TitanTableBuilder::AddBlob(const Slice& key, SequenceNumber sequence,
+void TitanTableBuilder::AddBlob(const Slice& key, SequenceNumber _sequence,
                                 const Slice& value, std::string* index_value) {
   if (!ok()) return;
   StopWatch write_sw(db_options_.env, stats_, BLOB_DB_BLOB_FILE_WRITE_MICROS);
@@ -134,7 +134,6 @@ void TitanTableBuilder::AddBlob(const Slice& key, SequenceNumber sequence,
   BlobIndex index;
   BlobRecord record;
   record.key = key;
-  record.sequence = sequence;
   record.value = value;
   index.file_number = blob_handle_->GetNumber();
   blob_builder_->Add(record, &index.blob_handle);

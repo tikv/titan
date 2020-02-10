@@ -66,9 +66,7 @@ void BlobFileIterator::Next() {
 
 Slice BlobFileIterator::key() const { return cur_blob_record_.key; }
 
-SequenceNumber BlobFileIterator::sequence() const {
-  return cur_blob_record_.sequence;
-}
+SequenceNumber BlobFileIterator::sequence() const { return 0; }
 
 Slice BlobFileIterator::value() const { return cur_blob_record_.value; }
 

@@ -7,6 +7,7 @@
 
 #include "blob_file_manager.h"
 #include "blob_file_set.h"
+#include "blob_index_merge_operator.h"
 #include "table_factory.h"
 #include "titan/db.h"
 #include "titan_stats.h"
@@ -268,8 +269,8 @@ class TitanDBImpl : public TitanDB {
   EnvOptions env_options_;
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
-  TitanGcRewriteMode gc_rewrite_mode_{TitanGcRewriteMode::kMerge};
   std::unique_ptr<Directory> directory_;
+  std::shared_ptr<BlobIndexMergeOperator> shared_merge_operator_;
 
   std::atomic<bool> initialized_{false};
 
