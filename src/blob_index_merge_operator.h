@@ -11,6 +11,17 @@ class BlobIndexMergeOperator : public MergeOperator {
  public:
   BlobIndexMergeOperator() = default;
 
+  // FullMergeV2 merges one base value with multiple merge operands and
+  // preserves latest value w.r.t. timestamp of original *put*. Each merge
+  // is the output of blob GC, and contains meta data including *put-ts* and
+  // *src-file*.
+  // Merge operation follows such rules:
+  // *. basic rule (keep base value): [Y][Z] ... [X](Y)(Z) => [X]
+  // a. same put (keep merge value): [Y] ... [X](Y)(X') => [X']
+  //    we identify this case by checking *src-file* of merges against
+  //    *blob-handle* of base.
+  // b. merge reorder (keep biggest put-ts): [A][B](B')(A') => [B']
+  // c. deletion (keep deletion marker): [delete](X)(Y) => [deletion marker]
   bool FullMergeV2(const MergeOperationInput& merge_in,
                    MergeOperationOutput* merge_out) const override {
     Status s;
