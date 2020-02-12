@@ -157,10 +157,6 @@ Status BlobGCJob::DoRunGC() {
 
   auto* cfh = blob_gc_->column_family_handle();
 
-  Options options;
-  options.table_properties_collector_factories.emplace_back(
-      std::make_shared<BlobFileSizeCollectorFactory>());
-
   //  uint64_t drop_entry_num = 0;
   //  uint64_t drop_entry_size = 0;
   //  uint64_t total_entry_num = 0;
@@ -237,8 +233,8 @@ Status BlobGCJob::DoRunGC() {
 
     MergeBlobIndex new_blob_index;
     new_blob_index.file_number = blob_file_handle->GetNumber();
-    new_blob_index.sequence = gc_iter->sequence();
     new_blob_index.source_file_number = blob_index.file_number;
+    new_blob_index.source_file_offset = blob_index.blob_handle.offset;
     blob_file_builder->Add(blob_record, &new_blob_index.blob_handle);
     std::string index_entry;
 

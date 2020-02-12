@@ -151,8 +151,8 @@ struct BlobIndex {
 };
 
 struct MergeBlobIndex : public BlobIndex {
-  SequenceNumber sequence;
   uint64_t source_file_number{0};
+  uint64_t source_file_offset{0};
 
   void EncodeTo(std::string* dst) const;
   void EncodeToBase(std::string* dst) const;

@@ -52,8 +52,6 @@ class BlobIndexMergeOperator : public MergeOperator {
 
     MergeBlobIndex index;
     BlobIndex merge_index;
-    SequenceNumber latest_sequence;
-    bool filled = false;
     for (auto operand : merge_in.operand_list) {
       s = index.DecodeFrom(&operand);
       if (!s.ok()) {
@@ -61,31 +59,21 @@ class BlobIndexMergeOperator : public MergeOperator {
       }
       // if any merge is sourced from base index, then the base index must
       // be stale.
-      if (existing_index_valid &&
-          index.source_file_number == existing_index.file_number) {
-        existing_index_valid = false;
-      }
-      // if base index is still valid, merges must be sourced from older
-      // modifies.
-      if (!existing_index_valid) {
-        if (!filled) {
+      if (existing_index_valid) {
+        if (index.source_file_number == existing_index.file_number &&
+            index.source_file_offset == existing_index.blob_handle.offset) {
+          existing_index_valid = false;
           merge_index = index;
-          latest_sequence = index.sequence;
-          filled = true;
-        } else if (latest_sequence <= index.sequence) {
-          // notice the equal case here, merge on merge is possible
-          latest_sequence = index.sequence;
-          merge_index = index;
-        } else {
-          // the merge comes from an older modify.
         }
+      } else if (index.source_file_number == merge_index.file_number &&
+                 index.source_file_offset == merge_index.blob_handle.offset) {
+        merge_index = index;
       }
     }
     merge_out->new_type = kTypeBlobIndex;
     if (existing_index_valid) {
       merge_out->existing_operand = *merge_in.existing_value;
     } else {
-      assert(filled);
       merge_out->new_value.clear();
       merge_index.EncodeTo(&merge_out->new_value);
     }

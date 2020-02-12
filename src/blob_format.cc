@@ -142,8 +142,8 @@ bool BlobIndex::operator==(const BlobIndex& rhs) const {
 
 void MergeBlobIndex::EncodeTo(std::string* dst) const {
   BlobIndex::EncodeTo(dst);
-  PutVarint64(dst, sequence);
   PutVarint64(dst, source_file_number);
+  PutVarint64(dst, source_file_offset);
 }
 
 void MergeBlobIndex::EncodeToBase(std::string* dst) const {
@@ -155,7 +155,8 @@ Status MergeBlobIndex::DecodeFrom(Slice* src) {
   if (!s.ok()) {
     return s;
   }
-  if (!GetVarint64(src, &sequence) || !GetVarint64(src, &source_file_number)) {
+  if (!GetVarint64(src, &source_file_number) ||
+      !GetVarint64(src, &source_file_offset)) {
     return Status::Corruption("MergeBlobIndex");
   }
   return s;
@@ -166,8 +167,8 @@ Status MergeBlobIndex::DecodeFromBase(Slice* src) {
 }
 
 bool MergeBlobIndex::operator==(const MergeBlobIndex& rhs) const {
-  return (sequence == rhs.sequence &&
-          source_file_number == rhs.source_file_number &&
+  return (source_file_number == rhs.source_file_number &&
+          source_file_offset == rhs.source_file_offset &&
           BlobIndex::operator==(rhs));
 }
 
