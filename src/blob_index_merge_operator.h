@@ -13,15 +13,16 @@ class BlobIndexMergeOperator : public MergeOperator {
 
   // FullMergeV2 merges one base value with multiple merge operands and
   // preserves latest value w.r.t. timestamp of original *put*. Each merge
-  // is the output of blob GC, and contains meta data including *put-ts* and
-  // *src-file*.
+  // is the output of blob GC, and contains meta data including *src-file-no*
+  // and *src-file-offset*.
   // Merge operation follows such rules:
   // *. basic rule (keep base value): [Y][Z] ... [X](Y)(Z) => [X]
-  // a. same put (keep merge value): [Y] ... [X](Y)(X') => [X']
-  //    we identify this case by checking *src-file* of merges against
+  // a. same put (keep merge value): [Y] ... [X](Y)(X')(X") => [X"]
+  //    we identify this case by checking *src-location* of merges against
   //    *blob-handle* of base.
-  // b. merge reorder (keep biggest put-ts): [A][B](B')(A') => [B']
-  // c. deletion (keep deletion marker): [delete](X)(Y) => [deletion marker]
+  // b. deletion (keep deletion marker): [delete](X)(Y) => [deletion marker]
+  //    this is a workaround since vanilla rocksdb disallow empty result from
+  //    merge.
   bool FullMergeV2(const MergeOperationInput& merge_in,
                    MergeOperationOutput* merge_out) const override {
     Status s;
@@ -43,7 +44,7 @@ class BlobIndexMergeOperator : public MergeOperator {
       existing_index_valid = !BlobIndex::IsDeletionMarker(existing_index);
     }
     if (!existing_index_valid) {
-      // this must be a deleted key
+      // this key must be deleted
       merge_out->new_type = kTypeBlobIndex;
       merge_out->new_value.clear();
       BlobIndex::EncodeDeletionMarkerTo(&merge_out->new_value);
@@ -57,8 +58,6 @@ class BlobIndexMergeOperator : public MergeOperator {
       if (!s.ok()) {
         return false;
       }
-      // if any merge is sourced from base index, then the base index must
-      // be stale.
       if (existing_index_valid) {
         if (index.source_file_number == existing_index.file_number &&
             index.source_file_offset == existing_index.blob_handle.offset) {
