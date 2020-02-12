@@ -26,8 +26,8 @@ class BlobIndexMergeOperator : public MergeOperator {
   bool FullMergeV2(const MergeOperationInput& merge_in,
                    MergeOperationOutput* merge_out) const override {
     Status s;
-    if (merge_in.existing_value && merge_in.value_type == kTypeValue) {
-      merge_out->new_type = kTypeValue;
+    if (merge_in.existing_value && merge_in.value_type == kValue) {
+      merge_out->new_type = kValue;
       merge_out->existing_operand = *merge_in.existing_value;
       return true;
     }
@@ -35,7 +35,7 @@ class BlobIndexMergeOperator : public MergeOperator {
     BlobIndex existing_index;
     bool existing_index_valid = false;
     if (merge_in.existing_value) {
-      assert(merge_in.value_type == kTypeBlobIndex);
+      assert(merge_in.value_type == kBlobIndex);
       Slice copy = *merge_in.existing_value;
       s = existing_index.DecodeFrom(&copy);
       if (!s.ok()) {
@@ -45,7 +45,7 @@ class BlobIndexMergeOperator : public MergeOperator {
     }
     if (!existing_index_valid) {
       // this key must be deleted
-      merge_out->new_type = kTypeBlobIndex;
+      merge_out->new_type = kBlobIndex;
       merge_out->new_value.clear();
       BlobIndex::EncodeDeletionMarkerTo(&merge_out->new_value);
       return true;
@@ -69,7 +69,7 @@ class BlobIndexMergeOperator : public MergeOperator {
         merge_index = index;
       }
     }
-    merge_out->new_type = kTypeBlobIndex;
+    merge_out->new_type = kBlobIndex;
     if (existing_index_valid) {
       merge_out->existing_operand = *merge_in.existing_value;
     } else {
