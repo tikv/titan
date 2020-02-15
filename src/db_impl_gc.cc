@@ -164,6 +164,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
   StopWatch gc_sw(env_, stats_.get(), BLOB_DB_GC_MICROS);
 
   std::unique_ptr<BlobGC> blob_gc;
+  bool gc_merge_rewrite;
   std::unique_ptr<ColumnFamilyHandle> cfh;
   Status s;
 
@@ -187,6 +188,8 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
       cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
       assert(column_family_id == cfh->GetID());
       blob_gc->SetColumnFamily(cfh.get());
+      gc_merge_rewrite =
+          cf_info_[column_family_id].mutable_cf_options.gc_merge_rewrite;
     }
   }
 
@@ -196,10 +199,10 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     // Nothing to do
     ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
-    BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
-                          env_options_, blob_manager_.get(),
-                          blob_file_set_.get(), log_buffer, &shuting_down_,
-                          stats_.get());
+    BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_,
+                          gc_merge_rewrite, env_, env_options_,
+                          blob_manager_.get(), blob_file_set_.get(), log_buffer,
+                          &shuting_down_, stats_.get());
     s = blob_gc_job.Prepare();
     if (s.ok()) {
       mutex_.Unlock();
