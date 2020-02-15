@@ -2,7 +2,8 @@
 
 #include "blob_index_merge_operator.h"
 
-namespace rocksdb::titandb {
+namespace rocksdb {
+namespace titandb {
 
 std::string GenKey(int i) {
   char buffer[32];
@@ -169,7 +170,9 @@ TEST_F(BlobIndexMergeOperatorTest, Delete) {
   Merge(GenMergeBlobIndex(GenBlobIndex(0), 1));
   Read(kTypeBlobIndex, value);
 }
-}  // namespace rocksdb::titandb
+
+}  // namespace titandb
+}  // namespace rocksdb
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
