@@ -5,11 +5,11 @@ enable_language(C)
 find_package(Git)
 
 if (NOT ROCKSDB_GIT_REPO)
-  set(ROCKSDB_GIT_REPO "https://github.com/tabokie/rocksdb.git")
+  set(ROCKSDB_GIT_REPO "https://github.com/pingcap/rocksdb.git")
 endif()
 
 if (NOT ROCKSDB_GIT_BRANCH)
-  set(ROCKSDB_GIT_BRANCH "green-blob-gc")
+  set(ROCKSDB_GIT_BRANCH "6.4.tikv")
 endif()
 
 if (NOT DEFINED ROCKSDB_DIR)
@@ -93,6 +93,7 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         blob_format_test
         blob_gc_job_test
         blob_gc_picker_test
+        blob_index_merge_operator_test
         gc_stats_test
         table_builder_test
         thread_safety_test
