@@ -144,6 +144,7 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
     stats_.reset(new TitanStats(db_options_.statistics.get()));
   }
   blob_manager_.reset(new FileManager(this));
+  shared_merge_operator_ = std::make_shared<BlobIndexMergeOperator>();
 }
 
 TitanDBImpl::~TitanDBImpl() { Close(); }
@@ -264,6 +265,7 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
         db_options_, desc.options, this, blob_manager_, &mutex_,
         blob_file_set_.get(), stats_.get()));
     cf_opts.table_factory = titan_table_factories.back();
+    cf_opts.merge_operator = shared_merge_operator_;
   }
   // Initialize GC thread pool.
   if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
@@ -397,6 +399,7 @@ Status TitanDBImpl::CreateColumnFamilies(
     options.table_factory = titan_table_factory.back();
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
+    options.merge_operator = shared_merge_operator_;
     base_descs.emplace_back(desc.name, options);
   }
 
@@ -601,6 +604,9 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   s = index.DecodeFrom(value);
   assert(s.ok());
   if (!s.ok()) return s;
+  if (BlobIndex::IsDeletionMarker(index)) {
+    return Status::NotFound("encounter deletion marker");
+  }
 
   BlobRecord record;
   PinnableSlice buffer;
@@ -955,22 +961,40 @@ Status TitanDBImpl::SetOptions(
     const std::unordered_map<std::string, std::string>& new_options) {
   Status s;
   auto opts = new_options;
-  auto p = opts.find("blob_run_mode");
-  bool set_blob_run_mode = (p != opts.end());
-  TitanBlobRunMode mode = TitanBlobRunMode::kNormal;
-  if (set_blob_run_mode) {
-    const std::string& blob_run_mode_string = p->second;
-    auto pm = blob_run_mode_string_map.find(blob_run_mode_string);
-    if (pm == blob_run_mode_string_map.end()) {
-      return Status::InvalidArgument("No blob_run_mode defined for " +
-                                     blob_run_mode_string);
-    } else {
-      mode = pm->second;
-      ROCKS_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
-                     column_family->GetName().c_str(),
-                     blob_run_mode_string.c_str());
+  bool set_blob_run_mode = false;
+  TitanBlobRunMode blob_run_mode = TitanBlobRunMode::kNormal;
+  bool set_gc_merge_rewrite = false;
+  bool gc_merge_rewrite = false;
+  {
+    auto p = opts.find("blob_run_mode");
+    set_blob_run_mode = (p != opts.end());
+    if (set_blob_run_mode) {
+      const std::string& blob_run_mode_string = p->second;
+      auto pm = blob_run_mode_string_map.find(blob_run_mode_string);
+      if (pm == blob_run_mode_string_map.end()) {
+        return Status::InvalidArgument("No blob_run_mode defined for " +
+                                       blob_run_mode_string);
+      } else {
+        blob_run_mode = pm->second;
+        ROCKS_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
+                       column_family->GetName().c_str(),
+                       blob_run_mode_string.c_str());
+      }
+      opts.erase(p);
     }
-    opts.erase(p);
+  }
+  {
+    auto p = opts.find("gc_merge_rewrite");
+    set_gc_merge_rewrite = (p != opts.end());
+    if (set_gc_merge_rewrite) {
+      try {
+        gc_merge_rewrite = ParseBoolean("", p->second);
+      } catch (std::exception& e) {
+        return Status::InvalidArgument("Error parsing " + p->second + ":" +
+                                       std::string(e.what()));
+      }
+      opts.erase(p);
+    }
   }
   if (opts.size() > 0) {
     s = db_->SetOptions(column_family, opts);
@@ -979,14 +1003,19 @@ Status TitanDBImpl::SetOptions(
     }
   }
   // Make sure base db's SetOptions success before setting blob_run_mode.
-  if (set_blob_run_mode) {
+  if (set_blob_run_mode || set_gc_merge_rewrite) {
     uint32_t cf_id = column_family->GetID();
     {
       MutexLock l(&mutex_);
       assert(cf_info_.count(cf_id) > 0);
       TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
-      cf_info.titan_table_factory->SetBlobRunMode(mode);
-      cf_info.mutable_cf_options.blob_run_mode = mode;
+      if (set_blob_run_mode) {
+        cf_info.titan_table_factory->SetBlobRunMode(blob_run_mode);
+        cf_info.mutable_cf_options.blob_run_mode = blob_run_mode;
+      }
+      if (set_gc_merge_rewrite) {
+        cf_info.mutable_cf_options.gc_merge_rewrite = gc_merge_rewrite;
+      }
     }
   }
   return Status::OK();

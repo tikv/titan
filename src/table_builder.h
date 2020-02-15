@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rocksdb/types.h"
+
 #include "blob_file_builder.h"
 #include "blob_file_manager.h"
 #include "blob_file_set.h"

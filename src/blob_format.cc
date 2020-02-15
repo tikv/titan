@@ -125,9 +125,51 @@ Status BlobIndex::DecodeFrom(Slice* src) {
   return s;
 }
 
-bool operator==(const BlobIndex& lhs, const BlobIndex& rhs) {
-  return (lhs.file_number == rhs.file_number &&
-          lhs.blob_handle == rhs.blob_handle);
+void BlobIndex::EncodeDeletionMarkerTo(std::string* dst) {
+  dst->push_back(kBlobRecord);
+  PutVarint64(dst, 0);
+  BlobHandle dummy;
+  dummy.EncodeTo(dst);
+}
+
+bool BlobIndex::IsDeletionMarker(const BlobIndex& index) {
+  return index.file_number == 0;
+}
+
+bool BlobIndex::operator==(const BlobIndex& rhs) const {
+  return (file_number == rhs.file_number && blob_handle == rhs.blob_handle);
+}
+
+void MergeBlobIndex::EncodeTo(std::string* dst) const {
+  BlobIndex::EncodeTo(dst);
+  PutVarint64(dst, source_file_number);
+  PutVarint64(dst, source_file_offset);
+}
+
+void MergeBlobIndex::EncodeToBase(std::string* dst) const {
+  BlobIndex::EncodeTo(dst);
+}
+
+Status MergeBlobIndex::DecodeFrom(Slice* src) {
+  Status s = BlobIndex::DecodeFrom(src);
+  if (!s.ok()) {
+    return s;
+  }
+  if (!GetVarint64(src, &source_file_number) ||
+      !GetVarint64(src, &source_file_offset)) {
+    return Status::Corruption("MergeBlobIndex");
+  }
+  return s;
+}
+
+Status MergeBlobIndex::DecodeFromBase(Slice* src) {
+  return BlobIndex::DecodeFrom(src);
+}
+
+bool MergeBlobIndex::operator==(const MergeBlobIndex& rhs) const {
+  return (source_file_number == rhs.source_file_number &&
+          source_file_offset == rhs.source_file_offset &&
+          BlobIndex::operator==(rhs));
 }
 
 void BlobFileMeta::EncodeTo(std::string* dst) const {
