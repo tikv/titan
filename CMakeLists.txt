@@ -100,7 +100,8 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         titan_db_test
         titan_options_test
         util_test
-        version_test)
+        version_test
+        prioritized_cache_test)
   set(TEST_LIBS
         titan
         rocksdb
