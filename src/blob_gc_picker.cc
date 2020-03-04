@@ -66,7 +66,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
                   "got batch size %" PRIu64 ", estimate output %" PRIu64
                   " bytes",
                   batch_size, estimate_output_size);
-  if (blob_files.empty() || batch_size < cf_options_.min_gc_batch_size) {
+  if (blob_files.empty() || (batch_size < cf_options_.min_gc_batch_size &&
+      estimate_output_size < cf_options_.blob_file_target_size)) {
     return nullptr;
   }
   // if there is only one small file to merge, no need to perform
