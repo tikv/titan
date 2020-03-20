@@ -164,7 +164,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
   StopWatch gc_sw(env_, stats_.get(), BLOB_DB_GC_MICROS);
 
   std::unique_ptr<BlobGC> blob_gc;
-  bool gc_merge_rewrite;
+  bool gc_merge_rewrite = false;
   std::unique_ptr<ColumnFamilyHandle> cfh;
   Status s;
 
