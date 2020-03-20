@@ -119,7 +119,7 @@ if (WITH_TITAN_TOOLS)
         titan
         rocksdb)
 
-  if (NOT TRAVIS)
+  if (TRAVIS)
     find_package(gflags REQUIRED)
   else()
     # Hack: On Travis (with Ubuntu xenial or before), libgflags-dev package doesn't come with
