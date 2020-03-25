@@ -2947,11 +2947,16 @@ class StressTest {
           titan_cf_descriptors.emplace_back(
               titandb::TitanCFDescriptor{cfd.name, options_});
           if (FLAGS_test_cf_consistency) {
-            // if test cf consistency, make some column families not store value in blob
+            // if test cf consistency, make some column families not store value
+            // in blob
             if (rand.OneIn(2)) {
-              titan_cf_descriptors.back().options.min_blob_size = 1024 * 1024 * 1024;
+              titan_cf_descriptors.back().options.min_blob_size =
+                  1024 * 1024 * 1024;
             }
-            fprintf(stdout, "Create Titan column family %s with min_blob_size %lu", cfd.name.c_str(), titan_cf_descriptors.back().options.min_blob_size);
+            fprintf(stdout,
+                    "Create Titan column family %s with min_blob_size %lu",
+                    cfd.name.c_str(),
+                    titan_cf_descriptors.back().options.min_blob_size);
           }
         }
         titandb::TitanDB* tdb;
@@ -3232,7 +3237,9 @@ class NonBatchedOpsStressTest : public StressTest {
             if (thread->rand.OneIn(2)) {
               tmp.back().options.min_blob_size = 1024 * 1024 * 1024;
             }
-            fprintf(stdout, "recreate Titan column family %s with min_blob_size %lu", new_name.c_str(), tmp.back().options.min_blob_size);
+            fprintf(stdout,
+                    "recreate Titan column family %s with min_blob_size %lu",
+                    new_name.c_str(), tmp.back().options.min_blob_size);
           }
           std::vector<ColumnFamilyHandle*> result;
           s = tdb->CreateColumnFamilies(tmp, &result);
