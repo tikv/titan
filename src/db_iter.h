@@ -56,7 +56,7 @@ class TitanDBIterator : public Iterator {
     iter_->SeekToLast();
     if (ShouldGetBlobValue()) {
       StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
-      GetBlobValue(true);
+      GetBlobValue(false);
       RecordTick(statistics(stats_), BLOB_DB_NUM_SEEK);
     }
   }
@@ -74,7 +74,7 @@ class TitanDBIterator : public Iterator {
     iter_->SeekForPrev(target);
     if (ShouldGetBlobValue()) {
       StopWatch seek_sw(env_, statistics(stats_), BLOB_DB_SEEK_MICROS);
-      GetBlobValue(true);
+      GetBlobValue(false);
       RecordTick(statistics(stats_), BLOB_DB_NUM_SEEK);
     }
   }
@@ -94,7 +94,7 @@ class TitanDBIterator : public Iterator {
     iter_->Prev();
     if (ShouldGetBlobValue()) {
       StopWatch prev_sw(env_, statistics(stats_), BLOB_DB_PREV_MICROS);
-      GetBlobValue(true);
+      GetBlobValue(false);
       RecordTick(statistics(stats_), BLOB_DB_NUM_PREV);
     }
   }
