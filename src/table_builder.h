@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rocksdb/types.h"
+
 #include "blob_file_builder.h"
 #include "blob_file_manager.h"
 #include "blob_file_set.h"
@@ -57,6 +59,9 @@ class TitanTableBuilder : public TableBuilder {
 
   void UpdateInternalOpStats();
 
+  Status GetBlobRecord(const BlobIndex& index, BlobRecord* record,
+                       PinnableSlice* buffer);
+
   Status status_;
   uint32_t cf_id_;
   TitanDBOptions db_options_;
@@ -69,6 +74,8 @@ class TitanTableBuilder : public TableBuilder {
   std::vector<
       std::pair<std::shared_ptr<BlobFileMeta>, std::unique_ptr<BlobFileHandle>>>
       finished_blobs_;
+  std::unordered_map<uint64_t, std::unique_ptr<BlobFilePrefetcher>>
+      input_file_prefetchers_;
   TitanStats* stats_;
 
   // target level in LSM-Tree for generated SSTs and blob files
@@ -83,6 +90,7 @@ class TitanTableBuilder : public TableBuilder {
   uint64_t bytes_written_ = 0;
   uint64_t io_bytes_read_ = 0;
   uint64_t io_bytes_written_ = 0;
+  uint64_t error_read_cnt_ = 0;
 };
 
 }  // namespace titandb

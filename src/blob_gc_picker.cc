@@ -42,8 +42,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     if (!stop_picking) {
       blob_files.push_back(blob_file.get());
       batch_size += blob_file->file_size();
-      estimate_output_size +=
-          (blob_file->file_size() - blob_file->discardable_size());
+      estimate_output_size += blob_file->live_data_size();
       if (batch_size >= cf_options_.max_gc_batch_size ||
           estimate_output_size >= cf_options_.blob_file_target_size) {
         // Stop pick file for this gc, but still check file for whether need
@@ -67,13 +66,14 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
                   "got batch size %" PRIu64 ", estimate output %" PRIu64
                   " bytes",
                   batch_size, estimate_output_size);
-  if (blob_files.empty() || batch_size < cf_options_.min_gc_batch_size) {
+  if (blob_files.empty() ||
+      (batch_size < cf_options_.min_gc_batch_size &&
+       estimate_output_size < cf_options_.blob_file_target_size)) {
     return nullptr;
   }
   // if there is only one small file to merge, no need to perform
   if (blob_files.size() == 1 &&
       blob_files[0]->file_size() <= cf_options_.merge_small_file_threshold &&
-      blob_files[0]->gc_mark() == false &&
       blob_files[0]->GetDiscardableRatio() <
           cf_options_.blob_file_discardable_ratio) {
     return nullptr;
