@@ -2948,7 +2948,7 @@ class StressTest {
           if (FLAGS_test_cf_consistency) {
             // if test cf consistency, make some column families not store value
             // in blob
-            if (titan_cf_descriptors.size() %2 == 0) {
+            if (titan_cf_descriptors.size() % 2 == 0) {
               titan_cf_descriptors.back().options.min_blob_size =
                   1024 * 1024 * 1024;
             }
