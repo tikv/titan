@@ -2942,14 +2942,13 @@ class StressTest {
         options_.max_background_gc = FLAGS_max_background_gc;
         titandb::TitanDBOptions titan_db_options(options_);
         std::vector<titandb::TitanCFDescriptor> titan_cf_descriptors;
-        Random rand(static_cast<uint32_t>(FLAGS_seed));
         for (const auto& cfd : cf_descriptors) {
           titan_cf_descriptors.emplace_back(
               titandb::TitanCFDescriptor{cfd.name, options_});
           if (FLAGS_test_cf_consistency) {
             // if test cf consistency, make some column families not store value
             // in blob
-            if (rand.OneIn(2)) {
+            if (titan_cf_descriptors.size() %2 == 0) {
               titan_cf_descriptors.back().options.min_blob_size =
                   1024 * 1024 * 1024;
             }
@@ -3234,7 +3233,7 @@ class NonBatchedOpsStressTest : public StressTest {
           tmp.emplace_back(titandb::TitanCFDescriptor{
               new_name, titandb::TitanCFOptions(options_)});
           if (FLAGS_test_cf_consistency) {
-            if (thread->rand.OneIn(2)) {
+            if (new_column_family_name_ % 2 == 0) {
               tmp.back().options.min_blob_size = 1024 * 1024 * 1024;
             }
             fprintf(stdout,
