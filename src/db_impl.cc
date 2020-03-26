@@ -18,6 +18,7 @@
 #include "db_iter.h"
 #include "table_factory.h"
 #include "titan_build_version.h"
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -141,7 +142,7 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
   }
   dirname_ = db_options_.dirname;
   if (db_options_.statistics != nullptr) {
-    db_options_.statistics = CreateDBStatistics<TITAN_TICKER_ENUM_MAX, TITAN_HISTOGRAM_ENUM_MAX>();
+    db_options_.statistics = titandb::CreateDBStatistics();
     stats_.reset(new TitanStats(db_options_.statistics.get()));
   }
   blob_manager_.reset(new FileManager(this));
