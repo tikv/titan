@@ -2953,7 +2953,7 @@ class StressTest {
                   1024 * 1024 * 1024;
             }
             fprintf(stdout,
-                    "Create Titan column family %s with min_blob_size %lu",
+                    "Create Titan column family %s with min_blob_size %lu\n",
                     cfd.name.c_str(),
                     titan_cf_descriptors.back().options.min_blob_size);
           }
@@ -3237,7 +3237,7 @@ class NonBatchedOpsStressTest : public StressTest {
               tmp.back().options.min_blob_size = 1024 * 1024 * 1024;
             }
             fprintf(stdout,
-                    "recreate Titan column family %s with min_blob_size %lu",
+                    "recreate Titan column family %s with min_blob_size %lu\n",
                     new_name.c_str(), tmp.back().options.min_blob_size);
           }
           std::vector<ColumnFamilyHandle*> result;
