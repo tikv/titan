@@ -77,7 +77,6 @@ const std::vector<std::pair<TickerType, std::string>> TitanTickersNameMap = {
     {TITAN_GC_TRIGGER_NEXT, "titandb.gc.trigger.next"},
 };
 
-
 enum HistogramType : uint32_t {
   TITAN_KEY_SIZE = HISTOGRAM_ENUM_MAX,
   TITAN_VALUE_SIZE,
@@ -95,28 +94,30 @@ enum HistogramType : uint32_t {
   TITAN_GC_MICROS,
   TITAN_GC_INPUT_FILE_SIZE,
   TITAN_GC_OUTPUT_FILE_SIZE,
-  
+
   TITAN_ITER_TOUCH_BLOB_FILE_COUNT,
 
   TITAN_HISTOGRAM_ENUM_MAX,
 };
 
-const std::vector<std::pair<HistogramType, std::string>> TitanHistogramsNameMap = {
-    {TITAN_KEY_SIZE, "titandb.key.size"},
-    {TITAN_VALUE_SIZE, "titandb.value.size"},
-    {TITAN_GET_MICROS, "titandb.get.micros"},
-    {TITAN_SEEK_MICROS, "titandb.seek.micros"},
-    {TITAN_NEXT_MICROS, "titandb.next.micros"},
-    {TITAN_PREV_MICROS, "titandb.prev.micros"},
-    {TITAN_BLOB_FILE_WRITE_MICROS, "titandb.blob.file.write.micros"},
-    {TITAN_BLOB_FILE_READ_MICROS, "titandb.blob.file.read.micros"},
-    {TITAN_BLOB_FILE_SYNC_MICROS, "titandb.blob.file.sync.micros"},
-    {TITAN_MANIFEST_FILE_SYNC_MICROS, "titandb.manifest.file.sync.micros"},
+const std::vector<std::pair<HistogramType, std::string>>
+    TitanHistogramsNameMap = {
+        {TITAN_KEY_SIZE, "titandb.key.size"},
+        {TITAN_VALUE_SIZE, "titandb.value.size"},
+        {TITAN_GET_MICROS, "titandb.get.micros"},
+        {TITAN_SEEK_MICROS, "titandb.seek.micros"},
+        {TITAN_NEXT_MICROS, "titandb.next.micros"},
+        {TITAN_PREV_MICROS, "titandb.prev.micros"},
+        {TITAN_BLOB_FILE_WRITE_MICROS, "titandb.blob.file.write.micros"},
+        {TITAN_BLOB_FILE_READ_MICROS, "titandb.blob.file.read.micros"},
+        {TITAN_BLOB_FILE_SYNC_MICROS, "titandb.blob.file.sync.micros"},
+        {TITAN_MANIFEST_FILE_SYNC_MICROS, "titandb.manifest.file.sync.micros"},
 
-    {TITAN_GC_MICROS, "titandb.gc.micros"},
-    {TITAN_GC_INPUT_FILE_SIZE, "titandb.gc.input.file.size"},
-    {TITAN_GC_OUTPUT_FILE_SIZE, "titandb.gc.output.file.size"},
-    {TITAN_ITER_TOUCH_BLOB_FILE_COUNT, "titandb.iter.touch.blob.file.count"},
+        {TITAN_GC_MICROS, "titandb.gc.micros"},
+        {TITAN_GC_INPUT_FILE_SIZE, "titandb.gc.input.file.size"},
+        {TITAN_GC_OUTPUT_FILE_SIZE, "titandb.gc.output.file.size"},
+        {TITAN_ITER_TOUCH_BLOB_FILE_COUNT,
+         "titandb.iter.touch.blob.file.count"},
 };
 
 }  // namespace titandb

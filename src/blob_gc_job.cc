@@ -102,7 +102,8 @@ BlobGCJob::~BlobGCJob() {
   }
   // flush metrics
   RecordTick(statistics(stats_), TITAN_GC_BYTES_READ, metrics_.gc_bytes_read);
-  RecordTick(statistics(stats_), TITAN_GC_BYTES_WRITTEN, metrics_.gc_bytes_written);
+  RecordTick(statistics(stats_), TITAN_GC_BYTES_WRITTEN,
+             metrics_.gc_bytes_written);
   RecordTick(statistics(stats_), TITAN_GC_NUM_KEYS_OVERWRITTEN,
              metrics_.gc_num_keys_overwritten);
   RecordTick(statistics(stats_), TITAN_GC_BYTES_OVERWRITTEN,

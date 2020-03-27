@@ -33,7 +33,8 @@ class TitanDBIterator : public Iterator {
         info_log_(info_log) {}
 
   ~TitanDBIterator() {
-      RecordInHistogram(statistics(stats_), TITAN_ITER_TOUCH_BLOB_FILE_COUNT, files_.size());
+    RecordInHistogram(statistics(stats_), TITAN_ITER_TOUCH_BLOB_FILE_COUNT,
+                      files_.size());
   }
 
   bool Valid() const override { return iter_->Valid() && status_.ok(); }
