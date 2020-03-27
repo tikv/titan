@@ -162,7 +162,7 @@ void UnrefCacheHandle(void* arg1, void* arg2) {
 Status SyncTitanManifest(Env* env, TitanStats* stats,
                          const ImmutableDBOptions* db_options,
                          WritableFileWriter* file) {
-  StopWatch sw(env, stats, TitanStats::TITAN_MANIFEST_FILE_SYNC_MICROS);
+  StopWatch sw(env, statistics(stats), TITAN_MANIFEST_FILE_SYNC_MICROS);
   return file->Sync(db_options->use_fsync);
 }
 
