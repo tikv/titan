@@ -106,13 +106,13 @@ Status BlobFileReader::Get(const ReadOptions& /*options*/,
     EncodeBlobCache(&cache_key, cache_prefix_, handle.offset);
     cache_handle = cache_->Lookup(cache_key);
     if (cache_handle) {
-      RecordTick(stats_, TitanStats::BLOB_CACHE_HIT);
+      RecordTick(statistics(stats_), BLOB_CACHE_HIT);
       auto blob = reinterpret_cast<OwnedSlice*>(cache_->Value(cache_handle));
       buffer->PinSlice(*blob, UnrefCacheHandle, cache_.get(), cache_handle);
       return DecodeInto(*blob, record);
     }
   }
-  RecordTick(stats_, TitanStats::BLOB_CACHE_MISS);
+  RecordTick(statistics(stats_), BLOB_CACHE_MISS);
 
   OwnedSlice blob;
   Status s = ReadRecord(handle, record, &blob);
