@@ -10,7 +10,8 @@ namespace rocksdb {
 namespace titandb {
 
 std::shared_ptr<Statistics> CreateDBStatistics() {
-  return rocksdb::CreateDBStatistics<TITAN_TICKER_ENUM_MAX, TITAN_HISTOGRAM_ENUM_MAX>();
+  return rocksdb::CreateDBStatistics<TITAN_TICKER_ENUM_MAX,
+                                     TITAN_HISTOGRAM_ENUM_MAX>();
 }
 
 static const std::string titandb_prefix = "rocksdb.titandb.";

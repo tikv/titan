@@ -9,7 +9,7 @@
 #include "blob_storage.h"
 #include "db/log_reader.h"
 #include "db/log_writer.h"
-#include "port/port_posix.h"
+#include "port/port.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "titan/options.h"
@@ -74,13 +74,6 @@ class BlobFileSet {
   // REQUIRES: mutex is held
   void GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                         SequenceNumber oldest_sequence);
-
-  // REQUIRES: mutex is held
-  void MarkAllFilesForGC() {
-    for (auto& cf : column_families_) {
-      cf.second->MarkAllFilesForGC();
-    }
-  }
 
   // REQUIRES: mutex is held
   bool IsColumnFamilyObsolete(uint32_t cf_id) {

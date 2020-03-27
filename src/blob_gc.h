@@ -23,12 +23,6 @@ class BlobGC {
 
   const std::vector<BlobFileMeta*>& inputs() { return inputs_; }
 
-  void set_sampled_inputs(std::vector<BlobFileMeta*>&& files) {
-    sampled_inputs_ = std::move(files);
-  }
-
-  const std::vector<BlobFileMeta*>& sampled_inputs() { return sampled_inputs_; }
-
   const TitanCFOptions& titan_cf_options() { return titan_cf_options_; }
 
   void SetColumnFamily(ColumnFamilyHandle* cfh);
@@ -47,7 +41,6 @@ class BlobGC {
 
  private:
   std::vector<BlobFileMeta*> inputs_;
-  std::vector<BlobFileMeta*> sampled_inputs_;
   std::vector<BlobFileMeta*> outputs_;
   TitanCFOptions titan_cf_options_;
   ColumnFamilyHandle* cfh_{nullptr};

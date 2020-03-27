@@ -51,7 +51,7 @@ class TitanDBIterator : public Iterator {
     iter_->SeekToFirst();
     if (ShouldGetBlobValue()) {
       StopWatch seek_sw(env_, statistics(stats_), TITAN_SEEK_MICROS);
-      GetBlobValue();
+      GetBlobValue(true);
       RecordTick(statistics(stats_), TITAN_NUM_SEEK);
     }
   }
@@ -60,7 +60,7 @@ class TitanDBIterator : public Iterator {
     iter_->SeekToLast();
     if (ShouldGetBlobValue()) {
       StopWatch seek_sw(env_, statistics(stats_), TITAN_SEEK_MICROS);
-      GetBlobValue();
+      GetBlobValue(false);
       RecordTick(statistics(stats_), TITAN_NUM_SEEK);
     }
   }
@@ -69,7 +69,7 @@ class TitanDBIterator : public Iterator {
     iter_->Seek(target);
     if (ShouldGetBlobValue()) {
       StopWatch seek_sw(env_, statistics(stats_), TITAN_SEEK_MICROS);
-      GetBlobValue();
+      GetBlobValue(true);
       RecordTick(statistics(stats_), TITAN_NUM_SEEK);
     }
   }
@@ -78,7 +78,7 @@ class TitanDBIterator : public Iterator {
     iter_->SeekForPrev(target);
     if (ShouldGetBlobValue()) {
       StopWatch seek_sw(env_, statistics(stats_), TITAN_SEEK_MICROS);
-      GetBlobValue();
+      GetBlobValue(false);
       RecordTick(statistics(stats_), TITAN_NUM_SEEK);
     }
   }
@@ -88,7 +88,7 @@ class TitanDBIterator : public Iterator {
     iter_->Next();
     if (ShouldGetBlobValue()) {
       StopWatch next_sw(env_, statistics(stats_), TITAN_NEXT_MICROS);
-      GetBlobValue();
+      GetBlobValue(true);
       RecordTick(statistics(stats_), TITAN_NUM_NEXT);
     }
   }
@@ -98,7 +98,7 @@ class TitanDBIterator : public Iterator {
     iter_->Prev();
     if (ShouldGetBlobValue()) {
       StopWatch prev_sw(env_, statistics(stats_), TITAN_PREV_MICROS);
-      GetBlobValue();
+      GetBlobValue(false);
       RecordTick(statistics(stats_), TITAN_NUM_PREV);
     }
   }
@@ -124,7 +124,7 @@ class TitanDBIterator : public Iterator {
     return true;
   }
 
-  void GetBlobValue() {
+  void GetBlobValue(bool forward) {
     assert(iter_->status().ok());
 
     BlobIndex index;
@@ -136,7 +136,30 @@ class TitanDBIterator : public Iterator {
                       status_.ToString().c_str());
       return;
     }
+    while (BlobIndex::IsDeletionMarker(index)) {
+      // skip deletion marker
+      if (forward) {
+        iter_->Next();
+      } else {
+        iter_->Prev();
+      }
+      if (!ShouldGetBlobValue()) {
+        return;
+      } else {
+        status_ = DecodeInto(iter_->value(), &index);
+        if (!status_.ok()) {
+          ROCKS_LOG_ERROR(info_log_,
+                          "Titan iterator: failed to decode blob index %s: %s",
+                          iter_->value().ToString(true /*hex*/).c_str(),
+                          status_.ToString().c_str());
+          return;
+        }
+      }
+    }
+    GetBlobValueImpl(index);
+  }
 
+  void GetBlobValueImpl(const BlobIndex& index) {
     auto it = files_.find(index.file_number);
     if (it == files_.end()) {
       std::unique_ptr<BlobFilePrefetcher> prefetcher;

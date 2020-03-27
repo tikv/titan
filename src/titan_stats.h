@@ -17,6 +17,8 @@
 namespace rocksdb {
 namespace titandb {
 
+std::shared_ptr<Statistics> CreateDBStatistics();
+
 enum class InternalOpStatsType : int {
   COUNT = 0,
   BYTES_READ,

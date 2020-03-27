@@ -7,6 +7,7 @@
 
 #include "blob_file_manager.h"
 #include "blob_file_set.h"
+#include "blob_index_merge_operator.h"
 #include "table_factory.h"
 #include "titan/db.h"
 #include "titan_stats.h"
@@ -140,11 +141,19 @@ class TitanDBImpl : public TitanDB {
   void TEST_set_initialized(bool _initialized) { initialized_ = _initialized; }
 
   Status TEST_StartGC(uint32_t column_family_id);
+  void TEST_WaitForBackgroundGC();
+
   Status TEST_PurgeObsoleteFiles();
 
   int TEST_bg_gc_running() {
     MutexLock l(&mutex_);
     return bg_gc_running_;
+  }
+
+  std::shared_ptr<BlobStorage> TEST_GetBlobStorage(
+      ColumnFamilyHandle* column_family) {
+    MutexLock l(&mutex_);
+    return blob_file_set_->GetBlobStorage(column_family->GetID()).lock();
   }
 
  private:
@@ -173,6 +182,16 @@ class TitanDBImpl : public TitanDB {
   Iterator* NewIteratorImpl(const TitanReadOptions& options,
                             ColumnFamilyHandle* handle,
                             std::shared_ptr<ManagedSnapshot> snapshot);
+
+  Status InitializeGC(const std::vector<ColumnFamilyHandle*>& cf_handles);
+
+  Status ExtractGCStatsFromTableProperty(
+      const std::shared_ptr<const TableProperties>& table_properties,
+      bool to_add, std::map<uint64_t, int64_t>* blob_file_size_diff);
+
+  Status ExtractGCStatsFromTableProperty(
+      const TableProperties& table_properties, bool to_add,
+      std::map<uint64_t, int64_t>* blob_file_size_diff);
 
   // REQUIRE: mutex_ held
   void AddToGCQueue(uint32_t column_family_id) {
@@ -250,6 +269,8 @@ class TitanDBImpl : public TitanDB {
   EnvOptions env_options_;
   DBImpl* db_impl_;
   TitanDBOptions db_options_;
+  std::unique_ptr<Directory> directory_;
+  std::shared_ptr<BlobIndexMergeOperator> shared_merge_operator_;
 
   std::atomic<bool> initialized_{false};
 
