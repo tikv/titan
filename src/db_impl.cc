@@ -6,6 +6,7 @@
 
 #include <inttypes.h>
 #include "logging/log_buffer.h"
+#include "monitoring/statistics_impl.h"
 #include "port/port.h"
 #include "util/autovector.h"
 #include "util/threadpool_imp.h"
@@ -57,10 +58,10 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
-      RecordTick(statistics(db_->stats_.get()), BLOB_DB_BLOB_FILE_SYNCED);
+      RecordTick(statistics(db_->stats_.get()), TITAN_BLOB_FILE_SYNCED);
       {
         StopWatch sync_sw(db_->env_, statistics(db_->stats_.get()),
-                          BLOB_DB_BLOB_FILE_SYNC_MICROS);
+                          TITAN_BLOB_FILE_SYNC_MICROS);
         s = file.second->GetFile()->Sync(false);
       }
       if (s.ok()) {
@@ -599,8 +600,8 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                         nullptr /*read_callback*/, &is_blob_index);
   if (!s.ok() || !is_blob_index) return s;
 
-  StopWatch get_sw(env_, statistics(stats_.get()), BLOB_DB_GET_MICROS);
-  RecordTick(statistics(stats_.get()), BLOB_DB_NUM_GET);
+  StopWatch get_sw(env_, statistics(stats_.get()), TITAN_GET_MICROS);
+  RecordTick(statistics(stats_.get()), TITAN_NUM_GET);
 
   BlobIndex index;
   s = index.DecodeFrom(value);
@@ -619,10 +620,10 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
 
   if (storage) {
     StopWatch read_sw(env_, statistics(stats_.get()),
-                      BLOB_DB_BLOB_FILE_READ_MICROS);
+                      TITAN_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
-    RecordTick(statistics(stats_.get()), BLOB_DB_NUM_KEYS_READ);
-    RecordTick(statistics(stats_.get()), BLOB_DB_BLOB_FILE_BYTES_READ,
+    RecordTick(statistics(stats_.get()), TITAN_BLOB_FILE_NUM_KEYS_READ);
+    RecordTick(statistics(stats_.get()), TITAN_BLOB_FILE_BYTES_READ,
                index.blob_handle.size);
   } else {
     ROCKS_LOG_ERROR(db_options_.info_log,
