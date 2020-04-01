@@ -145,9 +145,9 @@ class TitanDB : public StackableDB {
   virtual TitanDBOptions GetTitanDBOptions() const = 0;
 
   struct Properties {
-    // "rocksdb.titandb.num-blob-files-at-level<N>" - returns string containing the number
-    //      of blob files at level <N>, where <N> is an ASCII representation of a
-    //      level number (e.g., "0")."
+    // "rocksdb.titandb.num-blob-files-at-level<N>" - returns string containing
+    //      the number of blob files at level <N>, where <N> is an ASCII
+    //      representation of a level number (e.g., "0")."
     static const std::string kNumBlobFilesAtLevelPrefix;
     //  "rocksdb.titandb.live-blob-size" - returns total blob value size
     //      referenced by LSM tree.
