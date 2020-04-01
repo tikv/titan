@@ -161,7 +161,6 @@ void TitanDBImpl::BackgroundCallGC() {
 Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
                                  uint32_t column_family_id) {
   mutex_.AssertHeld();
-  StopWatch gc_sw(env_, statistics(stats_.get()), BLOB_DB_GC_MICROS);
 
   std::unique_ptr<BlobGC> blob_gc;
   bool gc_merge_rewrite = false;
@@ -196,9 +195,11 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
   // TODO(@DorianZheng) Make sure enough room for GC
 
   if (UNLIKELY(!blob_gc)) {
+    RecordTick(statistics(stats_.get()), TITAN_GC_NO_NEED, 1);
     // Nothing to do
     ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
+    StopWatch gc_sw(env_, statistics(stats_.get()), TITAN_GC_MICROS);
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_,
                           gc_merge_rewrite, env_, env_options_,
                           blob_manager_.get(), blob_file_set_.get(), log_buffer,
@@ -217,7 +218,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     if (blob_gc->trigger_next() &&
         (bg_gc_scheduled_ - 1 + gc_queue_.size() <
          2 * static_cast<uint32_t>(db_options_.max_background_gc))) {
-      RecordTick(statistics(stats_.get()), GC_TRIGGER_NEXT, 1);
+      RecordTick(statistics(stats_.get()), TITAN_GC_TRIGGER_NEXT, 1);
       // There is still data remained to be GCed
       // and the queue is not overwhelmed
       // then put this cf to GC queue for next GC
@@ -226,11 +227,11 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
   }
 
   if (s.ok()) {
-    RecordTick(statistics(stats_.get()), GC_SUCCESS, 1);
+    RecordTick(statistics(stats_.get()), TITAN_GC_SUCCESS, 1);
     // Done
   } else {
     SetBGError(s);
-    RecordTick(statistics(stats_.get()), GC_FAIL, 1);
+    RecordTick(statistics(stats_.get()), TITAN_GC_FAILURE, 1);
     ROCKS_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
                    s.ToString().c_str());
   }
