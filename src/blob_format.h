@@ -256,6 +256,9 @@ class BlobFileMeta {
   }
   bool NoLiveData() { return live_data_size_ == 0; }
   double GetDiscardableRatio() const {
+    if (file_size_ == 0) {
+      return 0;
+    }
     // TODO: Exclude metadata size from file size.
     return 1 - (static_cast<double>(live_data_size_) / file_size_);
   }
