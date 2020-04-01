@@ -79,6 +79,7 @@ std::weak_ptr<BlobFileMeta> BlobStorage::FindFile(uint64_t file_number) const {
 
 void BlobStorage::ExportBlobFiles(
     std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const {
+  ret.clear();
   MutexLock l(&mutex_);
   for (auto& kv : files_) {
     ret.emplace(kv.first, std::weak_ptr<BlobFileMeta>(kv.second));
@@ -117,7 +118,7 @@ void BlobStorage::MarkFileObsoleteLocked(std::shared_ptr<BlobFileMeta> file,
   levels_file_count_[file->file_level()]--;
   SubStats(stats_, cf_id_, file->GetDiscardableRatioLevel(), 1);
   SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
-           file->file_size() - file->discardable_size());
+           file->live_data_size());
   SubStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
            file->file_size());
   SubStats(stats_, cf_id_, TitanInternalStats::NUM_LIVE_BLOB_FILE, 1);
@@ -153,8 +154,6 @@ void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                                    SequenceNumber oldest_sequence) {
   MutexLock l(&mutex_);
 
-  uint32_t file_dropped = 0;
-  uint64_t file_dropped_size = 0;
   for (auto it = obsolete_files_.begin(); it != obsolete_files_.end();) {
     auto& file_number = it->first;
     auto& obsolete_sequence = it->second;
@@ -193,8 +192,7 @@ void BlobStorage::ComputeGCScore() {
     gc_score_.push_back({});
     auto& gcs = gc_score_.back();
     gcs.file_number = file.first;
-    if (file.second->file_size() < cf_options_.merge_small_file_threshold ||
-        file.second->gc_mark()) {
+    if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
       // for the small file or file with gc mark (usually the file that just
       // recovered) we want gc these file but more hope to gc other file with
       // more invalid data

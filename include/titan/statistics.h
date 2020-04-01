@@ -77,7 +77,6 @@ const std::vector<std::pair<TickerType, std::string>> TitanTickersNameMap = {
     {TITAN_GC_TRIGGER_NEXT, "titandb.gc.trigger.next"},
 };
 
-
 enum HistogramType : uint32_t {
   TITAN_KEY_SIZE = HISTOGRAM_ENUM_MAX,
   TITAN_VALUE_SIZE,
