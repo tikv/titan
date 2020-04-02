@@ -145,6 +145,10 @@ class TitanDB : public StackableDB {
   virtual TitanDBOptions GetTitanDBOptions() const = 0;
 
   struct Properties {
+    // "rocksdb.titandb.num-blob-files-at-level<N>" - returns string containing
+    //      the number of blob files at level <N>, where <N> is an ASCII
+    //      representation of a level number (e.g., "0")."
+    static const std::string kNumBlobFilesAtLevelPrefix;
     //  "rocksdb.titandb.live-blob-size" - returns total blob value size
     //      referenced by LSM tree.
     static const std::string kLiveBlobSize;
@@ -159,19 +163,19 @@ class TitanDB : public StackableDB {
     //      blob files.
     static const std::string kObsoleteBlobFileSize;
     //  "rocksdb.titandb.discardable_ratio_le0_file_num" - returns count of
-    //  file whose discardable ratio is less or equal to 0%.
+    //      file whose discardable ratio is less or equal to 0%.
     static const std::string kNumDiscardableRatioLE0File;
     //  "rocksdb.titandb.discardable_ratio_le20_file_num" - returns count of
-    //  file whose discardable ratio is less or equal to 20%.
+    //      file whose discardable ratio is less or equal to 20%.
     static const std::string kNumDiscardableRatioLE20File;
     //  "rocksdb.titandb.discardable_ratio_le50_file_num" - returns count of
-    //  file whose discardable ratio is less or equal to 50%.
+    //      file whose discardable ratio is less or equal to 50%.
     static const std::string kNumDiscardableRatioLE50File;
     //  "rocksdb.titandb.discardable_ratio_le80_file_num" - returns count of
-    //  file whose discardable ratio is less or equal to 80%.
+    //      file whose discardable ratio is less or equal to 80%.
     static const std::string kNumDiscardableRatioLE80File;
     //  "rocksdb.titandb.discardable_ratio_le100_file_num" - returns count of
-    //  file whose discardable ratio is less or equal to 100%.
+    //      file whose discardable ratio is less or equal to 100%.
     static const std::string kNumDiscardableRatioLE100File;
   };
 
