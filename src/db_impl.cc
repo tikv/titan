@@ -9,7 +9,6 @@
 #include "monitoring/statistics_impl.h"
 #include "port/port.h"
 #include "util/autovector.h"
-#include "monitoring/statistics_impl.h"
 #include "util/threadpool_imp.h"
 
 #include "base_db_listener.h"
