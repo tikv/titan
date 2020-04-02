@@ -278,7 +278,7 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
 TitanInternalStats::StatsType BlobFileMeta::GetDiscardableRatioLevel() const {
   auto ratio = GetDiscardableRatio();
   TitanInternalStats::StatsType type;
-  if (ratio == 0) {
+  if (ratio < std::numeric_limits<double>::epsilon()) {
     type = TitanInternalStats::NUM_DISCARDABLE_RATIO_LE0;
   } else if (ratio <= 0.2) {
     type = TitanInternalStats::NUM_DISCARDABLE_RATIO_LE20;

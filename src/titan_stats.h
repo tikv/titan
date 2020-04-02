@@ -13,6 +13,7 @@
 #include "rocksdb/statistics.h"
 #include "titan/options.h"
 #include "titan/statistics.h"
+#include "util/string_util.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -46,6 +47,8 @@ using InternalOpStats =
                static_cast<size_t>(
                    InternalOpStatsType::INTERNAL_OP_STATS_ENUM_MAX)>;
 
+class BlobStorage;
+
 // Titan internal stats does NOT optimize race
 // condition by making thread local copies of
 // data.
@@ -67,7 +70,10 @@ class TitanInternalStats {
     INTERNAL_STATS_ENUM_MAX,
   };
 
-  TitanInternalStats() { Clear(); }
+  TitanInternalStats(std::shared_ptr<BlobStorage> blob_storage)
+      : blob_storage_(blob_storage) {
+    Clear();
+  }
 
   void Clear() {
     for (int stat = 0; stat < INTERNAL_STATS_ENUM_MAX; stat++) {
@@ -101,32 +107,21 @@ class TitanInternalStats {
     v.fetch_sub(value, std::memory_order_relaxed);
   }
 
-  bool GetIntProperty(const Slice& property, uint64_t* value) const {
-    auto p = stats_type_string_map.find(property.ToString());
-    if (p != stats_type_string_map.end()) {
-      *value = stats_[p->second].load(std::memory_order_relaxed);
-      return true;
-    }
-    return false;
-  }
-
-  bool GetStringProperty(const Slice& property, std::string* value) const {
-    uint64_t int_value;
-    if (GetIntProperty(property, &int_value)) {
-      *value = std::to_string(int_value);
-      return true;
-    }
-    return false;
-  }
-
   InternalOpStats* GetInternalOpStatsForType(InternalOpType type) {
     return &internal_op_stats_[static_cast<int>(type)];
   }
 
   void DumpAndResetInternalOpStats(LogBuffer* log_buffer);
 
+  bool GetIntProperty(const Slice& property, uint64_t* value) const;
+  bool GetStringProperty(const Slice& property, std::string* value) const;
+  uint64_t HandleStatsValue(TitanInternalStats::StatsType type,
+                            Slice _arg) const;
+  uint64_t HandleNumBlobFilesAtLevel(Slice arg) const;
+
  private:
-  static const std::unordered_map<std::string, TitanInternalStats::StatsType>
+  static const std::unordered_map<
+      std::string, std::function<uint64_t(const TitanInternalStats*, Slice)>>
       stats_type_string_map;
   static const std::array<
       std::string, static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
@@ -135,20 +130,14 @@ class TitanInternalStats {
   std::array<InternalOpStats,
              static_cast<size_t>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
       internal_op_stats_;
+  std::shared_ptr<BlobStorage> blob_storage_;
 };
 
 class TitanStats {
  public:
   TitanStats(Statistics* stats) : stats_(stats) {}
 
-  // TODO: Initialize corresponding internal stats struct for Column families
-  // created after DB open.
-  Status Initialize(std::map<uint32_t, TitanCFOptions> cf_options) {
-    for (auto& opts : cf_options) {
-      internal_stats_[opts.first] = std::make_shared<TitanInternalStats>();
-    }
-    return Status::OK();
-  }
+  void InitializeCF(uint32_t cf_id, std::shared_ptr<BlobStorage> blob_storage);
 
   Statistics* statistics() { return stats_; }
 
