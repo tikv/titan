@@ -259,8 +259,9 @@ class BlobFileMeta {
     if (file_size_ == 0) {
       return 0;
     }
-    // TODO: Exclude metadata size from file size.
-    return 1 - (static_cast<double>(live_data_size_) / file_size_);
+    // TODO: Exclude meta blocks from file size
+    return 1 - (static_cast<double>(live_data_size_) /
+                (file_size_ - kBlobMaxHeaderSize - kBlobFooterSize));
   }
   TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
 

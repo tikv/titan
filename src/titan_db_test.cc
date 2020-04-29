@@ -1267,13 +1267,7 @@ TEST_F(TitanDBTest, GCAfterReopen) {
     ASSERT_OK(db_->Put(WriteOptions(), key, "v"));
   }
   Flush();
-  for (int i = 0; i < 100; i++) {
-    if (i % 2 == 0) {
-      Delete(i);
-    }
-  }
-  Flush();
-  CompactAll();
+
   std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
   ASSERT_TRUE(blob_storage != nullptr);
   std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
@@ -1281,6 +1275,18 @@ TEST_F(TitanDBTest, GCAfterReopen) {
   ASSERT_EQ(1, blob_files.size());
   std::shared_ptr<BlobFileMeta> file1 = blob_files.begin()->second.lock();
   ASSERT_TRUE(file1 != nullptr);
+  ASSERT_EQ(file1->GetDiscardableRatioLevel(),
+            TitanInternalStats::NUM_DISCARDABLE_RATIO_LE0);
+
+  for (int i = 0; i < 100; i++) {
+    if (i % 2 == 0) {
+      Delete(i);
+    }
+  }
+  Flush();
+  CompactAll();
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(1, blob_files.size());
   ASSERT_TRUE(abs(file1->GetDiscardableRatio() - 0.5) < 0.01);
   uint64_t file_number1 = file1->file_number();
   file1.reset();
