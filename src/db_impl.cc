@@ -554,7 +554,6 @@ Status TitanDBImpl::MultiBatchWrite(const WriteOptions& options,
                       : db_->MultiBatchWrite(options, std::move(updates));
 }
 
-
 Status TitanDBImpl::Delete(const rocksdb::WriteOptions& options,
                            rocksdb::ColumnFamilyHandle* column_family,
                            const rocksdb::Slice& key) {
