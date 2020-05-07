@@ -1233,9 +1233,11 @@ void TitanDBImpl::OnCompactionCompleted(
           assert(false);
           delta = 0;
         }
-        SubStats(stats_.get(), compaction_job_info.cf_id, file->GetDiscardableRatioLevel(), 1);
+        SubStats(stats_.get(), compaction_job_info.cf_id,
+                 file->GetDiscardableRatioLevel(), 1);
         file->set_live_data_size(static_cast<uint64_t>(delta));
-        AddStats(stats_.get(), compaction_job_info.cf_id, file->GetDiscardableRatioLevel(), 1);
+        AddStats(stats_.get(), compaction_job_info.cf_id,
+                 file->GetDiscardableRatioLevel(), 1);
         file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
         to_merge_candidates.push_back(file);
         ROCKS_LOG_INFO(
