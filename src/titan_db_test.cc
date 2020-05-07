@@ -416,6 +416,7 @@ TEST_F(TitanDBTest, DBIterSeek) {
 }
 
 TEST_F(TitanDBTest, GetProperty) {
+  options_.disable_background_gc = false;
   Open();
   for (uint64_t k = 1; k <= 100; k++) {
     Put(k);
@@ -424,9 +425,69 @@ TEST_F(TitanDBTest, GetProperty) {
   uint64_t value;
   ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumLiveBlobFile, &value));
   ASSERT_EQ(value, 1);
+  ASSERT_TRUE(
+      GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE0File, &value));
+  ASSERT_EQ(value, 1);
+
   Reopen();
   ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumLiveBlobFile, &value));
   ASSERT_EQ(value, 1);
+  ASSERT_TRUE(
+      GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE0File, &value));
+  ASSERT_EQ(value, 1);
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE20File,
+                             &value));
+  ASSERT_EQ(value, 0);
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE50File,
+                             &value));
+  ASSERT_EQ(value, 0);
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE80File,
+                             &value));
+  ASSERT_EQ(value, 0);
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE100File,
+                             &value));
+  ASSERT_EQ(value, 0);
+
+  for (uint64_t k = 1; k <= 100; k++) {
+    if (k % 3 == 0) Delete(k);
+  }
+  Flush();
+  CompactAll();
+
+  ASSERT_TRUE(
+      GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE0File, &value));
+  ASSERT_EQ(value, 0);
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE50File,
+                             &value));
+  ASSERT_EQ(value, 1);
+
+  Reopen();
+  ASSERT_TRUE(
+      GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE0File, &value));
+  ASSERT_EQ(value, 0);
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE50File,
+                             &value));
+  ASSERT_EQ(value, 1);
+
+  for (uint64_t k = 1; k <= 100; k++) {
+    if (k % 3 != 0) Delete(k);
+  }
+  Flush();
+  CompactAll();
+
+  db_impl_->TEST_WaitForBackgroundGC();
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumLiveBlobFile, &value));
+  ASSERT_EQ(value, 0);
+  ASSERT_TRUE(
+      GetIntProperty(TitanDB::Properties::kNumObsoleteBlobFile, &value));
+  ASSERT_EQ(value, 1);
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+  ASSERT_TRUE(
+      GetIntProperty(TitanDB::Properties::kNumObsoleteBlobFile, &value));
+  ASSERT_EQ(value, 0);
+  ASSERT_TRUE(GetIntProperty(TitanDB::Properties::kNumDiscardableRatioLE50File,
+                             &value));
+  ASSERT_EQ(value, 0);
 }
 
 TEST_F(TitanDBTest, Snapshot) {
