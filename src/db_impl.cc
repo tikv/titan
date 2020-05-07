@@ -1143,7 +1143,14 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
         assert(false);
         delta = 0;
       }
+
+      // the metrics is counted in the table builder when flushing,
+      // so update it when updateing the live data size.
+      SubStats(stats_.get(), flush_job_info.cf_id,
+               file->GetDiscardableRatioLevel(), 1);
       file->set_live_data_size(static_cast<uint64_t>(delta));
+      AddStats(stats_.get(), flush_job_info.cf_id,
+               file->GetDiscardableRatioLevel(), 1);
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushCompleted);
       ROCKS_LOG_INFO(db_options_.info_log,
                      "OnFlushCompleted[%d]: output blob file %" PRIu64
@@ -1232,7 +1239,11 @@ void TitanDBImpl::OnCompactionCompleted(
           assert(false);
           delta = 0;
         }
+        SubStats(stats_.get(), compaction_job_info.cf_id,
+                 file->GetDiscardableRatioLevel(), 1);
         file->set_live_data_size(static_cast<uint64_t>(delta));
+        AddStats(stats_.get(), compaction_job_info.cf_id,
+                 file->GetDiscardableRatioLevel(), 1);
         file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
         to_merge_candidates.push_back(file);
         ROCKS_LOG_INFO(
