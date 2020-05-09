@@ -134,7 +134,10 @@ class TitanDBTest : public testing::Test {
     }
   }
 
-  void Flush() {
+  void Flush(ColumnFamilyHandle* cf_handle = nullptr) {
+    if (cf_handle == nullptr) {
+      cf_handle = db_->DefaultColumnFamily();
+    }
     FlushOptions fopts;
     ASSERT_OK(db_->Flush(fopts));
     for (auto& handle : cf_handles_) {
@@ -153,6 +156,16 @@ class TitanDBTest : public testing::Test {
     }
     MutexLock l(&db_impl_->mutex_);
     return db_impl_->blob_file_set_->GetBlobStorage(cf_handle->GetID());
+  }
+
+  void CheckBlobFileCount(int count, ColumnFamilyHandle* cf_handle = nullptr) {
+    db_impl_->TEST_WaitForBackgroundGC();
+    ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+    std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage(cf_handle).lock();
+    ASSERT_TRUE(blob_storage != nullptr);
+    std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+    blob_storage->ExportBlobFiles(blob_files);
+    ASSERT_EQ(count, blob_files.size()); 
   }
 
   ColumnFamilyHandle* GetColumnFamilyHandle(uint32_t cf_id) {
@@ -220,13 +233,16 @@ class TitanDBTest : public testing::Test {
     }
   }
 
-  void CompactAll() {
+  void CompactAll(ColumnFamilyHandle* cf_handle = nullptr) {
+    if (cf_handle == nullptr) {
+      cf_handle = db_->DefaultColumnFamily();
+    }
     auto opts = db_->GetOptions();
     auto compact_opts = CompactRangeOptions();
     compact_opts.change_level = true;
     compact_opts.target_level = opts.num_levels - 1;
-    compact_opts.bottommost_level_compaction = BottommostLevelCompaction::kSkip;
-    ASSERT_OK(db_->CompactRange(compact_opts, nullptr, nullptr));
+    compact_opts.bottommost_level_compaction = BottommostLevelCompaction::kForce;
+    ASSERT_OK(db_->CompactRange(compact_opts, cf_handle, nullptr, nullptr));
   }
 
   void DeleteFilesInRange(const Slice* begin, const Slice* end) {
@@ -369,6 +385,7 @@ TEST_F(TitanDBTest, DbIter) {
   for (uint64_t i = 1; i <= kNumEntries; i++) {
     Put(i, &data);
   }
+  Flush();
   ASSERT_EQ(kNumEntries, data.size());
   std::unique_ptr<Iterator> iter(db_->NewIterator(ReadOptions()));
   iter->SeekToFirst();
@@ -388,6 +405,7 @@ TEST_F(TitanDBTest, DBIterSeek) {
   for (uint64_t i = 1; i <= kNumEntries; i++) {
     Put(i, &data);
   }
+  Flush();
   ASSERT_EQ(kNumEntries, data.size());
   std::unique_ptr<Iterator> iter(db_->NewIterator(ReadOptions()));
   iter->SeekToFirst();
@@ -1323,6 +1341,333 @@ TEST_F(TitanDBTest, GCAfterReopen) {
   ASSERT_EQ(1, blob_files.size());
   std::shared_ptr<BlobFileMeta> file2 = blob_files.begin()->second.lock();
   ASSERT_GT(file2->file_number(), file_number1);
+}
+
+TEST_F(TitanDBTest, VeryLargeValue) {
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(1000 * 1024 * 1024, 'v')));
+  Flush();
+  
+  std::string value;
+  ASSERT_OK(db_->Get(ReadOptions(), "k1", &value)); 
+  ASSERT_EQ(value.size(), 1000 * 1024 * 1024);
+
+  Close();
+}
+
+TEST_F(TitanDBTest, UpdateValue) {
+  options_.min_blob_size = 1024;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10, 'v')));
+  Flush();
+  std::string value;
+  ASSERT_OK(db_->Get(ReadOptions(), "k1", &value)); 
+  ASSERT_EQ(value.size(), 10);
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100, 'v')));
+  Flush();
+  ASSERT_OK(db_->Get(ReadOptions(), "k1", &value));
+  ASSERT_EQ(value.size(), 100);
+  CompactAll();
+  ASSERT_OK(db_->Get(ReadOptions(), "k1", &value));
+  ASSERT_EQ(value.size(), 100);
+
+  Close();
+}
+
+TEST_F(TitanDBTest, CompressionTypes) {
+  options_.min_blob_size = 1024;
+  auto compressions = std::vector<CompressionType>{CompressionType::kNoCompression, CompressionType::kLZ4Compression, CompressionType::kSnappyCompression, CompressionType::kZSTD};
+  
+  for  (auto type: compressions){
+    options_.blob_file_compression = type;
+    Open();
+    ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+    Flush();
+    Close();
+  }
+}
+
+TEST_F(TitanDBTest, DifferentCompressionType) {
+  options_.min_blob_size = 1024;
+  options_.blob_file_compression = CompressionType::kSnappyCompression;
+
+  Open();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  Flush();
+  Close();
+
+  options_.blob_file_compression = CompressionType::kLZ4Compression;
+  Open();
+  std::string value;
+  ASSERT_OK(db_->Get(ReadOptions(), "k1", &value));
+  ASSERT_EQ(value, std::string(10 * 1024, 'v'));
+  Close();
+}
+
+TEST_F(TitanDBTest, EmptyCompaction) {
+  Open();
+  CompactAll();
+  Close();
+}
+
+TEST_F(TitanDBTest, SmallCompaction) {
+  Open();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10, 'v')));
+  ASSERT_OK(db_->Put(WriteOptions(), "k2", std::string(10, 'v')));
+  Flush();
+  CompactAll();
+  Close();
+}
+
+TEST_F(TitanDBTest, MixCompaction) {
+  Open();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(0, 'v')));
+  ASSERT_OK(db_->Put(WriteOptions(), "k2", std::string(100, 'v')));
+  ASSERT_OK(db_->Put(WriteOptions(), "k3", std::string(10 * 1024, 'v')));
+  Flush();
+  CompactAll();
+  Close();
+}
+
+TEST_F(TitanDBTest, LargeCompaction) {
+  Open();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  ASSERT_OK(db_->Put(WriteOptions(), "k2", std::string(10 * 1024, 'v')));
+  Flush();
+  CompactAll();
+  Close();
+}
+
+TEST_F(TitanDBTest, CFCompaction) {
+  options_.disable_background_gc = false;
+  Open();
+  AddCF("cfa");
+  auto cfa = cf_handles_.back();
+  AddCF("cfb");
+  auto cfb = cf_handles_.back();
+
+  ASSERT_OK(db_->Put(WriteOptions(), cfa, "k1", std::string(10 * 1024, 'v')));
+  ASSERT_OK(db_->Put(WriteOptions(), cfb, "k1", std::string(10 * 1024, 'v')));
+  Flush(cfa);
+  Flush(cfb);
+
+  ASSERT_OK(db_->Delete(WriteOptions(), cfa, "k1"));
+  ASSERT_OK(db_->Delete(WriteOptions(), cfb, "k1"));
+  Flush(cfa);
+  Flush(cfb);
+  std::string value;  
+  ASSERT_TRUE(db_->GetProperty(cfa, "rocksdb.num-files-at-level0", &value));
+  ASSERT_EQ(value, "2");
+  printf("before compact all");
+  db_impl_->TEST_WaitForBackgroundGC();
+  CompactAll(cfa);
+  // the first `CompactAll` only move files to L6 without merging the two SSTs,
+  // so call it again to compact them.
+  CompactAll(cfa);
+  ASSERT_TRUE(db_->GetProperty(cfa, "rocksdb.num-files-at-level0", &value));
+  ASSERT_EQ(value, "0");
+  ASSERT_TRUE(db_->GetProperty(cfa, "rocksdb.num-files-at-level6", &value));
+  ASSERT_EQ(value, "0");
+
+  CheckBlobFileCount(0, cfa);
+  CheckBlobFileCount(1, cfb);
+}
+
+TEST_F(TitanDBTest, ReAddCFCompaction) {
+  options_.disable_background_gc = false;
+  Open();
+  AddCF("cfa");
+  DropCF("cfa");
+
+  AddCF("cfa");
+  auto cfa = cf_handles_.back();
+  ASSERT_OK(db_->Put(WriteOptions(), cfa, "k1", std::string(10 * 1024, 'v')));
+  Flush(cfa);
+  ASSERT_OK(db_->Delete(WriteOptions(), cfa, "k1"));
+  Flush(cfa);
+  CheckBlobFileCount(1, cfa);
+  CompactAll(cfa);
+  CompactAll(cfa);
+ 
+  CheckBlobFileCount(0, cfa);
+}
+
+TEST_F(TitanDBTest, DeleteAllGC) {
+  options_.max_background_gc = 2;
+  options_.disable_background_gc = false;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100, 'v')));
+  ASSERT_OK(db_->Put(WriteOptions(), "k2", std::string(10 * 1024, 'v')));
+  Flush();
+  ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
+  ASSERT_OK(db_->Delete(WriteOptions(), "k2"));
+  Flush();
+  CompactAll();
+  CompactAll();
+
+  CheckBlobFileCount(0);
+}
+
+TEST_F(TitanDBTest, LowDiscardableRatio) {
+  options_.max_background_gc = 2;
+  options_.disable_background_gc = false;
+  options_.blob_file_discardable_ratio = 0.01;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  auto snap = db_->GetSnapshot();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100 * 1024, 'v')));
+  Flush();
+  
+  db_->ReleaseSnapshot(snap);
+  CheckBlobFileCount(1);
+  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  auto prev_file_size = blob_files.begin()->second.lock()->file_size();
+  CompactAll();
+  CompactAll(); 
+
+  CheckBlobFileCount(1);
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_TRUE(blob_files.begin()->second.lock()->file_size() < prev_file_size);
+}
+
+TEST_F(TitanDBTest, CompactionDuringGC) {
+  options_.max_background_gc = 2;
+  options_.disable_background_gc = false;
+  options_.blob_file_discardable_ratio = 0.01;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  auto snap = db_->GetSnapshot();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100 * 1024, 'v')));
+  Flush();
+
+  db_->ReleaseSnapshot(snap);
+  CheckBlobFileCount(1);
+  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  auto prev_file_size = blob_files.begin()->second.lock()->file_size();
+  CompactAll();
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBTest::CompactionDuringGC::ContinueGC",
+        "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
+       {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
+        "TitanDBTest::CompactionDuringGC::WaitGC"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  CompactAll();
+  ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(blob_files.size(), 2);
+
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::ContinueGC");
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGC");
+  
+  std::string value;
+  Status status = db_->Get(ReadOptions(), "k1", &value);
+  ASSERT_EQ(status, Status::NotFound());
+  CheckBlobFileCount(1);
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_TRUE(blob_files.begin()->second.lock()->file_size() < prev_file_size);
+}
+
+TEST_F(TitanDBTest, PutDeletedDuringGC) {
+  options_.max_background_gc = 2;
+  options_.disable_background_gc = false;
+  options_.blob_file_discardable_ratio = 0.01;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  auto snap = db_->GetSnapshot();
+  ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
+  Flush();
+
+  db_->ReleaseSnapshot(snap);
+  CheckBlobFileCount(1);
+  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  CompactAll();
+
+  CheckBlobFileCount(1);
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBTest::PutDeletedDuringGC::ContinueGC",
+        "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
+       {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
+        "TitanDBTest::PutDeletedDuringGC::WaitGC"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  CompactAll();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100 * 1024, 'v')));
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(blob_files.size(), 1);
+
+  TEST_SYNC_POINT("TitanDBTest::PutDeletedDuringGC::ContinueGC");
+  TEST_SYNC_POINT("TitanDBTest::PutDeletedDuringGC::WaitGC");
+  
+  CheckBlobFileCount(0);
+  std::string value;
+  ASSERT_OK(db_->Get(ReadOptions(), "k1", &value));
+  ASSERT_EQ(value, std::string(100 * 1024, 'v'));
+}
+
+TEST_F(TitanDBTest, IngestDuringGC) {
+  options_.max_background_gc = 2;
+  options_.disable_background_gc = false;
+  options_.blob_file_discardable_ratio = 0.01;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100, 'v')));
+  auto snap = db_->GetSnapshot();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  Flush();
+
+  db_->ReleaseSnapshot(snap);
+  CheckBlobFileCount(1);
+  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  CompactAll();
+
+  CheckBlobFileCount(1);
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBTest::PutDeletedDuringGC::ContinueGC",
+        "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
+       {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
+        "TitanDBTest::PutDeletedDuringGC::WaitGC"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  CompactAll();
+
+  SstFileWriter sst_file_writer(EnvOptions(), options_);
+  std::string sst_file = options_.dirname + "/for_ingest.sst";
+  ASSERT_OK(sst_file_writer.Open(sst_file));
+  ASSERT_OK(sst_file_writer.Put("k1", std::string(100 * 1024, 'v')));
+  ASSERT_OK(sst_file_writer.Finish());
+  ASSERT_OK(db_->IngestExternalFile({sst_file}, IngestExternalFileOptions()));
+
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(blob_files.size(), 2);
+
+  TEST_SYNC_POINT("TitanDBTest::PutDeletedDuringGC::ContinueGC");
+  TEST_SYNC_POINT("TitanDBTest::PutDeletedDuringGC::WaitGC");
+  
+  CheckBlobFileCount(1);
+  std::string value;
+  ASSERT_OK(db_->Get(ReadOptions(), "k1", &value));
+  ASSERT_EQ(value, std::string(100 * 1024, 'v'));
 }
 
 }  // namespace titandb

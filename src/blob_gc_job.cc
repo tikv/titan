@@ -347,6 +347,7 @@ Status BlobGCJob::Finish() {
     mutex_->Unlock();
     s = InstallOutputBlobFiles();
     if (s.ok()) {
+      TEST_SYNC_POINT("BlobGCJob::Finish::BeforeRewriteValidKeyToLSM");
       s = RewriteValidKeyToLSM();
       if (!s.ok()) {
         ROCKS_LOG_ERROR(db_options_.info_log,
@@ -368,6 +369,7 @@ Status BlobGCJob::Finish() {
   if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
     s = DeleteInputBlobFiles();
   }
+  TEST_SYNC_POINT("BlobGCJob::Finish::AfterRewriteValidKeyToLSM");
 
   if (s.ok()) {
     UpdateInternalOpStats();
