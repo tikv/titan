@@ -1544,7 +1544,6 @@ TEST_F(TitanDBTest, CFCompaction) {
   std::string value;
   ASSERT_TRUE(db_->GetProperty(cfa, "rocksdb.num-files-at-level0", &value));
   ASSERT_EQ(value, "2");
-  printf("before compact all");
   db_impl_->TEST_WaitForBackgroundGC();
   CompactAll(cfa);
   // the first `CompactAll` only move files to L6 without merging the two SSTs,
@@ -1784,6 +1783,22 @@ TEST_F(TitanDBTest, Config) {
   Close();
 }
 
+TEST_F(TitanDBTest, NoSpaceLeft) {
+  options_.disable_background_gc = false;
+  system(("mkdir -p " + dbname_).c_str());
+  system(("sudo mount -t tmpfs -o size=1m tmpfs " + dbname_).c_str());
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100 * 1024, 'v')));
+  ASSERT_OK(db_->Put(WriteOptions(), "k2", std::string(100 * 1024, 'v')));
+  ASSERT_OK(db_->Put(WriteOptions(), "k3", std::string(100 * 1024, 'v')));
+  Flush();
+  ASSERT_OK(db_->Put(WriteOptions(), "k4", std::string(300 * 1024, 'v')));
+  ASSERT_NOK(db_->Flush(FlushOptions()));
+
+  Close();
+  system(("sudo umount " + dbname_).c_str());
+}
 }  // namespace titandb
 }  // namespace rocksdb
 
