@@ -1377,6 +1377,85 @@ TEST_F(TitanDBTest, UpdateValue) {
   Close();
 }
 
+TEST_F(TitanDBTest, MultiGet) {
+  options_.min_blob_size = 1024;
+  std::vector<int> blob_cache_sizes={0, 15 * 1024};
+  std::vector<int> block_cache_sizes = {0, 150};
+
+  for (auto blob_cache_size: blob_cache_sizes) {
+    for (auto block_cache_size: block_cache_sizes) {
+      BlockBasedTableOptions table_opts;
+      table_opts.block_size = block_cache_size;
+      options_.table_factory.reset(NewBlockBasedTableFactory(table_opts));
+      options_.blob_cache = NewLRUCache(blob_cache_size);
+
+      Open();
+      ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100, 'v')));
+      ASSERT_OK(db_->Put(WriteOptions(), "k2", std::string(100, 'v')));
+      ASSERT_OK(db_->Put(WriteOptions(), "k3", std::string(10 * 1024, 'v')));
+      ASSERT_OK(db_->Put(WriteOptions(), "k4", std::string(100 * 1024, 'v')));
+      Flush();
+
+      std::vector<std::string> values;
+      db_->MultiGet(ReadOptions(), std::vector<Slice>{"k1", "k2", "k3", "k4"}, &values);
+      ASSERT_EQ(values[0].size(), 100);
+      ASSERT_EQ(values[1].size(), 100);
+      ASSERT_EQ(values[2].size(), 10 * 1024);
+      ASSERT_EQ(values[3].size(), 100 * 1024);
+      Close();
+      DeleteDir(env_, options_.dirname);
+      DeleteDir(env_, dbname_);
+    }
+  }
+}
+
+TEST_F(TitanDBTest, PrefixScan) {
+    options_.min_blob_size = 1024;
+    options_.prefix_extractor.reset(NewFixedPrefixTransform(3));
+    std::vector<int> blob_cache_sizes = {0, 15 * 1024};
+    std::vector<int> block_cache_sizes = {0, 150};
+
+    for (auto blob_cache_size : blob_cache_sizes)
+    {
+      for (auto block_cache_size : block_cache_sizes)
+      {
+        BlockBasedTableOptions table_opts;
+        table_opts.block_size = block_cache_size;
+        options_.table_factory.reset(NewBlockBasedTableFactory(table_opts));
+        options_.blob_cache = NewLRUCache(blob_cache_size);
+
+        Open();
+        ASSERT_OK(db_->Put(WriteOptions(), "abc1", std::string(100, 'v')));
+        ASSERT_OK(db_->Put(WriteOptions(), "abc2", std::string(2 * 1024, 'v')));
+        ASSERT_OK(db_->Put(WriteOptions(), "cba1", std::string(100, 'v')));
+        ASSERT_OK(db_->Put(WriteOptions(), "cba1", std::string(10 * 1024, 'v')));
+        Flush();
+
+        ReadOptions r_opt;
+        r_opt.prefix_same_as_start = true;
+        {
+          std::unique_ptr<Iterator> iter(db_->NewIterator(r_opt));
+          iter->Seek("abc");
+          ASSERT_TRUE(iter->Valid());
+          ASSERT_EQ("abc1", iter->key());
+          ASSERT_EQ(iter->value().size(), 100);
+          iter->Next();
+
+          ASSERT_TRUE(iter->Valid());
+          ASSERT_EQ("abc2", iter->key());
+          ASSERT_EQ(iter->value().size(), 2 * 1024);
+          iter->Next();
+
+          ASSERT_FALSE(iter->Valid());
+          ;
+        }
+        Close();
+        DeleteDir(env_, options_.dirname);
+        DeleteDir(env_, dbname_);
+      }
+  }
+}
+
 TEST_F(TitanDBTest, CompressionTypes) {
   options_.min_blob_size = 1024;
   auto compressions = std::vector<CompressionType>{CompressionType::kNoCompression, CompressionType::kLZ4Compression, CompressionType::kSnappyCompression, CompressionType::kZSTD};
@@ -1668,6 +1747,37 @@ TEST_F(TitanDBTest, IngestDuringGC) {
   std::string value;
   ASSERT_OK(db_->Get(ReadOptions(), "k1", &value));
   ASSERT_EQ(value, std::string(100 * 1024, 'v'));
+}
+
+TEST_F(TitanDBTest, Config) {
+  options_.disable_background_gc = false;
+  
+  options_.max_background_gc = 0;
+  Open();
+  options_.max_background_gc = 1;
+  Reopen();
+  options_.max_background_gc = 2;
+  Reopen();
+  
+  options_.min_blob_size = 512;
+  Reopen();
+  options_.min_blob_size = 1024;
+  Reopen();
+  options_.min_blob_size = 64 * 1024 * 1024;
+  Reopen();
+
+  options_.blob_file_discardable_ratio = 0;
+  Reopen();
+  options_.blob_file_discardable_ratio = 0.001;
+  Reopen();
+  options_.blob_file_discardable_ratio = 1;
+
+  options_.blob_cache = NewLRUCache(0);
+  Reopen();
+  options_.blob_cache = NewLRUCache(1 * 1024 * 1024);
+  Reopen();
+
+  Close();
 }
 
 }  // namespace titandb
