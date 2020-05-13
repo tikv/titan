@@ -1784,6 +1784,7 @@ TEST_F(TitanDBTest, Config) {
 }
 
 TEST_F(TitanDBTest, NoSpaceLeft) {
+  #if defined(__linux)
   options_.disable_background_gc = false;
   system(("mkdir -p " + dbname_).c_str());
   system(("sudo mount -t tmpfs -o size=1m tmpfs " + dbname_).c_str());
@@ -1797,7 +1798,8 @@ TEST_F(TitanDBTest, NoSpaceLeft) {
   ASSERT_NOK(db_->Flush(FlushOptions()));
 
   Close();
-  system(("sudo umount " + dbname_).c_str());
+  system(("sudo umount -l " + dbname_).c_str());
+  #endif
 }
 }  // namespace titandb
 }  // namespace rocksdb
