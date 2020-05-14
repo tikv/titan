@@ -1431,14 +1431,15 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   CompactAll();
 
   ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
-  blob_storage->ExportBlobFiles(blob_files);
-  // rewriting index to LSM failed, but the output blob file is already
-  // generated
-  ASSERT_EQ(blob_files.size(), 2);
 
   TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::ContinueGC");
   TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGC");
 
+  blob_storage->ExportBlobFiles(blob_files);
+  // rewriting index to LSM failed, but the output blob file is already
+  // generated
+  ASSERT_EQ(blob_files.size(), 2);
+  
   std::string value;
   Status status = db_->Get(ReadOptions(), "k1", &value);
   ASSERT_EQ(status, Status::NotFound());
