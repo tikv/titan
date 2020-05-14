@@ -1698,7 +1698,7 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   ASSERT_TRUE(blob_storage != nullptr);
   std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
   blob_storage->ExportBlobFiles(blob_files);
-  auto prev_file_size = blob_files.begin()->second.lock()->file_size();
+  ASSERT_EQ(blob_files.size(), 1);
   CompactAll();
 
   SyncPoint::GetInstance()->LoadDependency(
@@ -1707,10 +1707,12 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
        {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
         "TitanDBTest::CompactionDuringGC::WaitGC"}});
   SyncPoint::GetInstance()->EnableProcessing();
-
+  // trigger GC
   CompactAll();
+
   ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
   blob_storage->ExportBlobFiles(blob_files);
+  // rewriting index to LSM failed, but the output blob file is already generated
   ASSERT_EQ(blob_files.size(), 2);
 
   TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::ContinueGC");
@@ -1719,9 +1721,16 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   std::string value;
   Status status = db_->Get(ReadOptions(), "k1", &value);
   ASSERT_EQ(status, Status::NotFound());
+
+  SyncPoint::GetInstance()->DisableProcessing();
   CheckBlobFileCount(1);
-  blob_storage->ExportBlobFiles(blob_files);
-  ASSERT_TRUE(blob_files.begin()->second.lock()->file_size() < prev_file_size);
+
+  Flush();
+  CompactAll();
+  CompactAll();
+  
+  db_impl_->TEST_StartGC(db_impl_->DefaultColumnFamily()->GetID());
+  CheckBlobFileCount(0);
 }
 
 TEST_F(TitanDBTest, PutDeletedDuringGC) {
