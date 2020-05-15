@@ -1439,7 +1439,7 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   // rewriting index to LSM failed, but the output blob file is already
   // generated
   ASSERT_EQ(blob_files.size(), 2);
-  
+
   std::string value;
   Status status = db_->Get(ReadOptions(), "k1", &value);
   ASSERT_EQ(status, Status::NotFound());
