@@ -534,8 +534,6 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
       }
       SubStats(stats_, cf_id, file->GetDiscardableRatioLevel(), 1);
       file->UpdateLiveDataSize(-blob_file.second);
-      fprintf(stderr, "update file %lu dropped %lu %lf", blob_file.first,
-              blob_file.second, file->GetDiscardableRatio());
       AddStats(stats_, cf_id, file->GetDiscardableRatioLevel(), 1);
 
       blob_storage->ComputeGCScore();
