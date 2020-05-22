@@ -20,6 +20,7 @@
 #include "table_factory.h"
 #include "titan_build_version.h"
 #include "titan_stats.h"
+#include "compaction_filter.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -269,6 +270,20 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
         blob_file_set_.get(), stats_.get()));
     cf_opts.table_factory = titan_table_factories.back();
     cf_opts.merge_operator = shared_merge_operator_;
+    if (cf_opts.compaction_filter != nullptr ||
+        cf_opts.compaction_filter_factory != nullptr) {
+      std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
+          std::make_shared<TitanCompactionFilterFactory>(this);
+
+      if (cf_opts.compaction_filter != nullptr) {
+        titan_cf_factory->SetCF(cf_opts.compaction_filter);
+      } else {
+        titan_cf_factory->SetCFFactory(cf_opts.compaction_filter_factory);
+      }
+
+      cf_opts.compaction_filter = nullptr;
+      cf_opts.compaction_filter_factory = titan_cf_factory;
+    }
   }
   // Initialize GC thread pool.
   if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
