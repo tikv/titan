@@ -59,7 +59,11 @@ public:
       if (rv) {
         return Decision::kRemove;
       }
-      return value_changed ? Decision::kChangeValue : Decision::kKeep;
+      // It would be a problem if you change the value whereas the value_type is still kBlobIndex.
+      // For now, we can just assert value_change == false and abort.
+      // TODO: we should make rocksdb Filter API support changing value_type
+      assert(!value_changed);
+      return Decision::kKeep;
     }
 
     // GetBlobRecord failed, keep the value.
