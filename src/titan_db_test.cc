@@ -1402,7 +1402,7 @@ TEST_F(TitanDBTest, GCAfterReopen) {
 }
 
 TEST_F(TitanDBTest, CompactionDuringGC) {
-  options_.max_background_gc = 2;
+  options_.max_background_gc = 1;
   options_.disable_background_gc = false;
   options_.blob_file_discardable_ratio = 0.01;
   Open();
@@ -1414,12 +1414,12 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
 
   db_->ReleaseSnapshot(snap);
   CheckBlobFileCount(1);
+  CompactAll();
   std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
   ASSERT_TRUE(blob_storage != nullptr);
   std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
   blob_storage->ExportBlobFiles(blob_files);
   ASSERT_EQ(blob_files.size(), 1);
-  CompactAll();
 
   SyncPoint::GetInstance()->LoadDependency(
       {{"TitanDBTest::CompactionDuringGC::ContinueGC",
