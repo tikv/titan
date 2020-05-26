@@ -55,8 +55,8 @@ public:
       ReadOptions read_options;
       s = blob_storage_->Get(read_options, blob_index, &record, &buffer);
     } else {
-      // Column family not found, remove the value.
-      return Decision::kRemove;
+      // kKeep is better. Maybe column family is not found due to some bugs.
+      return Decision::kKeep;
     }
 
     if (s.ok()) {
