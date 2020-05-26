@@ -11,8 +11,16 @@ namespace titandb {
 class TitanCompactionFilter final : public CompactionFilter {
 public:
   explicit TitanCompactionFilter(const CompactionFilter *original,
-                                 std::weak_ptr<BlobStorage> blob_storage)
-      : blob_storage_(std::move(blob_storage)), original_filter_(original) {}
+                                 std::shared_ptr<BlobStorage> blob_storage,
+                                 bool manual_release)
+      : blob_storage_(std::move(blob_storage)), original_filter_(original),
+        manual_release_(manual_release) {}
+
+  ~TitanCompactionFilter() override {
+    if (manual_release_) {
+      delete original_filter_;
+    }
+  }
 
   const char *Name() const override {
     return std::string("TitanCompactionFilter.")
@@ -43,10 +51,9 @@ public:
     BlobRecord record;
     PinnableSlice buffer;
 
-    auto storage = blob_storage_.lock();
-    if (storage) {
+    if (blob_storage_) {
       ReadOptions read_options;
-      s = storage->Get(read_options, blob_index, &record, &buffer);
+      s = blob_storage_->Get(read_options, blob_index, &record, &buffer);
     } else {
       // Column family not found, remove the value.
       return Decision::kRemove;
@@ -59,7 +66,10 @@ public:
       // still kBlobIndex. For now, we can just assert value_change == false and
       // abort.
       // TODO: we should make rocksdb Filter API support changing value_type
-      assert(decision != CompactionFilter::Decision::kChangeValue);
+      // assert(decision != CompactionFilter::Decision::kChangeValue);
+      if (decision == Decision::kChangeValue) {
+        decision = Decision::kKeep;
+      }
       return decision;
     }
 
@@ -68,8 +78,9 @@ public:
   }
 
 private:
-  const std::weak_ptr<BlobStorage> blob_storage_;
+  std::shared_ptr<BlobStorage> blob_storage_;
   const CompactionFilter *original_filter_;
+  bool manual_release_;
 };
 
 class TitanCompactionFilterFactory final : public CompactionFilterFactory {
@@ -92,9 +103,12 @@ public:
     }
   }
 
-  void SetOriginalCompactionFilter(const CompactionFilter *cf) { original_filter_ = cf; }
+  void SetOriginalCompactionFilter(const CompactionFilter *cf) {
+    original_filter_ = cf;
+  }
 
-  void SetOriginalCompactionFilterFactory(std::shared_ptr<CompactionFilterFactory> cf_factory) {
+  void SetOriginalCompactionFilterFactory(
+      std::shared_ptr<CompactionFilterFactory> cf_factory) {
     original_filter_factory_ = std::move(cf_factory);
   }
 
@@ -102,21 +116,21 @@ public:
   CreateCompactionFilter(const CompactionFilter::Context &context) override {
     assert(original_filter_ != nullptr || original_filter_factory_ != nullptr);
 
-    const CompactionFilter *compaction_filter = original_filter_;
-    std::unique_ptr<CompactionFilter> compaction_filter_from_factory = nullptr;
-    if (compaction_filter == nullptr) {
-      compaction_filter_from_factory =
-          original_filter_factory_->CreateCompactionFilter(context);
-      compaction_filter = compaction_filter_from_factory.get();
-    }
-
     titan_db_impl_->mutex_.Lock();
-    auto storage = titan_db_impl_->blob_file_set_->GetBlobStorage(
-        context.column_family_id);
+    auto storage =
+        titan_db_impl_->blob_file_set_->GetBlobStorage(context.column_family_id)
+            .lock();
     titan_db_impl_->mutex_.Unlock();
 
+    if (original_filter_ != nullptr) {
+      return std::unique_ptr<CompactionFilter>(
+          new TitanCompactionFilter(original_filter_, storage, false));
+    }
+
+    auto compaction_filter =
+        original_filter_factory_->CreateCompactionFilter(context);
     return std::unique_ptr<CompactionFilter>(
-        new TitanCompactionFilter(compaction_filter, storage));
+        new TitanCompactionFilter(compaction_filter.release(), storage, true));
   }
 
 private:
