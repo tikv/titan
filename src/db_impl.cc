@@ -276,9 +276,9 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
           std::make_shared<TitanCompactionFilterFactory>(this);
 
       if (cf_opts.compaction_filter != nullptr) {
-        titan_cf_factory->SetCF(cf_opts.compaction_filter);
+        titan_cf_factory->SetOriginalCompactionFilter(cf_opts.compaction_filter);
       } else {
-        titan_cf_factory->SetCFFactory(cf_opts.compaction_filter_factory);
+        titan_cf_factory->SetOriginalCompactionFilterFactory(cf_opts.compaction_filter_factory);
       }
 
       cf_opts.compaction_filter = nullptr;
@@ -415,6 +415,21 @@ Status TitanDBImpl::CreateColumnFamilies(
         std::make_shared<BlobFileSizeCollectorFactory>());
     options.merge_operator = shared_merge_operator_;
     base_descs.emplace_back(desc.name, options);
+
+    if (options.compaction_filter != nullptr ||
+        options.compaction_filter_factory != nullptr) {
+      std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
+          std::make_shared<TitanCompactionFilterFactory>(this);
+
+      if (options.compaction_filter != nullptr) {
+        titan_cf_factory->SetOriginalCompactionFilter(options.compaction_filter);
+      } else {
+        titan_cf_factory->SetOriginalCompactionFilterFactory(options.compaction_filter_factory);
+      }
+
+      options.compaction_filter = nullptr;
+      options.compaction_filter_factory = titan_cf_factory;
+    }
   }
 
   Status s = db_impl_->CreateColumnFamilies(base_descs, handles);
