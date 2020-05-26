@@ -62,9 +62,8 @@ public:
     if (s.ok()) {
       auto decision = original_filter_->FilterV2(
           level, key, ValueType::kValue, record.value, new_value, skip_until);
-      // It would be a problem if you change the value whereas the value_type is
-      // still kBlobIndex. For now, we can just assert value_change == false and
-      // abort.
+      // It would be a problem if it change the value whereas the value_type is
+      // still kBlobIndex. For now, just returns kKeep.
       // TODO: we should make rocksdb Filter API support changing value_type
       // assert(decision != CompactionFilter::Decision::kChangeValue);
       if (decision == Decision::kChangeValue) {
