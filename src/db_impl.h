@@ -24,6 +24,7 @@ struct TitanColumnFamilyInfo {
 };
 
 class TitanCompactionFilterFactory;
+class TitanCompactionFilter;
 
 class TitanDBImpl : public TitanDB {
  public:
@@ -170,6 +171,7 @@ class TitanDBImpl : public TitanDB {
   friend class TitanDBTest;
   friend class TitanThreadSafetyTest;
   friend class TitanCompactionFilterFactory;
+  friend class TitanCompactionFilter;
 
   Status OpenImpl(const std::vector<TitanCFDescriptor>& descs,
                   std::vector<ColumnFamilyHandle*>* handles);
