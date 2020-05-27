@@ -311,31 +311,11 @@ Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
                                bool* discardable) {
   TitanStopWatch sw(env_, metrics_.gc_read_lsm_micros);
   assert(discardable != nullptr);
-  PinnableSlice index_entry;
-  bool is_blob_index = false;
-  Status s = base_db_impl_->GetImpl(
-      ReadOptions(), blob_gc_->column_family_handle(), key, &index_entry,
-      nullptr /*value_found*/, nullptr /*read_callback*/, &is_blob_index);
-  if (!s.ok() && !s.IsNotFound()) {
-    return s;
-  }
-  // count read bytes for checking LSM entry
-  metrics_.gc_bytes_read += key.size() + index_entry.size();
-  if (s.IsNotFound() || !is_blob_index) {
-    // Either the key is deleted or updated with a newer version which is
-    // inlined in LSM.
-    *discardable = true;
-    return Status::OK();
-  }
-
-  BlobIndex other_blob_index;
-  s = other_blob_index.DecodeFrom(&index_entry);
-  if (!s.ok()) {
-    return s;
-  }
-
-  *discardable = !(blob_index == other_blob_index);
-  return Status::OK();
+  uint64_t read;
+  Status s = MaybeDiscard(base_db_impl_, blob_gc_->column_family_handle(), key,
+                          blob_index, discardable, &read);
+  metrics_.gc_bytes_read += read;
+  return s;
 }
 
 // We have to make sure crash consistency, but LSM db MANIFEST and BLOB db
@@ -576,6 +556,38 @@ void BlobGCJob::UpdateInternalOpStats() {
            metrics_.gc_read_lsm_micros);
   AddStats(internal_op_stats, InternalOpStatsType::GC_UPDATE_LSM_MICROS,
            metrics_.gc_update_lsm_micros);
+}
+
+Status MaybeDiscard(DBImpl* db_impl, ColumnFamilyHandle* cf_handle,
+                    const Slice& key, const BlobIndex& blob_index,
+                    bool* discardable, uint64_t* read) {
+  PinnableSlice index_entry;
+  bool is_blob_index = false;
+  Status s = db_impl->GetImpl(ReadOptions(), cf_handle, key, &index_entry,
+                              nullptr /*value_found*/,
+                              nullptr /*read_callback*/, &is_blob_index);
+  if (!s.ok() && !s.IsNotFound()) {
+    return s;
+  }
+  // count read bytes for checking LSM entry
+  if (read) {
+    *read = key.size() + index_entry.size();
+  }
+  if (s.IsNotFound() || !is_blob_index) {
+    // Either the key is deleted or updated with a newer version which is
+    // inlined in LSM.
+    *discardable = true;
+    return Status::OK();
+  }
+
+  BlobIndex other_blob_index;
+  s = other_blob_index.DecodeFrom(&index_entry);
+  if (!s.ok()) {
+    return s;
+  }
+
+  *discardable = !(blob_index == other_blob_index);
+  return Status::OK();
 }
 
 }  // namespace titandb

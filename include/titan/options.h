@@ -9,6 +9,12 @@
 namespace rocksdb {
 namespace titandb {
 
+enum class TitanBlobStatsMode {
+  kClose = 0,
+  kPrint = 1,
+  kAbort = 2,
+};
+
 struct TitanDBOptions : public DBOptions {
   // The directory to store data specific to TitanDB alongside with
   // the base DB.
@@ -37,6 +43,9 @@ struct TitanDBOptions : public DBOptions {
   //
   // Default: 600 (10 min)
   uint32_t titan_stats_dump_period_sec{600};
+
+  // TODO: default set to `kClose`
+  TitanBlobStatsMode titan_blob_stats_mode{TitanBlobStatsMode::kAbort};
 
   TitanDBOptions() = default;
   explicit TitanDBOptions(const DBOptions& options) : DBOptions(options) {}

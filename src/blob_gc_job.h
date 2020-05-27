@@ -100,5 +100,9 @@ class BlobGCJob {
   bool IsShutingDown();
 };
 
+Status MaybeDiscard(DBImpl *db_impl, ColumnFamilyHandle *cf_handle,
+                    const Slice &key, const BlobIndex &blob_index,
+                    bool *discardable, uint64_t *read);
+
 }  // namespace titandb
 }  // namespace rocksdb

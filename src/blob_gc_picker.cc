@@ -61,9 +61,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       }
     }
   }
-  ROCKS_LOG_DEBUG(db_options_.info_log,
-                  "got batch size %" PRIu64 ", estimate output %" PRIu64
-                  " bytes",
+  ROCKS_LOG_DEBUG(db_options_.info_log, "got batch size %" PRIu64
+                                        ", estimate output %" PRIu64 " bytes",
                   batch_size, estimate_output_size);
   if (blob_files.empty() ||
       (batch_size < cf_options_.min_gc_batch_size &&

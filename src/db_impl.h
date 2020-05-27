@@ -144,6 +144,8 @@ class TitanDBImpl : public TitanDB {
 
   void TEST_set_initialized(bool _initialized) { initialized_ = _initialized; }
 
+  void DumpBlobStats() const;
+
   Status TEST_StartGC(uint32_t column_family_id);
   void TEST_WaitForBackgroundGC();
 

@@ -16,6 +16,7 @@
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc.h"
+#include "blob_gc_job.h"
 #include "db_iter.h"
 #include "table_factory.h"
 #include "titan_build_version.h"
@@ -1002,6 +1003,12 @@ Status TitanDBImpl::SetOptions(
       opts.erase(p);
     }
   }
+  {
+    auto p = opts.find("blob_stats_mode");
+    if (p != opts.end()) {
+      // TODO:
+    }
+  }
   if (opts.size() > 0) {
     s = db_->SetOptions(column_family, opts);
     if (!s.ok()) {
@@ -1349,6 +1356,145 @@ void TitanDBImpl::DumpStats() {
       LogToBuffer(&log_buffer, "Titan internal stats for column family [%s]:",
                   cf.second.name.c_str());
       internal_stats->DumpAndResetInternalOpStats(&log_buffer);
+    }
+  }
+  log_buffer.FlushBufferToLog();
+
+  if (db_options_.titan_blob_stats_mode != TitanBlobStatsMode::kClose) {
+    this->DumpBlobStats();
+  }
+}
+
+void TitanDBImpl::DumpBlobStats() const {
+  uint64_t data = 0;
+  uint64_t discard = 0;
+  uint64_t total = 0;
+
+  std::vector<uint64_t> cfs;
+
+  mutex_.Lock();
+  for (auto& cf : cf_info_) {
+    cfs.push_back(cf.first);
+  }
+  mutex_.Unlock();
+
+  LogBuffer log_buffer(InfoLogLevel::HEADER_LEVEL, db_options_.info_log.get());
+  ROCKS_LOG_BUFFER(&log_buffer, "------- DUMPING BLOB STATS -------");
+  for (auto cf_id : cfs) {
+    auto cfh = db_impl_->GetColumnFamilyHandleUnlocked(cf_id);
+
+    mutex_.Lock();
+    auto blob_storage = blob_file_set_->GetBlobStorage(cf_id).lock();
+    std::map<uint64_t, std::weak_ptr<BlobFileMeta>> metas;
+    blob_storage->ExportBlobFiles(metas);
+    mutex_.Unlock();
+
+    for (auto& meta : metas) {
+      std::unique_ptr<RandomAccessFileReader> file;
+      Status s = NewBlobFileReader(meta.first, 0, db_options_, env_options_,
+                                   env_, &file);
+      if (!s.ok()) {
+        // TODO:
+        abort();
+      }
+      std::unique_ptr<BlobFileIterator> iter(new BlobFileIterator(
+          std::move(file), meta.first, meta.second.lock()->file_size(),
+          blob_storage->cf_options()));
+
+      std::string last_key;
+      bool last_key_valid = false;
+      iter->SeekToFirst();
+      assert(iter->Valid());
+
+      uint64_t discardable_size = 0;
+      uint64_t total_size = 0;
+      for (; iter->Valid(); iter->Next()) {
+        BlobIndex blob_index = iter->GetBlobIndex();
+        total_size += blob_index.blob_handle.size;
+        if (!last_key.empty() && !iter->key().compare(last_key)) {
+          if (last_key_valid) {
+            discardable_size += blob_index.blob_handle.size;
+            continue;
+          }
+        } else {
+          last_key = iter->key().ToString();
+          last_key_valid = false;
+        }
+
+        bool discardable;
+        s = MaybeDiscard(db_impl_, cfh.get(), iter->key(), blob_index,
+                         &discardable, nullptr);
+        if (!s.ok()) {
+          // TODO:
+          abort();
+        }
+        if (discardable) {
+          discardable_size += blob_index.blob_handle.size;
+          continue;
+        }
+
+        last_key_valid = true;
+      }
+
+      auto real_discardable_ratio = discardable_size * 1.0 / total_size;
+      mutex_.Lock();
+      auto estimate_discardable_ratio =
+          meta.second.lock()->GetDiscardableRatio();
+      mutex_.Unlock();
+
+      ROCKS_LOG_BUFFER(&log_buffer, "blob file %" PRIu64 " ", meta.first);
+      if ((estimate_discardable_ratio - real_discardable_ratio) <
+          std::numeric_limits<double>::epsilon()) {
+        ROCKS_LOG_BUFFER(&log_buffer, "OK: ");
+      } else if (estimate_discardable_ratio < real_discardable_ratio) {
+        if (db_options_.titan_blob_stats_mode == TitanBlobStatsMode::kAbort) {
+          auto start = Slice(meta.second.lock()->smallest_key());
+          auto end = Slice(meta.second.lock()->largest_key());
+          db_impl_->CompactRange(CompactRangeOptions(), cfh.get(), &start,
+                                 &end);
+          mutex_.Lock();
+          estimate_discardable_ratio =
+              meta.second.lock()->GetDiscardableRatio();
+          mutex_.Unlock();
+          if ((estimate_discardable_ratio - real_discardable_ratio) <
+              std::numeric_limits<double>::epsilon()) {
+            ROCKS_LOG_BUFFER(&log_buffer, "OK: after compact, ");
+          } else {
+            ROCKS_LOG_BUFFER(&log_buffer,
+                             "ERROR: estimate still wrong after compact, ");
+            if (db_options_.titan_blob_stats_mode ==
+                TitanBlobStatsMode::kAbort) {
+              abort();
+            }
+          }
+        } else {
+          ROCKS_LOG_BUFFER(&log_buffer, "WARN: estimate smaller than real, ");
+        }
+      } else {
+        ROCKS_LOG_BUFFER(&log_buffer, "ERROR: estimate larger than real, ");
+        if (db_options_.titan_blob_stats_mode == TitanBlobStatsMode::kAbort) {
+          abort();
+        }
+      }
+      total += total_size;
+      discard += discardable_size;
+      ROCKS_LOG_BUFFER(&log_buffer, "size: %" PRIu64 "K, total: %" PRIu64
+                                    "K, discardable: %" PRIu64
+                                    "K, estimate_ratio: %lf, real_ratio: %lf\n",
+                       meta.first, meta.second.lock()->file_size() / 1024,
+                       total_size / 1024, discardable_size / 1024,
+                       estimate_discardable_ratio, real_discardable_ratio);
+    }
+    ROCKS_LOG_BUFFER(&log_buffer, "cf %d in total: total: %" PRIu64
+                                  "K, discard: %" PRIu64 "K\n",
+                     cf_id, total / 1024, data / 1024, discard / 1024);
+    if (discard / total >
+        blob_storage->cf_options().blob_file_discardable_ratio * 2) {
+      ROCKS_LOG_BUFFER(&log_buffer,
+                       "ERROR: real discardable ratio %lf exceeds two times of "
+                       "threshold %lf * 2",
+                       discard * 1.0 / total,
+                       blob_storage->cf_options().blob_file_discardable_ratio);
     }
   }
   log_buffer.FlushBufferToLog();
