@@ -15,7 +15,7 @@ public:
               std::string * /*&new_value*/,
               bool * /*value_changed*/) const override {
     AssertValue(key, value);
-    return true;
+    return !value.starts_with("remain");
   }
 
 private:
@@ -63,7 +63,14 @@ public:
     env->DeleteDir(dirname);
   }
 
-  Status Open() { return TitanDB::Open(options_, dbname_, &db_); }
+  Status Open() {
+    Status s = TitanDB::Open(options_, dbname_, &db_);
+    if (!s.ok()) {
+      return s;
+    }
+    db_impl_ = reinterpret_cast<TitanDBImpl *>(db_);
+    return Status::OK();
+  }
 
   void Close() {
     if (!db_)
@@ -98,6 +105,7 @@ protected:
   std::string dbname_;
   TitanOptions options_;
   TitanDB *db_{nullptr};
+  TitanDBImpl *db_impl_{nullptr};
 };
 
 TEST_F(TitanCompactionFilterTest, CompactNormalValue) {
@@ -136,6 +144,31 @@ TEST_F(TitanCompactionFilterTest, CompactBlobValue) {
 
   s = Get("bigkey", &value1);
   ASSERT_TRUE(s.IsNotFound());
+}
+
+TEST_F(TitanCompactionFilterTest, CompactUpdateValue) {
+  options_.blob_file_discardable_ratio = 0.01;
+  options_.min_blob_size = 1;
+  options_.target_file_size_base = 1;
+  ASSERT_OK(Open());
+
+  ASSERT_OK(db_->Put(WriteOptions(), "update-key", "remain1"));
+  ASSERT_OK(db_->Put(WriteOptions(), "update-another-key", "remain2"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_OK(db_->Put(WriteOptions(), "update-key", "remain3"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+
+  uint32_t cf_id = db_->DefaultColumnFamily()->GetID();
+  ASSERT_OK(db_impl_->TEST_StartGC(cf_id));
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+
+  std::string value;
+  ASSERT_OK(db_->Get(ReadOptions(), "update-key", &value));
+  ASSERT_EQ(value, "remain3");
+  ASSERT_OK(db_->Get(ReadOptions(), "update-another-key", &value));
+  ASSERT_EQ(value, "remain2");
 }
 
 } // namespace titandb
