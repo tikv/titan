@@ -10,11 +10,12 @@ namespace titandb {
 
 class TitanCompactionFilter final : public CompactionFilter {
 public:
-  explicit TitanCompactionFilter(const CompactionFilter *original,
+  explicit TitanCompactionFilter(TitanDBImpl *db,
+                                 const CompactionFilter *original,
                                  std::shared_ptr<BlobStorage> blob_storage,
                                  bool manual_release)
-      : blob_storage_(std::move(blob_storage)), original_filter_(original),
-        manual_release_(manual_release) {}
+      : db_(db), blob_storage_(std::move(blob_storage)),
+        original_filter_(original), manual_release_(manual_release) {}
 
   ~TitanCompactionFilter() override {
     if (manual_release_) {
@@ -40,6 +41,7 @@ public:
     Slice original_value(value.data());
     Status s = blob_index.DecodeFrom(&original_value);
     if (!s.ok()) {
+      db_->SetBGError(s);
       // Unable to decode blob index. Keeping the value.
       return Decision::kKeep;
     }
@@ -59,7 +61,10 @@ public:
       return Decision::kKeep;
     }
 
-    if (s.ok()) {
+    if (s.IsCorruption()) {
+      // meet a stale blob index, or bug. so just keep it
+      return Decision::kKeep;
+    } else if (s.ok()) {
       auto decision = original_filter_->FilterV2(
           level, key, ValueType::kValue, record.value, new_value, skip_until);
       // It would be a problem if it change the value whereas the value_type is
@@ -67,16 +72,21 @@ public:
       // TODO: we should make rocksdb Filter API support changing value_type
       // assert(decision != CompactionFilter::Decision::kChangeValue);
       if (decision == Decision::kChangeValue) {
-        decision = Decision::kKeep;
+        db_->SetBGError(Status::NotSupported(
+            "It would be a problem if it change the value whereas the "
+            "value_type is still kBlobIndex."));
+        // decision = Decision::kKeep;
       }
       return decision;
+    } else {
+      db_->SetBGError(s);
+      // GetBlobRecord failed, keep the value.
+      return Decision::kKeep;
     }
-
-    // GetBlobRecord failed, keep the value.
-    return Decision::kKeep;
   }
 
 private:
+  TitanDBImpl *db_;
   std::shared_ptr<BlobStorage> blob_storage_;
   const CompactionFilter *original_filter_;
   bool manual_release_;
@@ -84,7 +94,7 @@ private:
 
 class TitanCompactionFilterFactory final : public CompactionFilterFactory {
 public:
-  explicit TitanCompactionFilterFactory(const TitanDBImpl *db)
+  explicit TitanCompactionFilterFactory(TitanDBImpl *db)
       : titan_db_impl_(db), original_filter_(nullptr),
         original_filter_factory_(nullptr) {}
 
@@ -122,18 +132,18 @@ public:
     titan_db_impl_->mutex_.Unlock();
 
     if (original_filter_ != nullptr) {
-      return std::unique_ptr<CompactionFilter>(
-          new TitanCompactionFilter(original_filter_, storage, false));
+      return std::unique_ptr<CompactionFilter>(new TitanCompactionFilter(
+          titan_db_impl_, original_filter_, storage, false));
     }
 
     auto compaction_filter =
         original_filter_factory_->CreateCompactionFilter(context);
-    return std::unique_ptr<CompactionFilter>(
-        new TitanCompactionFilter(compaction_filter.release(), storage, true));
+    return std::unique_ptr<CompactionFilter>(new TitanCompactionFilter(
+        titan_db_impl_, compaction_filter.release(), storage, true));
   }
 
 private:
-  const TitanDBImpl *titan_db_impl_;
+  TitanDBImpl *titan_db_impl_;
   const CompactionFilter *original_filter_;
   std::shared_ptr<CompactionFilterFactory> original_filter_factory_;
 };
