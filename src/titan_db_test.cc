@@ -1413,13 +1413,6 @@ TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
   Flush();
 
   db_->ReleaseSnapshot(snap);
-  CheckBlobFileCount(1);
-  CompactAll();
-  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
-  ASSERT_TRUE(blob_storage != nullptr);
-  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
-  blob_storage->ExportBlobFiles(blob_files);
-  ASSERT_EQ(blob_files.size(), 1);
 
   SyncPoint::GetInstance()->LoadDependency(
       {{"TitanDBImpl::BackgroundGC::BeforeRunGCJob",
@@ -1429,6 +1422,15 @@ TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
        {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
         "TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCFinish"}});
   SyncPoint::GetInstance()->EnableProcessing();
+
+  CheckBlobFileCount(1);
+  CompactAll();
+  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(blob_files.size(), 1);
+  
   // trigger GC
   CompactAll();
 
