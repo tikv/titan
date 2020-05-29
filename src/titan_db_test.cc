@@ -1415,6 +1415,16 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   Flush();
 
   db_->ReleaseSnapshot(snap);
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBImpl::BackgroundGC::BeforeRunGCJob",
+        "TitanDBTest::CompactionDuringGC::WaitGCStart"},
+       {"TitanDBTest::CompactionDuringGC::ContinueGC",
+        "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
+       {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
+        "TitanDBTest::CompactionDuringGC::WaitGCFinish"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
   CheckBlobFileCount(1);
   CompactAll();
   std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
@@ -1423,14 +1433,6 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   blob_storage->ExportBlobFiles(blob_files);
   ASSERT_EQ(blob_files.size(), 1);
 
-  SyncPoint::GetInstance()->LoadDependency(
-      {{"TitanDBImpl::BackgroundGC::BeforeRunGCJob",
-      "TitanDBTest::CompactionDuringGC::WaitGCStart"},
-      {"TitanDBTest::CompactionDuringGC::ContinueGC",
-        "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
-       {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
-        "TitanDBTest::CompactionDuringGC::WaitGCFinish"}});
-  SyncPoint::GetInstance()->EnableProcessing();
   // trigger GC
   CompactAll();
 
