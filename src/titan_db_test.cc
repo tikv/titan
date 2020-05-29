@@ -1423,7 +1423,7 @@ TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
 
   SyncPoint::GetInstance()->LoadDependency(
       {{"TitanDBImpl::BackgroundGC::BeforeRunGCJob",
-       "TitanDBTest::CompactionDuringGC::WaitGCStart"},
+        "TitanDBTest::CompactionDuringGC::WaitGCStart"},
        {"TitanDBTest::CompactionDuringGC::ContinueGC",
         "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
        {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
@@ -1443,7 +1443,7 @@ TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
   ASSERT_TRUE(s.IsNotFound());
   // it shouldn't be any background error
   ASSERT_OK(db_->Flush(FlushOptions()));
-  
+
   SyncPoint::GetInstance()->DisableProcessing();
   CheckBlobFileCount(1);
 }
