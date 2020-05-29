@@ -26,6 +26,9 @@ private:
     if (key.ToString() == "bigkey") {
       ASSERT_EQ(value.ToString(), std::string(min_blob_size_ + 1, 'v'));
     }
+    if (key.starts_with("skip")) {
+      ASSERT_EQ(value, Slice());
+    }
   }
 
   uint64_t min_blob_size_;
@@ -169,6 +172,18 @@ TEST_F(TitanCompactionFilterTest, CompactUpdateValue) {
   ASSERT_EQ(value, "remain3");
   ASSERT_OK(db_->Get(ReadOptions(), "update-another-key", &value));
   ASSERT_EQ(value, "remain2");
+}
+
+TEST_F(TitanCompactionFilterTest, CompactSkipValue) {
+  options_.skip_value_in_compaction_filter = true;
+  ASSERT_OK(Open());
+
+  ASSERT_OK(db_->Put(WriteOptions(), "skip-key", "skip-value"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+
+  std::string value;
+  ASSERT_TRUE(db_->Get(ReadOptions(), "skip-key", &value).IsNotFound());
 }
 
 } // namespace titandb

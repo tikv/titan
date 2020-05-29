@@ -273,7 +273,8 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
     if (cf_opts.compaction_filter != nullptr ||
         cf_opts.compaction_filter_factory != nullptr) {
       std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
-          std::make_shared<TitanCompactionFilterFactory>(this);
+          std::make_shared<TitanCompactionFilterFactory>(
+              this, desc.options.skip_value_in_compaction_filter);
 
       if (cf_opts.compaction_filter != nullptr) {
         titan_cf_factory->SetOriginalCompactionFilter(cf_opts.compaction_filter);
@@ -419,7 +420,8 @@ Status TitanDBImpl::CreateColumnFamilies(
     if (options.compaction_filter != nullptr ||
         options.compaction_filter_factory != nullptr) {
       std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
-          std::make_shared<TitanCompactionFilterFactory>(this);
+          std::make_shared<TitanCompactionFilterFactory>(
+              this, desc.options.skip_value_in_compaction_filter);
 
       if (options.compaction_filter != nullptr) {
         titan_cf_factory->SetOriginalCompactionFilter(options.compaction_filter);
