@@ -1430,7 +1430,7 @@ TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
   std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
   blob_storage->ExportBlobFiles(blob_files);
   ASSERT_EQ(blob_files.size(), 1);
-  
+
   // trigger GC
   CompactAll();
 
