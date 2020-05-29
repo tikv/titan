@@ -1423,20 +1423,20 @@ TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
 
   SyncPoint::GetInstance()->LoadDependency(
       {{"TitanDBImpl::BackgroundGC::BeforeRunGCJob",
-        "TitanDBTest::CompactionDuringGC::WaitGCStart"},
-       {"TitanDBTest::CompactionDuringGC::ContinueGC",
+        "TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCStart"},
+       {"TitanDBTest::DeleteFilesInRangeDuringGC::ContinueGC",
         "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
        {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
-        "TitanDBTest::CompactionDuringGC::WaitGCFinish"}});
+        "TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCFinish"}});
   SyncPoint::GetInstance()->EnableProcessing();
   // trigger GC
   CompactAll();
 
-  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGCStart");
+  TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCStart");
   DeleteFilesInRange(nullptr, nullptr);
 
-  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::ContinueGC");
-  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGCFinish");
+  TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::ContinueGC");
+  TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCFinish");
 
   std::string value;
   Status s = db_->Get(ReadOptions(), "k1", &value);
