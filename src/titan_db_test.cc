@@ -1415,7 +1415,7 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   db_->ReleaseSnapshot(snap);
 
   SyncPoint::GetInstance()->LoadDependency(
-      {{"TitanDBImpl::BackgroundGC::BeforeRunGCJob",
+      {{"TitanDBImpl::BackgroundGC::AfterRunGCJob",
         "TitanDBTest::CompactionDuringGC::WaitGCStart"},
        {"TitanDBTest::CompactionDuringGC::ContinueGC",
         "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
