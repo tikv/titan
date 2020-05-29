@@ -203,7 +203,7 @@ class BlobGCJobTest : public testing::Test {
     ASSERT_OK(WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), key, res));
     auto rewrite_status = base_db_->Write(WriteOptions(), &wb);
 
-    std::vector<BlobFileMeta*> tmp;
+    std::vector<std::shared_ptr<BlobFileMeta>> tmp;
     BlobGC blob_gc(std::move(tmp), TitanCFOptions(), false /*trigger_next*/);
     blob_gc.SetColumnFamily(cfh);
     BlobGCJob blob_gc_job(&blob_gc, base_db_, mutex_, TitanDBOptions(),
