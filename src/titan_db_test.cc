@@ -1447,7 +1447,6 @@ TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
   ASSERT_OK(db_->Flush(FlushOptions()));
 
   SyncPoint::GetInstance()->DisableProcessing();
-  CheckBlobFileCount(1);
 }
 
 }  // namespace titandb
