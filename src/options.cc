@@ -29,11 +29,10 @@ void TitanDBOptions::Dump(Logger* logger) const {
                    titan_stats_dump_period_sec);
 }
 
-TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
-                               const ImmutableTitanCFOptions& immutable_opts,
-                               const MutableTitanCFOptions& mutable_opts)
-    : ColumnFamilyOptions(cf_opts),
-      min_blob_size(immutable_opts.min_blob_size),
+TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions &cf_opts,
+                               const ImmutableTitanCFOptions &immutable_opts,
+                               const MutableTitanCFOptions &mutable_opts)
+    : ColumnFamilyOptions(cf_opts), min_blob_size(immutable_opts.min_blob_size),
       blob_file_compression(immutable_opts.blob_file_compression),
       blob_file_target_size(immutable_opts.blob_file_target_size),
       blob_cache(immutable_opts.blob_cache),
@@ -43,7 +42,9 @@ TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
       sample_file_size_ratio(immutable_opts.sample_file_size_ratio),
       merge_small_file_threshold(immutable_opts.merge_small_file_threshold),
       blob_run_mode(mutable_opts.blob_run_mode),
-      gc_merge_rewrite(mutable_opts.gc_merge_rewrite) {}
+      gc_merge_rewrite(mutable_opts.gc_merge_rewrite),
+      skip_value_in_compaction_filter(
+          immutable_opts.skip_value_in_compaction_filter) {}
 
 void TitanCFOptions::Dump(Logger* logger) const {
   ROCKS_LOG_HEADER(logger,

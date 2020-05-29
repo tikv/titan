@@ -13,9 +13,10 @@ public:
   explicit TitanCompactionFilter(
       TitanDBImpl *db, const CompactionFilter *original,
       std::unique_ptr<CompactionFilter> &&owned_filter,
-      std::shared_ptr<BlobStorage> blob_storage)
+      std::shared_ptr<BlobStorage> blob_storage, bool skip_value)
       : db_(db), blob_storage_(std::move(blob_storage)),
-        original_filter_(original), owned_filter_(std::move(owned_filter)) {}
+        original_filter_(original), owned_filter_(std::move(owned_filter)),
+        skip_value_(skip_value) {}
 
   const char *Name() const override {
     if (original_filter_) {
@@ -32,6 +33,13 @@ public:
   Decision FilterV2(int level, const Slice &key, ValueType value_type,
                     const Slice &value, std::string *new_value,
                     std::string *skip_until) const override {
+    if (skip_value_) {
+      return original_filter_ != nullptr
+                 ? original_filter_->FilterV2(level, key, kValue, Slice(),
+                                              new_value, skip_until)
+                 : owned_filter_->FilterV2(level, key, kValue, Slice(),
+                                           new_value, skip_until);
+    }
     if (value_type != kBlobIndex) {
       return original_filter_ != nullptr
                  ? original_filter_->FilterV2(level, key, value_type, value,
@@ -101,13 +109,14 @@ private:
   std::shared_ptr<BlobStorage> blob_storage_;
   const CompactionFilter *original_filter_;
   const std::unique_ptr<CompactionFilter> owned_filter_;
+  bool skip_value_;
 };
 
 class TitanCompactionFilterFactory final : public CompactionFilterFactory {
 public:
-  explicit TitanCompactionFilterFactory(TitanDBImpl *db)
+  explicit TitanCompactionFilterFactory(TitanDBImpl *db, bool skip_value)
       : titan_db_impl_(db), original_filter_(nullptr),
-        original_filter_factory_(nullptr) {}
+        original_filter_factory_(nullptr), skip_value_(skip_value) {}
 
   const char *Name() const override {
     if (original_filter_ != nullptr) {
@@ -144,19 +153,21 @@ public:
 
     if (original_filter_ != nullptr) {
       return std::unique_ptr<CompactionFilter>(new TitanCompactionFilter(
-          titan_db_impl_, original_filter_, nullptr, storage));
+          titan_db_impl_, original_filter_, nullptr, storage, skip_value_));
     }
 
     auto compaction_filter =
         original_filter_factory_->CreateCompactionFilter(context);
     return std::unique_ptr<CompactionFilter>(new TitanCompactionFilter(
-        titan_db_impl_, nullptr, std::move(compaction_filter), storage));
+        titan_db_impl_, nullptr, std::move(compaction_filter), storage,
+        skip_value_));
   }
 
 private:
   TitanDBImpl *titan_db_impl_;
   const CompactionFilter *original_filter_;
   std::shared_ptr<CompactionFilterFactory> original_filter_factory_;
+  bool skip_value_;
 };
 
 } // namespace titandb
