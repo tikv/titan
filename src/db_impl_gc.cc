@@ -211,6 +211,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     s = blob_gc_job.Prepare();
     if (s.ok()) {
       mutex_.Unlock();
+      TEST_SYNC_POINT("TitanDBImpl::BackgroundGC::BeforeRunGCJob");
       s = blob_gc_job.Run();
       mutex_.Lock();
     }
