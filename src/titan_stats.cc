@@ -73,9 +73,7 @@ const std::unordered_map<std::string, TitanInternalStats::StatsType>
 const std::array<std::string,
                  static_cast<int>(InternalOpType::INTERNAL_OP_ENUM_MAX)>
     TitanInternalStats::internal_op_names = {{
-        "Flush     ",
-        "Compaction",
-        "GC        ",
+        "Flush     ", "Compaction", "GC        ",
     }};
 
 void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {

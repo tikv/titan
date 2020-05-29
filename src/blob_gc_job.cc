@@ -151,10 +151,10 @@ Status BlobGCJob::Run() {
 
 Status BlobGCJob::SampleCandidateFiles() {
   TitanStopWatch sw(env_, metrics_.gc_sampling_micros);
-  std::vector<BlobFileMeta*> result;
+  std::vector<std::shared_ptr<BlobFileMeta>> result;
   for (const auto& file : blob_gc_->inputs()) {
     bool selected = false;
-    Status s = DoSample(file, &selected);
+    Status s = DoSample(file.get(), &selected);
     if (!s.ok()) {
       return s;
     }
@@ -441,6 +441,7 @@ Status BlobGCJob::Finish() {
     mutex_->Unlock();
     s = InstallOutputBlobFiles();
     if (s.ok()) {
+      TEST_SYNC_POINT("BlobGCJob::Finish::BeforeRewriteValidKeyToLSM");
       s = RewriteValidKeyToLSM();
       if (!s.ok()) {
         ROCKS_LOG_ERROR(db_options_.info_log,
@@ -462,6 +463,7 @@ Status BlobGCJob::Finish() {
   if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
     s = DeleteInputBlobFiles();
   }
+  TEST_SYNC_POINT("BlobGCJob::Finish::AfterRewriteValidKeyToLSM");
 
   if (s.ok()) {
     UpdateInternalOpStats();
@@ -593,6 +595,11 @@ Status BlobGCJob::DeleteInputBlobFiles() {
                    file->file_number());
     metrics_.gc_num_files++;
     MeasureTime(stats_, TitanStats::GC_INPUT_FILE_SIZE, file->file_size());
+    if (file->is_obsolete()) {
+      // There may be a concurrent DeleteBlobFilesInRanges or GC,
+      // so the input file is already deleted.
+      continue;
+    }
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
   }
   s = blob_file_set_->LogAndApply(edit);
