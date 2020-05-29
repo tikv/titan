@@ -1424,18 +1424,22 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   ASSERT_EQ(blob_files.size(), 1);
 
   SyncPoint::GetInstance()->LoadDependency(
-      {{"TitanDBTest::CompactionDuringGC::ContinueGC",
+      {{"TitanDBImpl::BackgroundGC::BeforeRunGCJob",
+      "TitanDBTest::CompactionDuringGC::WaitGCStart"},
+      {"TitanDBTest::CompactionDuringGC::ContinueGC",
         "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
        {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
-        "TitanDBTest::CompactionDuringGC::WaitGC"}});
+        "TitanDBTest::CompactionDuringGC::WaitGCFinish"}});
   SyncPoint::GetInstance()->EnableProcessing();
   // trigger GC
   CompactAll();
 
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGCStart");
+
   ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
 
   TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::ContinueGC");
-  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGC");
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGCFinish");
 
   blob_storage->ExportBlobFiles(blob_files);
   // rewriting index to LSM failed, but the output blob file is already
