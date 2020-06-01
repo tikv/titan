@@ -29,10 +29,11 @@ void TitanDBOptions::Dump(Logger* logger) const {
                    titan_stats_dump_period_sec);
 }
 
-TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions &cf_opts,
-                               const ImmutableTitanCFOptions &immutable_opts,
-                               const MutableTitanCFOptions &mutable_opts)
-    : ColumnFamilyOptions(cf_opts), min_blob_size(immutable_opts.min_blob_size),
+TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
+                               const ImmutableTitanCFOptions& immutable_opts,
+                               const MutableTitanCFOptions& mutable_opts)
+    : ColumnFamilyOptions(cf_opts),
+      min_blob_size(immutable_opts.min_blob_size),
       blob_file_compression(immutable_opts.blob_file_compression),
       blob_file_target_size(immutable_opts.blob_file_target_size),
       blob_cache(immutable_opts.blob_cache),

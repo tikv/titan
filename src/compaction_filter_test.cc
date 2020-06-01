@@ -66,13 +66,9 @@ public:
     env->DeleteDir(dirname);
   }
 
-  Status Open() {
-    Status s = TitanDB::Open(options_, dbname_, &db_);
-    if (!s.ok()) {
-      return s;
-    }
+  void Open() {
+    ASSERT_OK(TitanDB::Open(options_, dbname_, &db_));
     db_impl_ = reinterpret_cast<TitanDBImpl *>(db_);
-    return Status::OK();
   }
 
   void Close() {
@@ -80,9 +76,8 @@ public:
       return;
 
     ASSERT_OK(db_->Close());
+    delete db_;
     db_ = nullptr;
-    rocksdb::Options opts;
-    ASSERT_OK(rocksdb::DestroyDB(dbname_, opts));
   }
 
   Status Get(const std::string &key, std::string *value) {
@@ -112,10 +107,9 @@ protected:
 };
 
 TEST_F(TitanCompactionFilterTest, CompactNormalValue) {
-  Status s = Open();
-  ASSERT_OK(s);
+  Open();
 
-  s = Put("mykey", "myvalue");
+  Status s = Put("mykey", "myvalue");
   ASSERT_OK(s);
 
   std::string value;
@@ -130,12 +124,11 @@ TEST_F(TitanCompactionFilterTest, CompactNormalValue) {
 }
 
 TEST_F(TitanCompactionFilterTest, CompactBlobValue) {
-  Status s = Open();
-  ASSERT_OK(s);
+  Open();
 
   std::string value = GetBigValue();
   ASSERT_GT(value.length(), options_.min_blob_size);
-  s = Put("bigkey", value);
+  Status s = Put("bigkey", value);
   ASSERT_OK(s);
 
   std::string value1;
@@ -153,12 +146,12 @@ TEST_F(TitanCompactionFilterTest, CompactUpdateValue) {
   options_.blob_file_discardable_ratio = 0.01;
   options_.min_blob_size = 1;
   options_.target_file_size_base = 1;
-  ASSERT_OK(Open());
+  Open();
 
   ASSERT_OK(db_->Put(WriteOptions(), "update-key", "remain1"));
   ASSERT_OK(db_->Put(WriteOptions(), "update-another-key", "remain2"));
   ASSERT_OK(db_->Flush(FlushOptions()));
-  ASSERT_OK(db_->Put(WriteOptions(), "update-key", "remain3"));
+  ASSERT_OK(db_->Put(WriteOptions(), "update-key", "value"));
   ASSERT_OK(db_->Flush(FlushOptions()));
   ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
 
@@ -168,15 +161,14 @@ TEST_F(TitanCompactionFilterTest, CompactUpdateValue) {
   ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
 
   std::string value;
-  ASSERT_OK(db_->Get(ReadOptions(), "update-key", &value));
-  ASSERT_EQ(value, "remain3");
+  ASSERT_TRUE(db_->Get(ReadOptions(), "update-key", &value).IsNotFound());
   ASSERT_OK(db_->Get(ReadOptions(), "update-another-key", &value));
   ASSERT_EQ(value, "remain2");
 }
 
 TEST_F(TitanCompactionFilterTest, CompactSkipValue) {
   options_.skip_value_in_compaction_filter = true;
-  ASSERT_OK(Open());
+  Open();
 
   ASSERT_OK(db_->Put(WriteOptions(), "skip-key", "skip-value"));
   ASSERT_OK(db_->Flush(FlushOptions()));
