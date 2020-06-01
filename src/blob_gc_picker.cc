@@ -19,7 +19,7 @@ BasicBlobGCPicker::~BasicBlobGCPicker() {}
 std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     BlobStorage* blob_storage) {
   Status s;
-  std::vector<BlobFileMeta*> blob_files;
+  std::vector<std::shared_ptr<BlobFileMeta>> blob_files;
 
   uint64_t batch_size = 0;
   uint64_t estimate_output_size = 0;
@@ -39,7 +39,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       continue;
     }
     if (!stop_picking) {
-      blob_files.push_back(blob_file.get());
+      blob_files.emplace_back(blob_file);
       batch_size += blob_file->file_size();
       estimate_output_size += blob_file->live_data_size();
       if (batch_size >= cf_options_.max_gc_batch_size ||

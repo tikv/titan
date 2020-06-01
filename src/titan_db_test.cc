@@ -1461,6 +1461,54 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   CheckBlobFileCount(0);
 }
 
+TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
+  options_.max_background_gc = 1;
+  options_.disable_background_gc = false;
+  options_.blob_file_discardable_ratio = 0.01;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  auto snap = db_->GetSnapshot();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100 * 1024, 'v')));
+  Flush();
+
+  db_->ReleaseSnapshot(snap);
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBImpl::BackgroundGC::BeforeRunGCJob",
+        "TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCStart"},
+       {"TitanDBTest::DeleteFilesInRangeDuringGC::ContinueGC",
+        "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
+       {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
+        "TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCFinish"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  CheckBlobFileCount(1);
+  CompactAll();
+  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(blob_files.size(), 1);
+
+  // trigger GC
+  CompactAll();
+
+  TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCStart");
+  DeleteFilesInRange(nullptr, nullptr);
+
+  TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::ContinueGC");
+  TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCFinish");
+
+  std::string value;
+  Status s = db_->Get(ReadOptions(), "k1", &value);
+  ASSERT_TRUE(s.IsNotFound());
+  // it shouldn't be any background error
+  ASSERT_OK(db_->Flush(FlushOptions()));
+
+  SyncPoint::GetInstance()->DisableProcessing();
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
 

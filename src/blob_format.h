@@ -234,17 +234,16 @@ class BlobFileMeta {
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }
   uint64_t live_data_size() const { return live_data_size_; }
-  void set_live_data_size(uint64_t size) { live_data_size_ = size; }
-  uint64_t file_entries() const { return file_entries_; }
   uint32_t file_level() const { return file_level_; }
   const std::string& smallest_key() const { return smallest_key_; }
   const std::string& largest_key() const { return largest_key_; }
 
+  void set_live_data_size(uint64_t size) { live_data_size_ = size; }
+  uint64_t file_entries() const { return file_entries_; }
   FileState file_state() const { return state_; }
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
 
   void FileStateTransit(const FileEvent& event);
-
   bool UpdateLiveDataSize(int64_t delta) {
     int64_t result = static_cast<int64_t>(live_data_size_) + delta;
     if (result < 0) {
@@ -267,10 +266,9 @@ class BlobFileMeta {
 
  private:
   // Persistent field
+
   uint64_t file_number_{0};
   uint64_t file_size_{0};
-  // Size of data with reference from SST files.
-  uint64_t live_data_size_{0};
   uint64_t file_entries_;
   // Target level of compaction/flush which generates this blob file
   uint32_t file_level_;
@@ -280,7 +278,10 @@ class BlobFileMeta {
   std::string largest_key_;
 
   // Not persistent field
-  FileState state_{FileState::kInit};
+
+  // Size of data with reference from SST files.
+  std::atomic<uint64_t> live_data_size_{0};
+  std::atomic<FileState> state_{FileState::kInit};
 };
 
 // Format of blob file header for version 1 (8 bytes):
