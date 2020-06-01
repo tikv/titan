@@ -187,11 +187,12 @@ struct TitanCFOptions : public ColumnFamilyOptions {
 struct ImmutableTitanCFOptions {
   ImmutableTitanCFOptions() : ImmutableTitanCFOptions(TitanCFOptions()) {}
 
-  explicit ImmutableTitanCFOptions(const TitanCFOptions &opts)
+  explicit ImmutableTitanCFOptions(const TitanCFOptions& opts)
       : min_blob_size(opts.min_blob_size),
         blob_file_compression(opts.blob_file_compression),
         blob_file_target_size(opts.blob_file_target_size),
-        blob_cache(opts.blob_cache), max_gc_batch_size(opts.max_gc_batch_size),
+        blob_cache(opts.blob_cache),
+        max_gc_batch_size(opts.max_gc_batch_size),
         min_gc_batch_size(opts.min_gc_batch_size),
         blob_file_discardable_ratio(opts.blob_file_discardable_ratio),
         sample_file_size_ratio(opts.sample_file_size_ratio),

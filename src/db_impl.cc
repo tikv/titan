@@ -5,22 +5,22 @@
 #endif
 
 #include <inttypes.h>
-#include "logging/log_buffer.h"
-#include "monitoring/statistics_impl.h"
-#include "port/port.h"
-#include "util/autovector.h"
-#include "util/threadpool_imp.h"
 
 #include "base_db_listener.h"
 #include "blob_file_builder.h"
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc.h"
+#include "compaction_filter.h"
 #include "db_iter.h"
+#include "logging/log_buffer.h"
+#include "monitoring/statistics_impl.h"
+#include "port/port.h"
 #include "table_factory.h"
 #include "titan_build_version.h"
 #include "titan_stats.h"
-#include "compaction_filter.h"
+#include "util/autovector.h"
+#include "util/threadpool_imp.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -277,9 +277,11 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
               this, desc.options.skip_value_in_compaction_filter);
 
       if (cf_opts.compaction_filter != nullptr) {
-        titan_cf_factory->SetOriginalCompactionFilter(cf_opts.compaction_filter);
+        titan_cf_factory->SetOriginalCompactionFilter(
+            cf_opts.compaction_filter);
       } else {
-        titan_cf_factory->SetOriginalCompactionFilterFactory(cf_opts.compaction_filter_factory);
+        titan_cf_factory->SetOriginalCompactionFilterFactory(
+            cf_opts.compaction_filter_factory);
       }
 
       cf_opts.compaction_filter = nullptr;
@@ -424,9 +426,11 @@ Status TitanDBImpl::CreateColumnFamilies(
               this, desc.options.skip_value_in_compaction_filter);
 
       if (options.compaction_filter != nullptr) {
-        titan_cf_factory->SetOriginalCompactionFilter(options.compaction_filter);
+        titan_cf_factory->SetOriginalCompactionFilter(
+            options.compaction_filter);
       } else {
-        titan_cf_factory->SetOriginalCompactionFilterFactory(options.compaction_filter_factory);
+        titan_cf_factory->SetOriginalCompactionFilterFactory(
+            options.compaction_filter_factory);
       }
 
       options.compaction_filter = nullptr;
