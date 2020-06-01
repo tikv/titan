@@ -1401,6 +1401,66 @@ TEST_F(TitanDBTest, GCAfterReopen) {
   ASSERT_GT(file2->file_number(), file_number1);
 }
 
+TEST_F(TitanDBTest, CompactionDuringGC) {
+  options_.max_background_gc = 1;
+  options_.disable_background_gc = false;
+  options_.blob_file_discardable_ratio = 0.01;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  auto snap = db_->GetSnapshot();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100 * 1024, 'v')));
+  Flush();
+
+  db_->ReleaseSnapshot(snap);
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBImpl::BackgroundGC::AfterRunGCJob",
+        "TitanDBTest::CompactionDuringGC::WaitGCStart"},
+       {"TitanDBTest::CompactionDuringGC::ContinueGC",
+        "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
+       {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
+        "TitanDBTest::CompactionDuringGC::WaitGCFinish"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  CheckBlobFileCount(1);
+  CompactAll();
+  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(blob_files.size(), 1);
+
+  // trigger GC
+  CompactAll();
+
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGCStart");
+
+  ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
+
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::ContinueGC");
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGCFinish");
+
+  blob_storage->ExportBlobFiles(blob_files);
+  // rewriting index to LSM failed, but the output blob file is already
+  // generated
+  ASSERT_EQ(blob_files.size(), 2);
+
+  std::string value;
+  Status status = db_->Get(ReadOptions(), "k1", &value);
+  ASSERT_EQ(status, Status::NotFound());
+
+  SyncPoint::GetInstance()->DisableProcessing();
+  CheckBlobFileCount(1);
+
+  Flush();
+  CompactAll();
+  CompactAll();
+
+  db_impl_->TEST_StartGC(db_impl_->DefaultColumnFamily()->GetID());
+  CheckBlobFileCount(0);
+}
+
 TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
   options_.max_background_gc = 1;
   options_.disable_background_gc = false;
