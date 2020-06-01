@@ -364,8 +364,6 @@ Status BlobGCJob::Finish() {
     mutex_->Lock();
   }
 
-  // TODO(@DorianZheng) cal discardable size for new blob file
-
   if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
     s = DeleteInputBlobFiles();
   }
@@ -453,6 +451,9 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
   WriteOptions wo;
   wo.low_pri = true;
   wo.ignore_missing_column_families = true;
+
+  std::unordered_map<uint64_t, uint64_t>
+      dropped;  // blob_file_number -> dropped_size
   if (!gc_merge_rewrite_) {
     for (auto& write_batch : rewrite_batches_) {
       if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
@@ -475,6 +476,13 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
         metrics_.gc_num_keys_overwritten++;
         metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
         // The key is overwritten in the meanwhile. Drop the blob record.
+        // Though record is dropped, the diff won't counted in discardable
+        // ratio,
+        // so we should update the live_data_size here.
+        BlobIndex blob_index;
+        Slice str(write_batch.second.value);
+        blob_index.DecodeFrom(&str);
+        dropped[blob_index.file_number] += blob_index.blob_handle.size;
       } else {
         // We hit an error.
         break;
@@ -510,6 +518,30 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
     s = Status::OK();
   }
 
+  mutex_->Lock();
+  auto cf_id = blob_gc_->column_family_handle()->GetID();
+  for (auto blob_file : dropped) {
+    auto blob_storage = blob_file_set_->GetBlobStorage(cf_id).lock();
+    if (blob_storage) {
+      auto file = blob_storage->FindFile(blob_file.first).lock();
+      if (!file) {
+        ROCKS_LOG_ERROR(db_options_.info_log,
+                        "Blob File %" PRIu64 " not found when GC.",
+                        blob_file.first);
+        continue;
+      }
+      SubStats(stats_, cf_id, file->GetDiscardableRatioLevel(), 1);
+      file->UpdateLiveDataSize(-blob_file.second);
+      AddStats(stats_, cf_id, file->GetDiscardableRatioLevel(), 1);
+
+      blob_storage->ComputeGCScore();
+    } else {
+      ROCKS_LOG_ERROR(db_options_.info_log,
+                      "Column family id:%" PRIu32 " not Found when GC.", cf_id);
+    }
+  }
+  mutex_->Unlock();
+
   if (s.ok()) {
     // Flush and sync WAL.
     s = db_impl->FlushWAL(true /*sync*/);
@@ -533,11 +565,14 @@ Status BlobGCJob::DeleteInputBlobFiles() {
     metrics_.gc_num_files++;
     RecordInHistogram(statistics(stats_), TITAN_GC_INPUT_FILE_SIZE,
                       file->file_size());
+    if (file->is_obsolete()) {
+      // There may be a concurrent DeleteBlobFilesInRanges or GC,
+      // so the input file is already deleted.
+      continue;
+    }
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
   }
   s = blob_file_set_->LogAndApply(edit);
-  // TODO(@DorianZheng) Purge pending outputs
-  // base_db_->pending_outputs_.erase(handle->GetNumber());
   return s;
 }
 

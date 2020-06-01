@@ -1681,58 +1681,6 @@ TEST_F(TitanDBTest, LowDiscardableRatio) {
   ASSERT_TRUE(blob_files.begin()->second.lock()->file_size() < prev_file_size);
 }
 
-TEST_F(TitanDBTest, CompactionDuringGC) {
-  options_.max_background_gc = 2;
-  options_.disable_background_gc = false;
-  options_.blob_file_discardable_ratio = 0.01;
-  Open();
-
-  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
-  auto snap = db_->GetSnapshot();
-  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100 * 1024, 'v')));
-  Flush();
-
-  db_->ReleaseSnapshot(snap);
-  CheckBlobFileCount(1);
-  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
-  ASSERT_TRUE(blob_storage != nullptr);
-  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
-  blob_storage->ExportBlobFiles(blob_files);
-  ASSERT_EQ(blob_files.size(), 1);
-  CompactAll();
-
-  SyncPoint::GetInstance()->LoadDependency(
-      {{"TitanDBTest::CompactionDuringGC::ContinueGC",
-        "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
-       {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
-        "TitanDBTest::CompactionDuringGC::WaitGC"}});
-  SyncPoint::GetInstance()->EnableProcessing();
-  // trigger GC
-  CompactAll();
-
-  ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
-  blob_storage->ExportBlobFiles(blob_files);
-  // rewriting index to LSM failed, but the output blob file is already generated
-  ASSERT_EQ(blob_files.size(), 2);
-
-  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::ContinueGC");
-  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGC");
-
-  std::string value;
-  Status status = db_->Get(ReadOptions(), "k1", &value);
-  ASSERT_EQ(status, Status::NotFound());
-
-  SyncPoint::GetInstance()->DisableProcessing();
-  CheckBlobFileCount(1);
-
-  Flush();
-  CompactAll();
-  CompactAll();
-  
-  db_impl_->TEST_StartGC(db_impl_->DefaultColumnFamily()->GetID());
-  CheckBlobFileCount(0);
-}
-
 TEST_F(TitanDBTest, PutDeletedDuringGC) {
   options_.max_background_gc = 2;
   options_.disable_background_gc = false;
@@ -1822,6 +1770,114 @@ TEST_F(TitanDBTest, IngestDuringGC) {
   ASSERT_EQ(value, std::string(100 * 1024, 'v'));
 }
 
+TEST_F(TitanDBTest, CompactionDuringGC) {
+  options_.max_background_gc = 1;
+  options_.disable_background_gc = false;
+  options_.blob_file_discardable_ratio = 0.01;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  auto snap = db_->GetSnapshot();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100 * 1024, 'v')));
+  Flush();
+
+  db_->ReleaseSnapshot(snap);
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBImpl::BackgroundGC::AfterRunGCJob",
+        "TitanDBTest::CompactionDuringGC::WaitGCStart"},
+       {"TitanDBTest::CompactionDuringGC::ContinueGC",
+        "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
+       {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
+        "TitanDBTest::CompactionDuringGC::WaitGCFinish"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  CheckBlobFileCount(1);
+  CompactAll();
+  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(blob_files.size(), 1);
+
+  // trigger GC
+  CompactAll();
+
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGCStart");
+
+  ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
+
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::ContinueGC");
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGCFinish");
+
+  blob_storage->ExportBlobFiles(blob_files);
+  // rewriting index to LSM failed, but the output blob file is already
+  // generated
+  ASSERT_EQ(blob_files.size(), 2);
+
+  std::string value;
+  Status status = db_->Get(ReadOptions(), "k1", &value);
+  ASSERT_EQ(status, Status::NotFound());
+
+  SyncPoint::GetInstance()->DisableProcessing();
+  CheckBlobFileCount(1);
+
+  Flush();
+  CompactAll();
+  CompactAll();
+
+  db_impl_->TEST_StartGC(db_impl_->DefaultColumnFamily()->GetID());
+  CheckBlobFileCount(0);
+}
+
+TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
+  options_.max_background_gc = 1;
+  options_.disable_background_gc = false;
+  options_.blob_file_discardable_ratio = 0.01;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  auto snap = db_->GetSnapshot();
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(100 * 1024, 'v')));
+  Flush();
+
+  db_->ReleaseSnapshot(snap);
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBImpl::BackgroundGC::BeforeRunGCJob",
+        "TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCStart"},
+       {"TitanDBTest::DeleteFilesInRangeDuringGC::ContinueGC",
+        "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
+       {"BlobGCJob::Finish::AfterRewriteValidKeyToLSM",
+        "TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCFinish"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  CheckBlobFileCount(1);
+  CompactAll();
+  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
+  ASSERT_TRUE(blob_storage != nullptr);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage->ExportBlobFiles(blob_files);
+  ASSERT_EQ(blob_files.size(), 1);
+
+  // trigger GC
+  CompactAll();
+
+  TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCStart");
+  DeleteFilesInRange(nullptr, nullptr);
+
+  TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::ContinueGC");
+  TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCFinish");
+
+  std::string value;
+  Status s = db_->Get(ReadOptions(), "k1", &value);
+  ASSERT_TRUE(s.IsNotFound());
+  // it shouldn't be any background error
+  ASSERT_OK(db_->Flush(FlushOptions()));
+
+  SyncPoint::GetInstance()->DisableProcessing();
+}
+
 TEST_F(TitanDBTest, Config) {
   options_.disable_background_gc = false;
 
@@ -1854,7 +1910,7 @@ TEST_F(TitanDBTest, Config) {
 }
 
 TEST_F(TitanDBTest, NoSpaceLeft) {
-  #if defined(__linux)
+#if defined(__linux)
   options_.disable_background_gc = false;
   system(("mkdir -p " + dbname_).c_str());
   system(("sudo mount -t tmpfs -o size=1m tmpfs " + dbname_).c_str());
@@ -1869,7 +1925,7 @@ TEST_F(TitanDBTest, NoSpaceLeft) {
 
   Close();
   system(("sudo umount -l " + dbname_).c_str());
-  #endif
+#endif
 }
 }  // namespace titandb
 }  // namespace rocksdb
