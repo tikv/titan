@@ -5,7 +5,7 @@ namespace rocksdb {
 namespace titandb {
 
 class TestCompactionFilter : public CompactionFilter {
-public:
+ public:
   explicit TestCompactionFilter(uint64_t min_blob_size)
       : min_blob_size_(min_blob_size) {}
 
@@ -18,7 +18,7 @@ public:
     return !value.starts_with("remain");
   }
 
-private:
+ private:
   void AssertValue(const Slice &key, const Slice &value) const {
     if (key.ToString() == "mykey") {
       ASSERT_EQ(value.ToString(), "myvalue");
@@ -35,7 +35,7 @@ private:
 };
 
 class TitanCompactionFilterTest : public testing::Test {
-public:
+ public:
   TitanCompactionFilterTest() : dbname_(test::TmpDir()) {
     options_.dirname = dbname_ + "/titandb";
     options_.create_if_missing = true;
@@ -72,8 +72,7 @@ public:
   }
 
   void Close() {
-    if (!db_)
-      return;
+    if (!db_) return;
 
     ASSERT_OK(db_->Close());
     delete db_;
@@ -99,7 +98,7 @@ public:
     ASSERT_OK(db_->CompactRange(copts, nullptr, nullptr));
   }
 
-protected:
+ protected:
   std::string dbname_;
   TitanOptions options_;
   TitanDB *db_{nullptr};
@@ -178,8 +177,8 @@ TEST_F(TitanCompactionFilterTest, CompactSkipValue) {
   ASSERT_TRUE(db_->Get(ReadOptions(), "skip-key", &value).IsNotFound());
 }
 
-} // namespace titandb
-} // namespace rocksdb
+}  // namespace titandb
+}  // namespace rocksdb
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
