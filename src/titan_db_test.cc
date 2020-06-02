@@ -9,6 +9,7 @@
 #include "test_util/sync_point.h"
 #include "test_util/testharness.h"
 #include "util/random.h"
+#include "util/stderr_logger.h"
 
 #include "blob_file_iterator.h"
 #include "blob_file_reader.h"
@@ -1399,6 +1400,47 @@ TEST_F(TitanDBTest, GCAfterReopen) {
   ASSERT_EQ(1, blob_files.size());
   std::shared_ptr<BlobFileMeta> file2 = blob_files.begin()->second.lock();
   ASSERT_GT(file2->file_number(), file_number1);
+}
+
+TEST_F(TitanDBTest, CompactionDuringFlush) {
+  options_.max_background_gc = 1;
+  options_.disable_background_gc = true;
+  options_.info_log.reset(new StderrLogger());
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", "value"));
+  Flush();
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBImpl::OnFlushCompleted:Begin1",
+        "TitanDBTest::CompactionDuringFlush::WaitFlushStart"},
+       {"TitanDBTest::CompactionDuringFlush::ContinueFlush",
+        "TitanDBImpl::OnFlushCompleted:Begin"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  auto snap = db_->GetSnapshot();
+  ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
+
+  port::Thread writer([&]() { Flush(); });
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringFlush::WaitFlushStart");
+  db_->ReleaseSnapshot(snap);
+
+  auto compact_opts = CompactRangeOptions();
+  compact_opts.bottommost_level_compaction = BottommostLevelCompaction::kForce;
+  ASSERT_OK(db_->CompactRange(compact_opts, nullptr, nullptr));
+  ASSERT_OK(db_->CompactRange(compact_opts, nullptr, nullptr));
+
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringFlush::ContinueFlush");
+  writer.join();
+  CheckBlobFileCount(1);
+  SyncPoint::GetInstance()->DisableProcessing();
+  
+  std::string value;
+  Status s = db_->Get(ReadOptions(), "k1", &value);
+  ASSERT_TRUE(s.IsNotFound());
+  // it shouldn't be any background error
+  ASSERT_OK(db_->Flush(FlushOptions()));
 }
 
 TEST_F(TitanDBTest, CompactionDuringGC) {
