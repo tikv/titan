@@ -1435,7 +1435,7 @@ TEST_F(TitanDBTest, CompactionDuringFlush) {
   writer.join();
   CheckBlobFileCount(1);
   SyncPoint::GetInstance()->DisableProcessing();
-  
+
   std::string value;
   Status s = db_->Get(ReadOptions(), "k1", &value);
   ASSERT_TRUE(s.IsNotFound());
