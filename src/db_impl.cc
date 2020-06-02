@@ -1262,7 +1262,7 @@ void TitanDBImpl::OnCompactionCompleted(
                    file->GetDiscardableRatioLevel(), 1);
           ROCKS_LOG_INFO(db_options_.info_log,
                          "OnCompactionCompleted[%d]: Get blob file %" PRIu64
-                         " live size being negative %ld, maybe due to "
+                         " live size being negative %lld, maybe due to "
                          "OnFlushCompleted() is called yet",
                          compaction_job_info.job_id, file_number, delta);
           continue;
