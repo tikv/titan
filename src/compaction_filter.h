@@ -35,9 +35,9 @@ public:
                    std::string *skip_until) const override {
    if (skip_value_) {
      return original_filter_ != nullptr
-                ? original_filter_->FilterV2(level, key, kValue, Slice(),
+                ? original_filter_->FilterV2(level, key, value_type, Slice(),
                                              new_value, skip_until)
-                : owned_filter_->FilterV2(level, key, kValue, Slice(),
+                : owned_filter_->FilterV2(level, key, value_type, Slice(),
                                           new_value, skip_until);
    }
    if (value_type != kBlobIndex) {
