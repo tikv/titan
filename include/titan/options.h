@@ -165,7 +165,8 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: false
   bool gc_merge_rewrite{false};
 
-  // If set true, Titan will pass empty value in user compaction filter.
+  // If set true, Titan will pass empty value in user compaction filter,
+  // improves compaction performance by avoid fetching value from blob files.
   //
   // Default: false
   bool skip_value_in_compaction_filter{false};
