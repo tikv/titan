@@ -9,7 +9,6 @@
 #include "test_util/sync_point.h"
 #include "test_util/testharness.h"
 #include "util/random.h"
-#include "util/stderr_logger.h"
 
 #include "blob_file_iterator.h"
 #include "blob_file_reader.h"
@@ -1405,7 +1404,6 @@ TEST_F(TitanDBTest, GCAfterReopen) {
 TEST_F(TitanDBTest, CompactionDuringFlush) {
   options_.max_background_gc = 1;
   options_.disable_background_gc = true;
-  options_.info_log.reset(new StderrLogger());
   Open();
 
   ASSERT_OK(db_->Put(WriteOptions(), "k1", "value"));
