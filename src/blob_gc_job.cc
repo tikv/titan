@@ -364,8 +364,6 @@ Status BlobGCJob::Finish() {
     mutex_->Lock();
   }
 
-  // TODO(@DorianZheng) cal discardable size for new blob file
-
   if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
     s = DeleteInputBlobFiles();
   }
@@ -567,11 +565,14 @@ Status BlobGCJob::DeleteInputBlobFiles() {
     metrics_.gc_num_files++;
     RecordInHistogram(statistics(stats_), TITAN_GC_INPUT_FILE_SIZE,
                       file->file_size());
+    if (file->is_obsolete()) {
+      // There may be a concurrent DeleteBlobFilesInRanges or GC,
+      // so the input file is already deleted.
+      continue;
+    }
     edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
   }
   s = blob_file_set_->LogAndApply(edit);
-  // TODO(@DorianZheng) Purge pending outputs
-  // base_db_->pending_outputs_.erase(handle->GetNumber());
   return s;
 }
 
