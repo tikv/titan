@@ -83,8 +83,6 @@ Status TitanDBImpl::InitializeGC(
           blob_storage->FindFile(file_size.first).lock();
       if (file != nullptr) {
         assert(file->live_data_size() == 0);
-        SubStats(stats_.get(), cf_handle->GetID(),
-                 file->GetDiscardableRatioLevel(), 1);
         file->set_live_data_size(static_cast<uint64_t>(file_size.second));
         AddStats(stats_.get(), cf_handle->GetID(),
                  file->GetDiscardableRatioLevel(), 1);
@@ -213,6 +211,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
       mutex_.Unlock();
       TEST_SYNC_POINT("TitanDBImpl::BackgroundGC::BeforeRunGCJob");
       s = blob_gc_job.Run();
+      TEST_SYNC_POINT("TitanDBImpl::BackgroundGC::AfterRunGCJob");
       mutex_.Lock();
     }
     if (s.ok()) {
