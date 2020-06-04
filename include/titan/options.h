@@ -165,6 +165,12 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: false
   bool gc_merge_rewrite{false};
 
+  // If set true, Titan will pass empty value in user compaction filter,
+  // improves compaction performance by avoid fetching value from blob files.
+  //
+  // Default: false
+  bool skip_value_in_compaction_filter{false};
+
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}
@@ -192,7 +198,8 @@ struct ImmutableTitanCFOptions {
         blob_file_discardable_ratio(opts.blob_file_discardable_ratio),
         sample_file_size_ratio(opts.sample_file_size_ratio),
         merge_small_file_threshold(opts.merge_small_file_threshold),
-        level_merge(opts.level_merge) {}
+        level_merge(opts.level_merge),
+        skip_value_in_compaction_filter(opts.skip_value_in_compaction_filter) {}
 
   uint64_t min_blob_size;
 
@@ -213,6 +220,8 @@ struct ImmutableTitanCFOptions {
   uint64_t merge_small_file_threshold;
 
   bool level_merge;
+
+  bool skip_value_in_compaction_filter;
 };
 
 struct MutableTitanCFOptions {
