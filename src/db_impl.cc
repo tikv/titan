@@ -5,21 +5,22 @@
 #endif
 
 #include <inttypes.h>
-#include "logging/log_buffer.h"
-#include "monitoring/statistics_impl.h"
-#include "port/port.h"
-#include "util/autovector.h"
-#include "util/threadpool_imp.h"
 
 #include "base_db_listener.h"
 #include "blob_file_builder.h"
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc.h"
+#include "compaction_filter.h"
 #include "db_iter.h"
+#include "logging/log_buffer.h"
+#include "monitoring/statistics_impl.h"
+#include "port/port.h"
 #include "table_factory.h"
 #include "titan_build_version.h"
 #include "titan_stats.h"
+#include "util/autovector.h"
+#include "util/threadpool_imp.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -269,6 +270,15 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
         blob_file_set_.get(), stats_.get()));
     cf_opts.table_factory = titan_table_factories.back();
     cf_opts.merge_operator = shared_merge_operator_;
+    if (cf_opts.compaction_filter != nullptr ||
+        cf_opts.compaction_filter_factory != nullptr) {
+      std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
+          std::make_shared<TitanCompactionFilterFactory>(
+              cf_opts.compaction_filter, cf_opts.compaction_filter_factory,
+              this, desc.options.skip_value_in_compaction_filter, desc.name);
+      cf_opts.compaction_filter = nullptr;
+      cf_opts.compaction_filter_factory = titan_cf_factory;
+    }
   }
   // Initialize GC thread pool.
   if (!db_options_.disable_background_gc && db_options_.max_background_gc > 0) {
@@ -400,6 +410,16 @@ Status TitanDBImpl::CreateColumnFamilies(
         std::make_shared<BlobFileSizeCollectorFactory>());
     options.merge_operator = shared_merge_operator_;
     base_descs.emplace_back(desc.name, options);
+
+    if (options.compaction_filter != nullptr ||
+        options.compaction_filter_factory != nullptr) {
+      std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
+          std::make_shared<TitanCompactionFilterFactory>(
+              options.compaction_filter, options.compaction_filter_factory,
+              this, desc.options.skip_value_in_compaction_filter, desc.name);
+      options.compaction_filter = nullptr;
+      options.compaction_filter_factory = titan_cf_factory;
+    }
   }
 
   Status s = db_impl_->CreateColumnFamilies(base_descs, handles);

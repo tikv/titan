@@ -43,7 +43,9 @@ TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
       sample_file_size_ratio(immutable_opts.sample_file_size_ratio),
       merge_small_file_threshold(immutable_opts.merge_small_file_threshold),
       blob_run_mode(mutable_opts.blob_run_mode),
-      gc_merge_rewrite(mutable_opts.gc_merge_rewrite) {}
+      gc_merge_rewrite(mutable_opts.gc_merge_rewrite),
+      skip_value_in_compaction_filter(
+          immutable_opts.skip_value_in_compaction_filter) {}
 
 void TitanCFOptions::Dump(Logger* logger) const {
   ROCKS_LOG_HEADER(logger,
