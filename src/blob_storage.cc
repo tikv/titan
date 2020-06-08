@@ -91,7 +91,14 @@ void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   files_.emplace(std::make_pair(file->file_number(), file));
   blob_ranges_.emplace(std::make_pair(Slice(file->smallest_key()), file));
   levels_file_count_[file->file_level()]++;
-  AddStats(stats_, cf_id_, file->GetDiscardableRatioLevel(), 1);
+  if (file->live_data_size() != 0) {
+    // When live data size == 0, it means the live size of blob file is unknown
+    // now.
+    // So don't count this metrics now, it will delayed to when setting the real
+    // live data size
+    // in `InitializeGC()` and `OnFlushCompleted()`/`OnCompactionCompleted()`.
+    AddStats(stats_, cf_id_, file->GetDiscardableRatioLevel(), 1);
+  }
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_FILE_SIZE,
            file->file_size());
   AddStats(stats_, cf_id_, TitanInternalStats::NUM_LIVE_BLOB_FILE, 1);

@@ -1770,6 +1770,46 @@ TEST_F(TitanDBTest, IngestDuringGC) {
   ASSERT_EQ(value, std::string(100 * 1024, 'v'));
 }
 
+TEST_F(TitanDBTest, CompactionDuringFlush) {
+  options_.max_background_gc = 1;
+  options_.disable_background_gc = true;
+  Open();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", "value"));
+  Flush();
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBImpl::OnFlushCompleted:Begin1",
+        "TitanDBTest::CompactionDuringFlush::WaitFlushStart"},
+       {"TitanDBTest::CompactionDuringFlush::ContinueFlush",
+        "TitanDBImpl::OnFlushCompleted:Begin"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  ASSERT_OK(db_->Put(WriteOptions(), "k1", std::string(10 * 1024, 'v')));
+  auto snap = db_->GetSnapshot();
+  ASSERT_OK(db_->Delete(WriteOptions(), "k1"));
+
+  port::Thread writer([&]() { Flush(); });
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringFlush::WaitFlushStart");
+  db_->ReleaseSnapshot(snap);
+
+  auto compact_opts = CompactRangeOptions();
+  compact_opts.bottommost_level_compaction = BottommostLevelCompaction::kForce;
+  ASSERT_OK(db_->CompactRange(compact_opts, nullptr, nullptr));
+  ASSERT_OK(db_->CompactRange(compact_opts, nullptr, nullptr));
+
+  TEST_SYNC_POINT("TitanDBTest::CompactionDuringFlush::ContinueFlush");
+  writer.join();
+  CheckBlobFileCount(1);
+  SyncPoint::GetInstance()->DisableProcessing();
+
+  std::string value;
+  Status s = db_->Get(ReadOptions(), "k1", &value);
+  ASSERT_TRUE(s.IsNotFound());
+  // it shouldn't be any background error
+  ASSERT_OK(db_->Flush(FlushOptions()));
+}
+
 TEST_F(TitanDBTest, CompactionDuringGC) {
   options_.max_background_gc = 1;
   options_.disable_background_gc = false;

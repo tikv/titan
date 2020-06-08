@@ -280,6 +280,15 @@ class BlobFileMeta {
   // Not persistent field
 
   // Size of data with reference from SST files.
+  //
+  // Because the new generated SST is added to superversion before
+  // `OnFlushCompleted()`/`OnCompactionCompleted()` is called, so if there is a
+  // later compaction trigger by the new generated SST, the later
+  // `OnCompactionCompleted()` maybe called before the previous events'
+  // `OnFlushCompleted()`/`OnCompactionCompleted()` is called.
+  // So when state_ == kPendingLSM, it uses this to record the delta as a
+  // positive number if any later compaction is trigger before previous
+  // `OnCompactionCompleted()` is called.
   std::atomic<uint64_t> live_data_size_{0};
   std::atomic<FileState> state_{FileState::kInit};
 };
