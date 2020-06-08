@@ -1410,12 +1410,12 @@ TEST_F(TitanDBTest, VeryLargeValue) {
   Open();
 
   ASSERT_OK(
-      db_->Put(WriteOptions(), "k1", std::string(1000 * 1024 * 1024, 'v')));
+      db_->Put(WriteOptions(), "k1", std::string(100 * 1024 * 1024, 'v')));
   Flush();
 
   std::string value;
   ASSERT_OK(db_->Get(ReadOptions(), "k1", &value));
-  ASSERT_EQ(value.size(), 1000 * 1024 * 1024);
+  ASSERT_EQ(value.size(), 100 * 1024 * 1024);
 
   Close();
 }
