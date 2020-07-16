@@ -157,6 +157,9 @@ class TitanCompactionFilterFactory final : public CompactionFilterFactory {
           original_filter_factory_->CreateCompactionFilter(context);
       original_filter = original_filter_from_factory.get();
     }
+
+    if (UNLIKELY(original_filter == nullptr)) return nullptr;
+
     return std::unique_ptr<CompactionFilter>(new TitanCompactionFilter(
         titan_db_impl_, cf_name_, original_filter,
         std::move(original_filter_from_factory), blob_storage, skip_value_));
