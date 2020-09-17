@@ -247,6 +247,7 @@ class TitanDBTest : public testing::Test {
   void DeleteFilesInRange(const Slice* begin, const Slice* end) {
     RangePtr range(begin, end);
     ASSERT_OK(db_->DeleteFilesInRanges(db_->DefaultColumnFamily(), &range, 1));
+    ASSERT_OK(db_->DeleteBlobFilesInRanges(db_->DefaultColumnFamily(), &range, 1));
   }
 
   std::string GenKey(uint64_t i) {
