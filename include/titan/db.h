@@ -129,8 +129,8 @@ class TitanDB : public StackableDB {
                                      bool include_end = true) = 0;
 
   virtual Status DeleteBlobFilesInRanges(ColumnFamilyHandle* column_family,
-                                     const RangePtr* ranges, size_t n,
-                                     bool include_end = true) = 0;
+                                         const RangePtr* ranges, size_t n,
+                                         bool include_end = true) = 0;
 
   using rocksdb::StackableDB::GetOptions;
   Options GetOptions(ColumnFamilyHandle* column_family) const override = 0;

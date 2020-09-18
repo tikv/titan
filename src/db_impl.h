@@ -115,8 +115,8 @@ class TitanDBImpl : public TitanDB {
                              bool include_end = true) override;
 
   Status DeleteBlobFilesInRanges(ColumnFamilyHandle* column_family,
-                                     const RangePtr* ranges, size_t n,
-                                     bool include_end = true) override;
+                                 const RangePtr* ranges, size_t n,
+                                 bool include_end = true) override;
 
   using TitanDB::GetOptions;
   Options GetOptions(ColumnFamilyHandle* column_family) const override;

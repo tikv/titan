@@ -921,12 +921,12 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
 }
 
 Status TitanDBImpl::DeleteBlobFilesInRanges(ColumnFamilyHandle* column_family,
-                                        const RangePtr* ranges, size_t n,
-                                        bool include_end) {
+                                            const RangePtr* ranges, size_t n,
+                                            bool include_end) {
   MutexLock l(&mutex_);
   SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
-  Status s = blob_file_set_->DeleteBlobFilesInRanges(column_family->GetID(), ranges, n, include_end,
-                                              obsolete_sequence);
+  Status s = blob_file_set_->DeleteBlobFilesInRanges(
+      column_family->GetID(), ranges, n, include_end, obsolete_sequence);
   return s;
 }
 
