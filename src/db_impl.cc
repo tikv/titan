@@ -862,11 +862,6 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   if (!s.ok()) return s;
 
   MutexLock l(&mutex_);
-  SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
-  s = blob_file_set_->DeleteBlobFilesInRanges(cf_id, ranges, n, include_end,
-                                              obsolete_sequence);
-  if (!s.ok()) return s;
-
   auto bs = blob_file_set_->GetBlobStorage(cf_id).lock();
   if (!bs) {
     // TODO: Should treat it as background error and make DB read-only.
@@ -922,6 +917,16 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     MaybeScheduleGC();
   }
 
+  return s;
+}
+
+Status TitanDBImpl::DeleteBlobFilesInRanges(ColumnFamilyHandle* column_family,
+                                            const RangePtr* ranges, size_t n,
+                                            bool include_end) {
+  MutexLock l(&mutex_);
+  SequenceNumber obsolete_sequence = db_impl_->GetLatestSequenceNumber();
+  Status s = blob_file_set_->DeleteBlobFilesInRanges(
+      column_family->GetID(), ranges, n, include_end, obsolete_sequence);
   return s;
 }
 
