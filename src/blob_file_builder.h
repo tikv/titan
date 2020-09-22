@@ -63,6 +63,31 @@ class BlobFileBuilder {
   uint64_t live_data_size() const { return live_data_size_; }
 
  private:
+  // States of the builder.
+  //
+  // - `kBuffered`: This is the initial state where zero or more data blocks are
+  //   accumulated uncompressed in-memory. From this state, call
+  //   `EnterUnbuffered()` to finalize the compression dictionary if enabled,
+  //   compress/write out any buffered blocks, and proceed to the `kUnbuffered`
+  //   state.
+  //
+  // - `kUnbuffered`: This is the state when compression dictionary is finalized
+  //   either because it wasn't enabled in the first place or it's been created
+  //   from sampling previously buffered data. In this state, blocks are simply
+  //   compressed/written out as they fill up. From this state, call `Finish()`
+  //   to complete the file (write meta-blocks, etc.), or `Abandon()` to delete
+  //   the partially created file.
+  //
+  // - `kClosed`: This indicates either `Finish()` or `Abandon()` has been
+  //   called, so the table builder is no longer usable. We must be in this
+  //   state by the time the destructor runs.
+  enum class BuilderState {
+    kBuffered,
+    kUnbuffered,
+    kClosed,
+  };
+  BuilderState builder_state_;
+
   bool ok() const { return status().ok(); }
 
   TitanCFOptions cf_options_;
@@ -70,6 +95,8 @@ class BlobFileBuilder {
 
   Status status_;
   BlobEncoder encoder_;
+  std::vector<BlobRecord> sample_records_;
+  uint64_t sample_str_len_ = 0;
 
   uint64_t num_entries_ = 0;
   std::string smallest_key_;

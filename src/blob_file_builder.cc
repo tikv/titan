@@ -6,18 +6,33 @@ namespace titandb {
 BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
                                  const TitanCFOptions& cf_options,
                                  WritableFileWriter* file)
-    : cf_options_(cf_options),
+    : builder_state_(cf_options.blob_file_compression_options.max_dict_bytes > 0
+                         ? BuilderState::kBuffered
+                         : BuilderState::kUnbuffered),
+      cf_options_(cf_options),
       file_(file),
       encoder_(cf_options_.blob_file_compression) {
-  BlobFileHeader header;
+  BlobFileHeader header(cf_options.blob_file_compression_options);
   std::string buffer;
   header.EncodeTo(&buffer);
   status_ = file_->Append(buffer);
 }
 
 void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
-  if (!ok()) return;
+  if (!ok())
+    return;
+  if (builder_state_ == BuilderState::kBuffered) {
+    sample_records_.emplace_back(record);
+    sample_str_len_ += (16 /* 2 extra Varint64 */ + record.size());
+    if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0 &&
+        sample_str_len_ >=
+            cf_options_.blob_file_compression_options.zstd_max_train_bytes) {
+      // TODO: should enter unbuffered state
+    }
+    return;
+  }
 
+  // unbuffered state
   encoder_.EncodeRecord(record);
   handle->offset = file_->GetFileSize();
   handle->size = encoder_.GetEncodedSize();
@@ -40,7 +55,8 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
 }
 
 Status BlobFileBuilder::Finish() {
-  if (!ok()) return status();
+  if (!ok())
+    return status();
 
   std::string buffer;
   BlobFileFooter footer;
@@ -56,7 +72,9 @@ Status BlobFileBuilder::Finish() {
 
 void BlobFileBuilder::Abandon() {}
 
-uint64_t BlobFileBuilder::NumEntries() { return num_entries_; }
+uint64_t BlobFileBuilder::NumEntries() {
+  return num_entries_;
+}
 
 }  // namespace titandb
 }  // namespace rocksdb
