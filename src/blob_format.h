@@ -312,6 +312,10 @@ class BlobFileMeta {
 // The header is mean to be compatible with header of BlobDB blob files, except
 // we use a different magic number.
 struct BlobFileHeader {
+  BlobFileHeader(const CompressionOptions& blob_file_compression_options) {
+    if (blob_file_compression_options.max_dict_bytes > 0)
+      flags |= kHasUncompressionDictionary;
+  };
   // The first 32bits from $(echo titandb/blob | sha1sum).
   static const uint32_t kHeaderMagicNumber = 0x2be0a614ul;
   static const uint32_t kVersion1 = 1;
