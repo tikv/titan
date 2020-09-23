@@ -64,12 +64,21 @@ class BlobEncoder {
   BlobEncoder(CompressionType compression,
               const CompressionDict& compression_dict)
       : compression_ctx_(compression),
-        compression_info_(compression_opt_, compression_ctx_, compression_dict,
-                          compression, 0 /*sample_for_compression*/) {}
+        compression_info_(new CompressionInfo(
+            compression_opt_, compression_ctx_, compression_dict, compression,
+            0 /*sample_for_compression*/)) {}
   BlobEncoder(CompressionType compression)
       : BlobEncoder(compression, CompressionDict::GetEmptyDict()) {}
 
   void EncodeRecord(const BlobRecord& record);
+  void SetCompressionDict(const CompressionDict& compression_dict) {
+    compression_info_.reset(new CompressionInfo(
+        compression_opt_, compression_ctx_, compression_dict,
+        compression_info_->type(), compression_info_->SampleForCompression()));
+  }
+  Slice GetCompressionDict() const {
+    return compression_info_->dict().GetRawDict();
+  }
 
   Slice GetHeader() const { return Slice(header_, sizeof(header_)); }
   Slice GetRecord() const { return record_; }
@@ -83,7 +92,7 @@ class BlobEncoder {
   std::string compressed_buffer_;
   CompressionOptions compression_opt_;
   CompressionContext compression_ctx_;
-  CompressionInfo compression_info_;
+  std::unique_ptr<CompressionInfo> compression_info_;
 };
 
 class BlobDecoder {

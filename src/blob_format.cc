@@ -40,7 +40,8 @@ void BlobEncoder::EncodeRecord(const BlobRecord& record) {
 
   CompressionType compression;
   record.EncodeTo(&record_buffer_);
-  record_ = Compress(compression_info_, record_buffer_, &compressed_buffer_,
+
+  record_ = Compress(*compression_info_, record_buffer_, &compressed_buffer_,
                      &compression);
 
   assert(record_.size() < std::numeric_limits<uint32_t>::max());
