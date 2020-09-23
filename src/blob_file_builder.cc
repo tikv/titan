@@ -19,19 +19,25 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
 }
 
 void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
-  if (!ok())
-    return;
+  if (!ok()) return;
   if (builder_state_ == BuilderState::kBuffered) {
     sample_records_.emplace_back(record);
     sample_str_len_ += (16 /* 2 extra Varint64 */ + record.size());
     if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0 &&
         sample_str_len_ >=
             cf_options_.blob_file_compression_options.zstd_max_train_bytes) {
-      // TODO: should enter unbuffered state
+      EnterUnbuffered();
+      // add history buffer
+      for (const BlobRecord& rec : sample_records_) {
+        Add(rec, handle);
+      }
+      sample_records_.clear();
+      sample_str_len_ = 0;
     }
     return;
   }
 
+  assert(builder_state_ == BuilderState::kUnbuffered);
   // unbuffered state
   encoder_.EncodeRecord(record);
   handle->offset = file_->GetFileSize();
@@ -54,9 +60,42 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
   }
 }
 
+void BlobFileBuilder::EnterUnbuffered() {
+  // Using collected samples to train the compression dictionary
+  // Then replay those records in memory, encode them to blob file
+  // When above things are done, transform builder state into unbuffered
+  std::string samples = "";
+  std::vector<size_t> sample_lens;
+  std::string rec_str;
+
+  const size_t kSampleBytes =
+      cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0
+          ? cf_options_.blob_file_compression_options.zstd_max_train_bytes
+          : cf_options_.blob_file_compression_options.max_dict_bytes;
+  for (const auto& rec : sample_records_) {
+    rec.EncodeTo(&rec_str);
+    size_t copy_len = std::min(kSampleBytes - samples.size(), rec_str.size());
+    samples.append(rec_str, 0, copy_len);
+    sample_lens.emplace_back(copy_len);
+  }
+  std::string dict;
+  if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0) {
+    dict = ZSTD_TrainDictionary(
+        samples, sample_lens,
+        cf_options_.blob_file_compression_options.max_dict_bytes);
+  } else {
+    dict = std::move(samples);
+  }
+  CompressionDict compression_dict(
+      dict, cf_options_.blob_file_compression,
+      cf_options_.blob_file_compression_options.level);
+  encoder_.SetCompressionDict(compression_dict);
+
+  builder_state_ = BuilderState::kUnbuffered;
+}
+
 Status BlobFileBuilder::Finish() {
-  if (!ok())
-    return status();
+  if (!ok()) return status();
 
   std::string buffer;
   BlobFileFooter footer;
@@ -72,9 +111,7 @@ Status BlobFileBuilder::Finish() {
 
 void BlobFileBuilder::Abandon() {}
 
-uint64_t BlobFileBuilder::NumEntries() {
-  return num_entries_;
-}
+uint64_t BlobFileBuilder::NumEntries() { return num_entries_; }
 
 }  // namespace titandb
 }  // namespace rocksdb

@@ -2,6 +2,7 @@
 
 #include "blob_format.h"
 #include "titan/options.h"
+#include "util/compression.h"
 #include "util/file_reader_writer.h"
 
 namespace rocksdb {
@@ -42,6 +43,10 @@ class BlobFileBuilder {
   // Adds the record to the file and points the handle to it.
   void Add(const BlobRecord& record, BlobHandle* handle);
 
+  // Enter unbuffered state, only be called after collecting enough samples
+  // for compression dictionary
+  void EnterUnbuffered();
+
   // Returns non-ok iff some error has been detected.
   Status status() const { return status_; }
 
@@ -77,14 +82,9 @@ class BlobFileBuilder {
   //   compressed/written out as they fill up. From this state, call `Finish()`
   //   to complete the file (write meta-blocks, etc.), or `Abandon()` to delete
   //   the partially created file.
-  //
-  // - `kClosed`: This indicates either `Finish()` or `Abandon()` has been
-  //   called, so the table builder is no longer usable. We must be in this
-  //   state by the time the destructor runs.
   enum class BuilderState {
     kBuffered,
     kUnbuffered,
-    kClosed,
   };
   BuilderState builder_state_;
 
