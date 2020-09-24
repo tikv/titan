@@ -27,7 +27,7 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
     std::string rec_str;
     record.EncodeTo(&rec_str);
     sample_records_.emplace_back(rec_str);
-    sample_str_len_ += (16 /* 2 extra Varint64 */ + record.size());
+    sample_str_len_ += rec_str.size();
     if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0 &&
         sample_str_len_ >=
             cf_options_.blob_file_compression_options.zstd_max_train_bytes) {
