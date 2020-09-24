@@ -61,23 +61,28 @@ struct BlobRecord {
 
 class BlobEncoder {
  public:
+  BlobEncoder(CompressionType compression, CompressionOptions compression_opt,
+              const CompressionDict& compression_dict)
+      : compression_opt_(compression_opt),
+        compression_ctx_(compression),
+        compression_info_(new CompressionInfo(compression_opt, compression_ctx_,
+                                              compression_dict, compression,
+                                              0 /*sample_for_compression*/)) {}
+  BlobEncoder(CompressionType compression)
+      : BlobEncoder(compression, CompressionOptions(),
+                    CompressionDict::GetEmptyDict()) {}
   BlobEncoder(CompressionType compression,
               const CompressionDict& compression_dict)
-      : compression_ctx_(compression),
-        compression_info_(new CompressionInfo(
-            compression_opt_, compression_ctx_, compression_dict, compression,
-            0 /*sample_for_compression*/)) {}
-  BlobEncoder(CompressionType compression)
-      : BlobEncoder(compression, CompressionDict::GetEmptyDict()) {}
+      : BlobEncoder(compression, CompressionOptions(), compression_dict) {}
+  BlobEncoder(CompressionType compression, CompressionOptions compression_opt)
+      : BlobEncoder(compression, compression_opt,
+                    CompressionDict::GetEmptyDict()) {}
 
   void EncodeRecord(const BlobRecord& record);
   void SetCompressionDict(const CompressionDict& compression_dict) {
     compression_info_.reset(new CompressionInfo(
         compression_opt_, compression_ctx_, compression_dict,
         compression_info_->type(), compression_info_->SampleForCompression()));
-  }
-  Slice GetCompressionDict() const {
-    return compression_info_->dict().GetRawDict();
   }
 
   Slice GetHeader() const { return Slice(header_, sizeof(header_)); }

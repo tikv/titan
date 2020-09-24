@@ -11,7 +11,8 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
                          : BuilderState::kUnbuffered),
       cf_options_(cf_options),
       file_(file),
-      encoder_(cf_options_.blob_file_compression) {
+      encoder_(cf_options_.blob_file_compression,
+               cf_options.blob_file_compression_options) {
   BlobFileHeader header;
   if (cf_options.blob_file_compression_options.max_dict_bytes > 0)
     header.flags |= BlobFileHeader::kHasUncompressionDictionary;
@@ -23,7 +24,9 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
 void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
   if (!ok()) return;
   if (builder_state_ == BuilderState::kBuffered) {
-    sample_records_.emplace_back(record);
+    std::string rec_str;
+    record.EncodeTo(&rec_str);
+    sample_records_.emplace_back(rec_str);
     sample_str_len_ += (16 /* 2 extra Varint64 */ + record.size());
     if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0 &&
         sample_str_len_ >=
@@ -62,36 +65,36 @@ void BlobFileBuilder::EnterUnbuffered() {
   // When above things are done, transform builder state into unbuffered
   std::string samples = "";
   std::vector<size_t> sample_lens;
-  std::string rec_str;
 
-  const size_t kSampleBytes =
-      cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0
-          ? cf_options_.blob_file_compression_options.zstd_max_train_bytes
-          : cf_options_.blob_file_compression_options.max_dict_bytes;
-  for (const auto& rec : sample_records_) {
-    rec.EncodeTo(&rec_str);
-    size_t copy_len = std::min(kSampleBytes - samples.size(), rec_str.size());
+  for (const auto& rec_str : sample_records_) {
+    size_t copy_len =
+        cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0
+            ? std::min(cf_options_.blob_file_compression_options
+                               .zstd_max_train_bytes -
+                           rec_str.size(),
+                       rec_str.size())
+            : rec_str.size();
     samples.append(rec_str, 0, copy_len);
     sample_lens.emplace_back(copy_len);
   }
   std::string dict;
-  if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0) {
-    dict = ZSTD_TrainDictionary(
-        samples, sample_lens,
-        cf_options_.blob_file_compression_options.max_dict_bytes);
-  } else {
-    dict = std::move(samples);
-  }
-  CompressionDict compression_dict(
-      dict, cf_options_.blob_file_compression,
-      cf_options_.blob_file_compression_options.level);
-  encoder_.SetCompressionDict(compression_dict);
+  dict = ZSTD_TrainDictionary(
+      samples, sample_lens,
+      cf_options_.blob_file_compression_options.max_dict_bytes);
+
+  compression_dict_.reset(
+      new CompressionDict(dict, cf_options_.blob_file_compression,
+                          cf_options_.blob_file_compression_options.level));
+  encoder_.SetCompressionDict(*compression_dict_);
 
   builder_state_ = BuilderState::kUnbuffered;
 
   // add history buffer
   BlobHandle handle;
-  for (const BlobRecord& rec : sample_records_) {
+  for (const std::string& rec_str : sample_records_) {
+    BlobRecord rec;
+    Slice rec_slice(rec_str);
+    rec.DecodeFrom(&rec_slice);
     Add(rec, &handle);
   }
   sample_records_.clear();
@@ -106,7 +109,7 @@ void BlobFileBuilder::WriteRawBlock(const Slice& block, BlockHandle* handle) {
 
 void BlobFileBuilder::WriteCompressionDictBlock(
     MetaIndexBuilder* meta_index_builder, BlockHandle* handle) {
-  WriteRawBlock(encoder_.GetCompressionDict(), handle);
+  WriteRawBlock(compression_dict_->GetRawDict(), handle);
   if (ok()) {
     meta_index_builder->Add(kCompressionDictBlock, *handle);
   }

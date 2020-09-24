@@ -99,8 +99,11 @@ class BlobFileBuilder {
 
   Status status_;
   BlobEncoder encoder_;
-  std::vector<BlobRecord> sample_records_;
+
+  // following 3 may be refactored in to Rep
+  std::vector<std::string> sample_records_;
   uint64_t sample_str_len_ = 0;
+  std::unique_ptr<CompressionDict> compression_dict_;
 
   uint64_t num_entries_ = 0;
   std::string smallest_key_;
