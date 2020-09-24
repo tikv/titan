@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blob_format.h"
+#include "table/meta_blocks.h"
 #include "titan/options.h"
 #include "util/compression.h"
 #include "util/file_reader_writer.h"
@@ -89,6 +90,9 @@ class BlobFileBuilder {
   BuilderState builder_state_;
 
   bool ok() const { return status().ok(); }
+  void WriteRawBlock(const Slice& block, BlockHandle* handle);
+  void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder,
+                                 BlockHandle* handle);
 
   TitanCFOptions cf_options_;
   WritableFileWriter* file_;

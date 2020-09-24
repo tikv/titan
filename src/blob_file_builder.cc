@@ -12,7 +12,9 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
       cf_options_(cf_options),
       file_(file),
       encoder_(cf_options_.blob_file_compression) {
-  BlobFileHeader header(cf_options.blob_file_compression_options);
+  BlobFileHeader header;
+  if (cf_options.blob_file_compression_options.max_dict_bytes > 0)
+    header.flags |= BlobFileHeader::kHasUncompressionDictionary;
   std::string buffer;
   header.EncodeTo(&buffer);
   status_ = file_->Append(buffer);
@@ -27,12 +29,6 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
         sample_str_len_ >=
             cf_options_.blob_file_compression_options.zstd_max_train_bytes) {
       EnterUnbuffered();
-      // add history buffer
-      for (const BlobRecord& rec : sample_records_) {
-        Add(rec, handle);
-      }
-      sample_records_.clear();
-      sample_str_len_ = 0;
     }
     return;
   }
@@ -92,13 +88,49 @@ void BlobFileBuilder::EnterUnbuffered() {
   encoder_.SetCompressionDict(compression_dict);
 
   builder_state_ = BuilderState::kUnbuffered;
+
+  // add history buffer
+  BlobHandle handle;
+  for (const BlobRecord& rec : sample_records_) {
+    Add(rec, &handle);
+  }
+  sample_records_.clear();
+  sample_str_len_ = 0;
+}
+
+void BlobFileBuilder::WriteRawBlock(const Slice& block, BlockHandle* handle) {
+  handle->set_offset(file_->GetFileSize());
+  handle->set_size(block.size());
+  status_ = file_->Append(block);
+}
+
+void BlobFileBuilder::WriteCompressionDictBlock(
+    MetaIndexBuilder* meta_index_builder, BlockHandle* handle) {
+  WriteRawBlock(encoder_.GetCompressionDict(), handle);
+  if (ok()) {
+    meta_index_builder->Add(kCompressionDictBlock, *handle);
+  }
 }
 
 Status BlobFileBuilder::Finish() {
   if (!ok()) return status();
 
-  std::string buffer;
+  if (builder_state_ == BuilderState::kBuffered) EnterUnbuffered();
+
   BlobFileFooter footer;
+
+  // if has compression dictionary, encode it into meta blocks
+  // and update relative fields in footer
+  if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
+    BlockHandle meta_index_handle, uncompression_dict_handle;
+    MetaIndexBuilder meta_index_builder;
+    WriteCompressionDictBlock(&meta_index_builder, &uncompression_dict_handle);
+    WriteRawBlock(meta_index_builder.Finish(), &meta_index_handle);
+    footer.meta_index_handle = meta_index_handle;
+    footer.uncompression_dict_handle = uncompression_dict_handle;
+  }
+
+  std::string buffer;
   footer.EncodeTo(&buffer);
 
   status_ = file_->Append(buffer);
