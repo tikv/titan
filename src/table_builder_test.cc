@@ -1,14 +1,14 @@
 #include "table/table_builder.h"
-#include "file/filename.h"
-#include "table/table_reader.h"
-#include "test_util/testharness.h"
 
 #include "blob_file_manager.h"
 #include "blob_file_reader.h"
 #include "blob_file_set.h"
 #include "db_impl.h"
+#include "file/filename.h"
+#include "table/table_reader.h"
 #include "table_builder.h"
 #include "table_factory.h"
+#include "test_util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -357,6 +357,51 @@ TEST_F(TableBuilderTest, Basic) {
     }
     iter->Next();
   }
+}
+
+TEST_F(TableBuilderTest, DictCompress) {
+  std::unique_ptr<WritableFileWriter> base_file;
+  NewBaseFileWriter(&base_file);
+  std::unique_ptr<TableBuilder> table_builder;
+
+  TitanCFOptions cf_options;
+  CompressionOptions compression_opts;
+  compression_opts.enabled = true;
+  compression_opts.max_dict_bytes = 4000;
+  cf_options.blob_file_compression_options = compression_opts;
+  cf_options.compression = kZSTD;
+
+  TableBuilderOptions options(
+      cf_ioptions_, cf_moptions_, cf_ioptions_.internal_comparator,
+      &collectors_, kZSTD, 0 /*sample_for_compression*/, compression_opts,
+      false /*skip_filters*/, kDefaultColumnFamilyName, 0 /*target_level*/);
+  table_builder.reset(
+      table_factory_->NewTableBuilder(options, 0, base_file.get()));
+
+  // Build a base table and a blob file.
+  const int n = 100;
+  for (char i = 0; i < n; i++) {
+    std::string key(1, i);
+    InternalKey ikey(key, 1, kTypeValue);
+    std::string value;
+    value = std::string(kMinBlobSize, i);
+    table_builder->Add(ikey.Encode(), value);
+  }
+  ASSERT_OK(table_builder->Finish());
+  ASSERT_OK(base_file->Sync(true));
+  ASSERT_OK(base_file->Close());
+  BlobFileExists(true);
+
+  std::unique_ptr<TableReader> base_reader;
+  NewTableReader(base_name_, &base_reader);
+  std::unique_ptr<BlobFileReader> blob_reader;
+  std::unique_ptr<RandomAccessFileReader> file;
+  NewFileReader(blob_name_, &file);
+  uint64_t file_size = 0;
+  ASSERT_OK(env_->GetFileSize(blob_name_, &file_size));
+  Status stat = BlobFileReader::Open(cf_options, std::move(file), file_size,
+                                     &blob_reader, nullptr);
+  assert(stat.code() == Status::kNotSupported);
 }
 
 TEST_F(TableBuilderTest, NoBlob) {
