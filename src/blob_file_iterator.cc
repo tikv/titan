@@ -28,6 +28,10 @@ bool BlobFileIterator::Init() {
   }
   BlobFileHeader blob_file_header;
   status_ = blob_file_header.DecodeFrom(&slice);
+  if (blob_file_header.flags & BlobFileHeader::kHasUncompressionDictionary) {
+    status_ = Status::NotSupported(
+        "blob file with dictionary compression is not supported yet");
+  }
   if (!status_.ok()) {
     return false;
   }

@@ -8,10 +8,9 @@
 
 #include "file/filename.h"
 #include "test_util/sync_point.h"
+#include "titan_stats.h"
 #include "util/crc32c.h"
 #include "util/string_util.h"
-
-#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -62,6 +61,12 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
                             TitanStats* stats) {
   if (file_size < BlobFileFooter::kEncodedLength) {
     return Status::Corruption("file is too short to be a blob file");
+  }
+
+  if (options.blob_file_compression_options.enabled &&
+      options.blob_file_compression_options.max_dict_bytes > 0) {
+    return Status::NotSupported(
+        "blob file with dictionary compression is not supported yet");
   }
 
   FixedSlice<BlobFileFooter::kEncodedLength> buffer;
