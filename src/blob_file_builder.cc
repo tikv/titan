@@ -24,11 +24,11 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
 void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
   if (!ok()) return;
   if (builder_state_ == BuilderState::kBuffered) {
-    std::string rec_str;
+    std::string record_str;
     // Encode to take ownership of underlying string.
-    record.EncodeTo(&rec_str);
-    sample_records_.emplace_back(rec_str);
-    sample_str_len_ += rec_str.size();
+    record.EncodeTo(&record_str);
+    sample_records_.emplace_back(record_str);
+    sample_str_len_ += record_str.size();
     if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0 &&
         sample_str_len_ >=
             cf_options_.blob_file_compression_options.zstd_max_train_bytes) {
@@ -65,17 +65,18 @@ void BlobFileBuilder::EnterUnbuffered() {
   // Then replay those records in memory, encode them to blob file
   // When above things are done, transform builder state into unbuffered
   std::string samples = "";
+  samples.reserve(sample_str_len_);
   std::vector<size_t> sample_lens;
 
-  for (const auto& rec_str : sample_records_) {
+  for (const auto& record_str : sample_records_) {
     size_t copy_len =
         cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0
             ? std::min(cf_options_.blob_file_compression_options
                                .zstd_max_train_bytes -
-                           rec_str.size(),
-                       rec_str.size())
-            : rec_str.size();
-    samples.append(rec_str, 0, copy_len);
+                           record_str.size(),
+                       record_str.size())
+            : record_str.size();
+    samples.append(record_str, 0, copy_len);
     sample_lens.emplace_back(copy_len);
   }
   std::string dict;
@@ -90,11 +91,14 @@ void BlobFileBuilder::EnterUnbuffered() {
 
   builder_state_ = BuilderState::kUnbuffered;
 
-  // add history buffer
+  FlushSampleRecords();
+}
+
+void BlobFileBuilder::FlushSampleRecords() {
   BlobHandle handle;
-  for (const std::string& rec_str : sample_records_) {
+  for (const std::string& record_str : sample_records_) {
     BlobRecord rec;
-    Slice rec_slice(rec_str);
+    Slice rec_slice(record_str);
     rec.DecodeFrom(&rec_slice);
     Add(rec, &handle);
   }

@@ -93,6 +93,7 @@ class BlobFileBuilder {
   void WriteRawBlock(const Slice& block, BlockHandle* handle);
   void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder,
                                  BlockHandle* handle);
+  void FlushSampleRecords();
 
   TitanCFOptions cf_options_;
   WritableFileWriter* file_;
