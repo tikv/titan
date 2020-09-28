@@ -114,6 +114,20 @@ void BlobFileBuilder::WriteRawBlock(const Slice& block, BlockHandle* handle) {
   handle->set_offset(file_->GetFileSize());
   handle->set_size(block.size());
   status_ = file_->Append(block);
+  if (ok()) {
+    // follow rocksdb's block based table format
+    char trailer[kBlockTrailerSize];
+    // only compression dictionary and meta index block are written
+    // by this method, we use `kNoCompression` as placeholder
+    trailer[0] = kNoCompression;
+    char* trailer_without_type = trailer + 1;
+
+    // crc32 checksum
+    auto crc = crc32c::Value(block.data(), block.size());
+    crc = crc32c::Extend(crc, trailer, 1);  // Extend to cover block type
+    EncodeFixed32(trailer_without_type, crc32c::Mask(crc));
+    status_ = file_->Append(Slice(trailer, kBlockTrailerSize));
+  }
 }
 
 void BlobFileBuilder::WriteCompressionDictBlock(
