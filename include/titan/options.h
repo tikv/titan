@@ -85,9 +85,10 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: kNoCompression
   CompressionType blob_file_compression{kNoCompression};
 
-  // The compression options
-  //
-  // Default: disabled
+  // The compression options. The `blob_file_compression.enabled` option is
+  // ignored, we only use `blob_file_compression` above to determine wether the
+  // blob file is compressed. We use this options mainly to configure the
+  // compression dictionary.
   CompressionOptions blob_file_compression_options;
 
   // The desirable blob file size. This is not a hard limit but a wish.

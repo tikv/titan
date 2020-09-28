@@ -25,6 +25,7 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
   if (!ok()) return;
   if (builder_state_ == BuilderState::kBuffered) {
     std::string rec_str;
+    // Encode to take ownership of underlying string.
     record.EncodeTo(&rec_str);
     sample_records_.emplace_back(rec_str);
     sample_str_len_ += rec_str.size();
