@@ -37,27 +37,21 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
     return;
   }
 
-  assert(builder_state_ == BuilderState::kUnbuffered);
-  // unbuffered state
-  encoder_.EncodeRecord(record);
-  handle->offset = file_->GetFileSize();
-  handle->size = encoder_.GetEncodedSize();
-  live_data_size_ += handle->size;
+  if (builder_state_ == BuilderState::kUnbuffered) {
+    encoder_.EncodeRecord(record);
 
-  status_ = file_->Append(encoder_.GetHeader());
-  if (ok()) {
-    status_ = file_->Append(encoder_.GetRecord());
-    num_entries_++;
-    // The keys added into blob files are in order.
-    if (smallest_key_.empty()) {
-      smallest_key_.assign(record.key.data(), record.key.size());
-    }
-    assert(cf_options_.comparator->Compare(record.key, Slice(smallest_key_)) >=
-           0);
-    assert(cf_options_.comparator->Compare(record.key, Slice(largest_key_)) >=
-           0);
-    largest_key_.assign(record.key.data(), record.key.size());
+    WriteEncoderData(handle);
   }
+
+  // The keys added into blob files are in order.
+  // We do key range checks for both state
+  if (smallest_key_.empty()) {
+    smallest_key_.assign(record.key.data(), record.key.size());
+  }
+  assert(cf_options_.comparator->Compare(record.key, Slice(smallest_key_)) >=
+         0);
+  assert(cf_options_.comparator->Compare(record.key, Slice(largest_key_)) >= 0);
+  largest_key_.assign(record.key.data(), record.key.size());
 }
 
 void BlobFileBuilder::EnterUnbuffered() {
@@ -97,13 +91,23 @@ void BlobFileBuilder::EnterUnbuffered() {
 void BlobFileBuilder::FlushSampleRecords() {
   BlobHandle handle;
   for (const std::string& record_str : sample_records_) {
-    BlobRecord rec;
-    Slice rec_slice(record_str);
-    rec.DecodeFrom(&rec_slice);
-    Add(rec, &handle);
+    encoder_.EncodeString(record_str);
+    WriteEncoderData(&handle);
   }
   sample_records_.clear();
   sample_str_len_ = 0;
+}
+
+void BlobFileBuilder::WriteEncoderData(BlobHandle* handle) {
+  handle->offset = file_->GetFileSize();
+  handle->size = encoder_.GetEncodedSize();
+  live_data_size_ += handle->size;
+
+  status_ = file_->Append(encoder_.GetHeader());
+  if (ok()) {
+    status_ = file_->Append(encoder_.GetRecord());
+    num_entries_++;
+  }
 }
 
 void BlobFileBuilder::WriteRawBlock(const Slice& block, BlockHandle* handle) {

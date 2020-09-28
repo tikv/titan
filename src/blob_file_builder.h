@@ -94,6 +94,7 @@ class BlobFileBuilder {
   void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder,
                                  BlockHandle* handle);
   void FlushSampleRecords();
+  void WriteEncoderData(BlobHandle* handle);
 
   TitanCFOptions cf_options_;
   WritableFileWriter* file_;

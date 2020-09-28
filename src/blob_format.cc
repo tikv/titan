@@ -36,12 +36,14 @@ bool operator==(const BlobRecord& lhs, const BlobRecord& rhs) {
 
 void BlobEncoder::EncodeRecord(const BlobRecord& record) {
   record_buffer_.clear();
-  compressed_buffer_.clear();
-
-  CompressionType compression;
   record.EncodeTo(&record_buffer_);
+  EncodeString(record_buffer_);
+}
 
-  record_ = Compress(*compression_info_, record_buffer_, &compressed_buffer_,
+void BlobEncoder::EncodeString(const std::string& record_str) {
+  compressed_buffer_.clear();
+  CompressionType compression;
+  record_ = Compress(*compression_info_, record_str, &compressed_buffer_,
                      &compression);
 
   assert(record_.size() < std::numeric_limits<uint32_t>::max());
