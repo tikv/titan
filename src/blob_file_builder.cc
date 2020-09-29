@@ -124,7 +124,7 @@ void BlobFileBuilder::WriteRawBlock(const Slice& block, BlockHandle* handle) {
 
     // crc32 checksum
     auto crc = crc32c::Value(block.data(), block.size());
-    crc = crc32c::Extend(crc, trailer, 1);  // Extend to cover block type
+    crc = crc32c::Extend(crc, trailer, 1);  // Extend to cover compression type
     EncodeFixed32(trailer_without_type, crc32c::Mask(crc));
     status_ = file_->Append(Slice(trailer, kBlockTrailerSize));
   }

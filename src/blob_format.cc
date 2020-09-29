@@ -40,11 +40,11 @@ void BlobEncoder::EncodeRecord(const BlobRecord& record) {
   EncodeString(record_buffer_);
 }
 
-void BlobEncoder::EncodeString(const std::string& record_str) {
+void BlobEncoder::EncodeString(const Slice& record) {
   compressed_buffer_.clear();
   CompressionType compression;
-  record_ = Compress(*compression_info_, record_str, &compressed_buffer_,
-                     &compression);
+  record_ =
+      Compress(*compression_info_, record, &compressed_buffer_, &compression);
 
   assert(record_.size() < std::numeric_limits<uint32_t>::max());
   EncodeFixed32(header_ + 4, static_cast<uint32_t>(record_.size()));
