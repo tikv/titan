@@ -37,10 +37,10 @@ bool operator==(const BlobRecord& lhs, const BlobRecord& rhs) {
 void BlobEncoder::EncodeRecord(const BlobRecord& record) {
   record_buffer_.clear();
   record.EncodeTo(&record_buffer_);
-  EncodeString(record_buffer_);
+  EncodeSlice(record_buffer_);
 }
 
-void BlobEncoder::EncodeString(const Slice& record) {
+void BlobEncoder::EncodeSlice(const Slice& record) {
   compressed_buffer_.clear();
   CompressionType compression;
   record_ =

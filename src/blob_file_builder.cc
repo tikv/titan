@@ -91,7 +91,7 @@ void BlobFileBuilder::EnterUnbuffered() {
 void BlobFileBuilder::FlushSampleRecords() {
   BlobHandle handle;
   for (const std::string& record_str : sample_records_) {
-    encoder_.EncodeString(record_str);
+    encoder_.EncodeSlice(record_str);
     WriteEncoderData(&handle);
   }
   sample_records_.clear();

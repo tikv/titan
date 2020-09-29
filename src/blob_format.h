@@ -79,7 +79,7 @@ class BlobEncoder {
                     CompressionDict::GetEmptyDict()) {}
 
   void EncodeRecord(const BlobRecord& record);
-  void EncodeString(const Slice& record);
+  void EncodeSlice(const Slice& record);
   void SetCompressionDict(const CompressionDict& compression_dict) {
     compression_info_.reset(new CompressionInfo(
         compression_opt_, compression_ctx_, compression_dict,
