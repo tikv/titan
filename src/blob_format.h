@@ -168,6 +168,9 @@ struct BlobIndex {
 struct MergeBlobIndex : public BlobIndex {
   uint64_t source_file_number{0};
   uint64_t source_file_offset{0};
+  // The `source_file_size` will not be encoded to string, just for rebuilding
+  // the original index
+  uint64_t source_file_size{0};
 
   void EncodeTo(std::string* dst) const;
   void EncodeToBase(std::string* dst) const;

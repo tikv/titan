@@ -65,18 +65,30 @@ class BlobFileIteratorTest : public testing::Test {
         new BlobFileBuilder(db_options, cf_options, writable_file_.get()));
   }
 
-  BlobIndices AddKeyValue(const std::string& key, const std::string& value) {
+  void AddKeyValue(const std::string& key, const std::string& value,
+                   BlobIndices& key_indices) {
     BlobRecord record;
     record.key = key;
     record.value = value;
     std::unique_ptr<BlobIndex> idx(new BlobIndex);
-    BlobIndices key_indices = builder_->Add(record, std::move(idx));
-    // ASSERT_OK(builder_->status());
-    return key_indices;
+    BlobIndices cur_key_indices = builder_->Add(record, std::move(idx));
+    ASSERT_OK(builder_->status());
+    if (!cur_key_indices.empty()) {
+      key_indices.insert(key_indices.end(),
+                         std::make_move_iterator(cur_key_indices.begin()),
+                         std::make_move_iterator(cur_key_indices.end()));
+    }
   }
 
-  void FinishBuilder() {
-    ASSERT_OK(builder_->Finish());
+  void FinishBuilder(BlobIndices& key_indices) {
+    Status s;
+    BlobIndices cur_key_indices = builder_->Finish(&s);
+    if (!cur_key_indices.empty()) {
+      key_indices.insert(key_indices.end(),
+                         std::make_move_iterator(cur_key_indices.begin()),
+                         std::make_move_iterator(cur_key_indices.end()));
+    }
+    ASSERT_OK(s);
     ASSERT_OK(builder_->status());
   }
 
@@ -95,15 +107,10 @@ class BlobFileIteratorTest : public testing::Test {
     const int n = 1000;
     BlobIndices key_indices;
     for (int i = 0; i < n; i++) {
-      BlobIndices cur_key_indices = AddKeyValue(GenKey(i), GenValue(i));
-      if (!cur_key_indices.empty()) {
-        key_indices.insert(key_indices.end(),
-                           std::make_move_iterator(cur_key_indices.begin()),
-                           std::make_move_iterator(cur_key_indices.end()));
-      }
+      AddKeyValue(GenKey(i), GenValue(i), key_indices);
     }
 
-    FinishBuilder();
+    FinishBuilder(key_indices);
 
     NewBlobFileIterator();
 
@@ -130,15 +137,10 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   const int n = 1000;
   BlobIndices key_indices;
   for (int i = 0; i < n; i++) {
-    BlobIndices cur_key_indices = AddKeyValue(GenKey(i), GenValue(i));
-    if (!cur_key_indices.empty()) {
-      key_indices.insert(key_indices.end(),
-                         std::make_move_iterator(cur_key_indices.begin()),
-                         std::make_move_iterator(cur_key_indices.end()));
-    }
+    AddKeyValue(GenKey(i), GenValue(i), key_indices);
   }
 
-  FinishBuilder();
+  FinishBuilder(key_indices);
 
   NewBlobFileIterator();
 
@@ -196,15 +198,10 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
   std::vector<std::unique_ptr<BlobFileIterator>> iters;
   NewBuilder();
   for (int i = 1; i < kMaxKeyNum; i++) {
-    BlobIndices cur_key_indices = AddKeyValue(GenKey(i), GenValue(i));
-    if (!cur_key_indices.empty()) {
-      key_indices.insert(key_indices.end(),
-                         std::make_move_iterator(cur_key_indices.begin()),
-                         std::make_move_iterator(cur_key_indices.end()));
-    }
+    AddKeyValue(GenKey(i), GenValue(i), key_indices);
+
     if (i % 100 == 0) {
-      // FIXME: refactor finish
-      FinishBuilder();
+      FinishBuilder(key_indices);
       uint64_t file_size = 0;
       ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
       NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
@@ -218,7 +215,7 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
     }
   }
 
-  FinishBuilder();
+  FinishBuilder(key_indices);
   uint64_t file_size = 0;
   ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
   NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
@@ -234,7 +231,6 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
     ASSERT_TRUE(iter.Valid());
     ASSERT_EQ(iter.key(), GenKey(i));
     ASSERT_EQ(iter.value(), GenValue(i));
-    // FIXME: broke
     ASSERT_EQ(iter.GetBlobIndex().blob_handle,
               key_indices[i].second->blob_handle);
   }

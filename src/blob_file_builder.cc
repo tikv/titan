@@ -147,14 +147,18 @@ void BlobFileBuilder::WriteCompressionDictBlock(
   }
 }
 
-// TODO: return indices as well
-Status BlobFileBuilder::Finish() {
-  if (!ok()) return status();
+BlobIndices BlobFileBuilder::Finish(Status* finish_status) {
+  BlobIndices ret;
+  if (!ok()) {
+    *finish_status = status();
+    return ret;
+  }
 
-  if (builder_state_ == BuilderState::kBuffered) EnterUnbuffered();
+  if (builder_state_ == BuilderState::kBuffered) {
+    ret = EnterUnbuffered();
+  }
 
   BlobFileFooter footer;
-
   // if has compression dictionary, encode it into meta blocks
   // and update relative fields in footer
   if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
@@ -174,7 +178,8 @@ Status BlobFileBuilder::Finish() {
     // The Sync will be done in `BatchFinishFiles`
     status_ = file_->Flush();
   }
-  return status();
+  *finish_status = status();
+  return ret;
 }
 
 void BlobFileBuilder::Abandon() {}

@@ -42,19 +42,25 @@ class BlobFileBuilder {
   BlobFileBuilder(const TitanDBOptions& db_options,
                   const TitanCFOptions& cf_options, WritableFileWriter* file);
 
-  // Adds the record to the file and points the handle to it.
+  // Adds the record to the file, return `BlobIndices`
+  // Notice: return value might be empty when builder is in `kBuffered` state,
+  // and the index parameter should set its `file_number` before passed in, the
+  // builder will only change the `blob_handle` of it
   BlobIndices Add(const BlobRecord& record, std::unique_ptr<BlobIndex> index);
 
   // Enter unbuffered state, only be called after collecting enough samples
-  // for compression dictionary
+  // for compression dictionary. It will return `BlobIndices` of the buffered
+  // records
   BlobIndices EnterUnbuffered();
 
   // Returns non-ok iff some error has been detected.
   Status status() const { return status_; }
 
   // Finishes building the table.
+  // This method will return non-empty `BlobIndices` when it is called in
+  // `kBuffered` state.
   // REQUIRES: Finish(), Abandon() have not been called.
-  Status Finish();
+  BlobIndices Finish(Status* status);
 
   // Abandons building the table. If the caller is not going to call
   // Finish(), it must call Abandon() before destroying this builder.

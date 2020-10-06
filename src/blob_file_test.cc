@@ -28,6 +28,28 @@ class BlobFileTest : public testing::Test {
 
   std::string GenValue(uint64_t i) { return std::string(1024, i); }
 
+  void AddRecord(BlobFileBuilder* builder, BlobRecord& record,
+                 BlobIndices& key_indices) {
+    std::unique_ptr<BlobIndex> idx(new BlobIndex);
+    BlobIndices cur_key_indices = builder->Add(record, std::move(idx));
+    if (!cur_key_indices.empty()) {
+      key_indices.insert(key_indices.end(),
+                         std::make_move_iterator(cur_key_indices.begin()),
+                         std::make_move_iterator(cur_key_indices.end()));
+    }
+  }
+
+  Status Finish(BlobFileBuilder* builder, BlobIndices& key_indices) {
+    Status s;
+    BlobIndices cur_key_indices = builder->Finish(&s);
+    if (!cur_key_indices.empty()) {
+      key_indices.insert(key_indices.end(),
+                         std::make_move_iterator(cur_key_indices.begin()),
+                         std::make_move_iterator(cur_key_indices.end()));
+    }
+    return s;
+  }
+
   void TestBlobFilePrefetcher(TitanOptions options) {
     options.dirname = dirname_;
     TitanDBOptions db_options(options);
@@ -54,17 +76,11 @@ class BlobFileTest : public testing::Test {
       record.key = key;
       record.value = value;
 
-      std::unique_ptr<BlobIndex> idx(new BlobIndex);
-      BlobIndices cur_key_indices = builder->Add(record, std::move(idx));
-      if (!cur_key_indices.empty()) {
-        key_indices.insert(key_indices.end(),
-                           std::make_move_iterator(cur_key_indices.begin()),
-                           std::make_move_iterator(cur_key_indices.end()));
-      }
+      AddRecord(builder.get(), record, key_indices);
 
       ASSERT_OK(builder->status());
     }
-    ASSERT_OK(builder->Finish());
+    ASSERT_OK(Finish(builder.get(), key_indices));
     ASSERT_OK(builder->status());
 
     uint64_t file_size = 0;
@@ -125,17 +141,12 @@ class BlobFileTest : public testing::Test {
       record.key = key;
       record.value = value;
 
-      std::unique_ptr<BlobIndex> idx(new BlobIndex);
-      BlobIndices cur_key_indices = builder->Add(record, std::move(idx));
-      if (!cur_key_indices.empty()) {
-        key_indices.insert(key_indices.end(),
-                           std::make_move_iterator(cur_key_indices.begin()),
-                           std::make_move_iterator(cur_key_indices.end()));
-      }
+      AddRecord(builder.get(), record, key_indices);
 
       ASSERT_OK(builder->status());
     }
-    ASSERT_OK(builder->Finish());
+
+    ASSERT_OK(Finish(builder.get(), key_indices));
     ASSERT_OK(builder->status());
 
     uint64_t file_size = 0;

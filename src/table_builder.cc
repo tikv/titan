@@ -64,6 +64,12 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
 
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
+
+    // FIXME: when buffering, we have to detect is this file hit size limit
+    if (blob_handle_->GetFile()->GetFileSize() >=
+        cf_options_.blob_file_target_size) {
+      FinishBlobFile();
+    }
     if (ok()) return;
   } else if (ikey.type == kTypeBlobIndex && cf_options_.level_merge &&
              target_level_ >= merge_level_ &&
@@ -157,11 +163,6 @@ void TitanTableBuilder::BatchInsertIndices(const BlobIndices& key_indices) {
       base_builder_->Add(index_key, index_value);
     }
   }
-  // FIXME: when buffering, we have to detect is this file hit size limit
-  if (blob_handle_->GetFile()->GetFileSize() >=
-      cf_options_.blob_file_target_size) {
-    FinishBlobFile();
-  }
 }
 
 void TitanTableBuilder::FinishBlobFile() {
@@ -169,7 +170,10 @@ void TitanTableBuilder::FinishBlobFile() {
     uint64_t prev_bytes_read = 0;
     uint64_t prev_bytes_written = 0;
     SavePrevIOBytes(&prev_bytes_read, &prev_bytes_written);
-    blob_builder_->Finish();
+    Status s;
+    BlobIndices key_indices = blob_builder_->Finish(&s);
+    BatchInsertIndices(key_indices);
+
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
 
