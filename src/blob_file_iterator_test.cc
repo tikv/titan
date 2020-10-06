@@ -232,7 +232,7 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
     ASSERT_EQ(iter.key(), GenKey(i));
     ASSERT_EQ(iter.value(), GenValue(i));
     ASSERT_EQ(iter.GetBlobIndex().blob_handle,
-              key_indices[i].second->blob_handle);
+              key_indices[i - 1].second->blob_handle);
   }
   ASSERT_EQ(i, kMaxKeyNum);
 }

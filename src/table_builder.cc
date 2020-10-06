@@ -143,7 +143,7 @@ BlobIndices TitanTableBuilder::AddBlob(const BlobRecord& record) {
 }
 
 void TitanTableBuilder::BatchInsertIndices(const BlobIndices& key_indices) {
-  for (const std::pair<Slice, std::unique_ptr<BlobIndex>>& key_index :
+  for (const std::pair<std::string, std::unique_ptr<BlobIndex>>& key_index :
        key_indices) {
     RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
                key_index.second->blob_handle.size);

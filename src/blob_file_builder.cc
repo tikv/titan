@@ -25,14 +25,14 @@ BlobIndices BlobFileBuilder::Add(const BlobRecord& record,
                                  std::unique_ptr<BlobIndex> index) {
   BlobIndices ret;
   if (!ok()) return ret;
+  std::string key = record.key.ToString();
   if (builder_state_ == BuilderState::kBuffered) {
     std::string record_str;
     // Encode to take ownership of underlying string.
     record.EncodeTo(&record_str);
     sample_records_.emplace_back(record_str);
     sample_str_len_ += record_str.size();
-    cached_indices_.push_back(
-        std::make_pair(Slice(record.key), std::move(index)));
+    cached_indices_.push_back(std::make_pair(key, std::move(index)));
     if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0 &&
         sample_str_len_ >=
             cf_options_.blob_file_compression_options.zstd_max_train_bytes) {
@@ -41,7 +41,7 @@ BlobIndices BlobFileBuilder::Add(const BlobRecord& record,
   } else if (builder_state_ == BuilderState::kUnbuffered) {
     encoder_.EncodeRecord(record);
     WriteEncoderData(&index->blob_handle);
-    ret.push_back(std::make_pair(Slice(record.key), std::move(index)));
+    ret.push_back(std::make_pair(key, std::move(index)));
   }
 
   // The keys added into blob files are in order.
@@ -95,7 +95,7 @@ BlobIndices BlobFileBuilder::FlushSampleRecords() {
   assert(cached_indices_.size() == sample_records_.size());
   for (size_t i = 0; i < sample_records_.size(); i++) {
     const std::string& record_str = sample_records_[i];
-    std::pair<Slice, std::unique_ptr<BlobIndex>>& key_index =
+    std::pair<std::string, std::unique_ptr<BlobIndex>>& key_index =
         cached_indices_[i];
     encoder_.EncodeSlice(record_str);
     WriteEncoderData(&key_index.second->blob_handle);

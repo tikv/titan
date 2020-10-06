@@ -32,7 +32,8 @@ namespace titandb {
 // meta index block with block handles pointed to the meta blocks. The
 // meta block and the meta index block are formatted the same as the
 // BlockBasedTable.
-typedef std::vector<std::pair<Slice, std::unique_ptr<BlobIndex>>> BlobIndices;
+typedef std::vector<std::pair<std::string, std::unique_ptr<BlobIndex>>>
+    BlobIndices;
 
 class BlobFileBuilder {
  public:

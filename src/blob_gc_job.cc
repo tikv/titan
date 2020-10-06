@@ -267,7 +267,7 @@ Status BlobGCJob::DoRunGC() {
 
 void BlobGCJob::BatchWriteNewIndices(BlobIndices& key_indices, Status* s) {
   auto* cfh = blob_gc_->column_family_handle();
-  for (const std::pair<Slice, std::unique_ptr<BlobIndex>>& key_index :
+  for (const std::pair<std::string, std::unique_ptr<BlobIndex>>& key_index :
        key_indices) {
     MergeBlobIndex* new_blob_index =
         static_cast<MergeBlobIndex*>(key_index.second.get());
@@ -279,7 +279,7 @@ void BlobGCJob::BatchWriteNewIndices(BlobIndices& key_indices, Status* s) {
     if (!gc_merge_rewrite_) {
       new_blob_index->EncodeToBase(&index_entry);
       // Store WriteBatch for rewriting new Key-Index pairs to LSM
-      GarbageCollectionWriteCallback callback(cfh, key_index.first.ToString(),
+      GarbageCollectionWriteCallback callback(cfh, std::string(key_index.first),
                                               std::move(blob_index));
       callback.value = index_entry;
       rewrite_batches_.emplace_back(
