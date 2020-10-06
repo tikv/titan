@@ -21,26 +21,27 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
   status_ = file_->Append(buffer);
 }
 
-void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
-  if (!ok()) return;
+BlobIndices BlobFileBuilder::Add(const BlobRecord& record,
+                                 std::unique_ptr<BlobIndex> index) {
+  BlobIndices ret;
+  if (!ok()) return ret;
   if (builder_state_ == BuilderState::kBuffered) {
     std::string record_str;
     // Encode to take ownership of underlying string.
     record.EncodeTo(&record_str);
     sample_records_.emplace_back(record_str);
     sample_str_len_ += record_str.size();
+    cached_indices_.push_back(
+        std::make_pair(Slice(record.key), std::move(index)));
     if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0 &&
         sample_str_len_ >=
             cf_options_.blob_file_compression_options.zstd_max_train_bytes) {
-      EnterUnbuffered();
+      ret = EnterUnbuffered();
     }
-    return;
-  }
-
-  if (builder_state_ == BuilderState::kUnbuffered) {
+  } else if (builder_state_ == BuilderState::kUnbuffered) {
     encoder_.EncodeRecord(record);
-
-    WriteEncoderData(handle);
+    WriteEncoderData(&index->blob_handle);
+    ret.push_back(std::make_pair(Slice(record.key), std::move(index)));
   }
 
   // The keys added into blob files are in order.
@@ -52,9 +53,11 @@ void BlobFileBuilder::Add(const BlobRecord& record, BlobHandle* handle) {
          0);
   assert(cf_options_.comparator->Compare(record.key, Slice(largest_key_)) >= 0);
   largest_key_.assign(record.key.data(), record.key.size());
+
+  return ret;
 }
 
-void BlobFileBuilder::EnterUnbuffered() {
+BlobIndices BlobFileBuilder::EnterUnbuffered() {
   // Using collected samples to train the compression dictionary
   // Then replay those records in memory, encode them to blob file
   // When above things are done, transform builder state into unbuffered
@@ -85,17 +88,24 @@ void BlobFileBuilder::EnterUnbuffered() {
 
   builder_state_ = BuilderState::kUnbuffered;
 
-  FlushSampleRecords();
+  return FlushSampleRecords();
 }
 
-void BlobFileBuilder::FlushSampleRecords() {
-  BlobHandle handle;
-  for (const std::string& record_str : sample_records_) {
+BlobIndices BlobFileBuilder::FlushSampleRecords() {
+  BlobIndices ret;
+  assert(cached_indices_.size() == sample_records_.size());
+  for (size_t i = 0; i < sample_records_.size(); i++) {
+    const std::string& record_str = sample_records_[i];
+    std::pair<Slice, std::unique_ptr<BlobIndex>>& key_index =
+        cached_indices_[i];
     encoder_.EncodeSlice(record_str);
-    WriteEncoderData(&handle);
+    WriteEncoderData(&key_index.second->blob_handle);
+    ret.push_back(key_index);
   }
   sample_records_.clear();
   sample_str_len_ = 0;
+  cached_indices_.clear();
+  return ret;
 }
 
 void BlobFileBuilder::WriteEncoderData(BlobHandle* handle) {
@@ -138,6 +148,7 @@ void BlobFileBuilder::WriteCompressionDictBlock(
   }
 }
 
+// TODO: return indices as well
 Status BlobFileBuilder::Finish() {
   if (!ok()) return status();
 

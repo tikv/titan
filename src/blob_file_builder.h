@@ -32,6 +32,7 @@ namespace titandb {
 // meta index block with block handles pointed to the meta blocks. The
 // meta block and the meta index block are formatted the same as the
 // BlockBasedTable.
+typedef std::vector<std::pair<Slice, std::unique_ptr<BlobIndex>>> BlobIndices;
 
 class BlobFileBuilder {
  public:
@@ -42,11 +43,11 @@ class BlobFileBuilder {
                   const TitanCFOptions& cf_options, WritableFileWriter* file);
 
   // Adds the record to the file and points the handle to it.
-  void Add(const BlobRecord& record, BlobHandle* handle);
+  BlobIndices Add(const BlobRecord& record, std::unique_ptr<BlobIndex> index);
 
   // Enter unbuffered state, only be called after collecting enough samples
   // for compression dictionary
-  void EnterUnbuffered();
+  BlobIndices EnterUnbuffered();
 
   // Returns non-ok iff some error has been detected.
   Status status() const { return status_; }
@@ -93,7 +94,7 @@ class BlobFileBuilder {
   void WriteRawBlock(const Slice& block, BlockHandle* handle);
   void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder,
                                  BlockHandle* handle);
-  void FlushSampleRecords();
+  BlobIndices FlushSampleRecords();
   void WriteEncoderData(BlobHandle* handle);
 
   TitanCFOptions cf_options_;
@@ -106,6 +107,8 @@ class BlobFileBuilder {
   std::vector<std::string> sample_records_;
   uint64_t sample_str_len_ = 0;
   std::unique_ptr<CompressionDict> compression_dict_;
+
+  BlobIndices cached_indices_;
 
   uint64_t num_entries_ = 0;
   std::string smallest_key_;
