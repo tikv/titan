@@ -1,11 +1,11 @@
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
+#include "blob_gc_job.h"
+
 #include <inttypes.h>
 
 #include <memory>
-
-#include "blob_gc_job.h"
 
 #include "blob_file_size_collector.h"
 
@@ -234,32 +234,41 @@ Status BlobGCJob::DoRunGC() {
     // blob index's size is counted in `RewriteValidKeyToLSM`
     metrics_.gc_bytes_written += blob_record.size();
 
-    MergeBlobIndex new_blob_index;
-    new_blob_index.file_number = blob_file_handle->GetNumber();
-    new_blob_index.source_file_number = blob_index.file_number;
-    new_blob_index.source_file_offset = blob_index.blob_handle.offset;
-    blob_file_builder->Add(blob_record, &new_blob_index.blob_handle);
-    std::string index_entry;
+    std::unique_ptr<MergeBlobIndex> merge_blob_index(new MergeBlobIndex());
+    merge_blob_index->file_number = blob_file_handle->GetNumber();
+    merge_blob_index->source_file_number = blob_index.file_number;
+    merge_blob_index->source_file_offset = blob_index.blob_handle.offset;
+    BlobIndices key_indices =
+        blob_file_builder->Add(blob_record, std::move(merge_blob_index));
 
-    if (!gc_merge_rewrite_) {
-      new_blob_index.EncodeToBase(&index_entry);
-      // Store WriteBatch for rewriting new Key-Index pairs to LSM
-      GarbageCollectionWriteCallback callback(cfh, blob_record.key.ToString(),
-                                              std::move(blob_index));
-      callback.value = index_entry;
-      rewrite_batches_.emplace_back(
-          std::make_pair(WriteBatch(), std::move(callback)));
-      auto& wb = rewrite_batches_.back().first;
-      s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), blob_record.key,
-                                           index_entry);
-    } else {
-      new_blob_index.EncodeTo(&index_entry);
-      rewrite_batches_without_callback_.emplace_back(
-          std::make_pair(WriteBatch(), blob_index.blob_handle.size));
-      auto& wb = rewrite_batches_without_callback_.back().first;
-      s = WriteBatchInternal::Merge(&wb, cfh->GetID(), blob_record.key,
-                                    index_entry);
+    if (!key_indices.empty()) {
+      for (const std::pair<Slice, std::unique_ptr<BlobIndex>>& key_index :
+           key_indices) {
+        MergeBlobIndex* new_blob_index =
+            static_cast<MergeBlobIndex*>(key_index.second.get());
+        std::string index_entry;
+        if (!gc_merge_rewrite_) {
+          new_blob_index->EncodeToBase(&index_entry);
+          // Store WriteBatch for rewriting new Key-Index pairs to LSM
+          GarbageCollectionWriteCallback callback(
+              cfh, key_index.first.ToString(), std::move(blob_index));
+          callback.value = index_entry;
+          rewrite_batches_.emplace_back(
+              std::make_pair(WriteBatch(), std::move(callback)));
+          auto& wb = rewrite_batches_.back().first;
+          s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(),
+                                               key_index.first, index_entry);
+        } else {
+          new_blob_index->EncodeTo(&index_entry);
+          rewrite_batches_without_callback_.emplace_back(
+              std::make_pair(WriteBatch(), blob_index.blob_handle.size));
+          auto& wb = rewrite_batches_without_callback_.back().first;
+          s = WriteBatchInternal::Merge(&wb, cfh->GetID(), key_index.first,
+                                        index_entry);
+        }
+      }
     }
+
     if (!s.ok()) {
       break;
     }

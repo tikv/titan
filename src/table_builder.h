@@ -1,10 +1,9 @@
 #pragma once
 
-#include "rocksdb/types.h"
-
 #include "blob_file_builder.h"
 #include "blob_file_manager.h"
 #include "blob_file_set.h"
+#include "rocksdb/types.h"
 #include "table/table_builder.h"
 #include "titan/options.h"
 #include "titan_stats.h"
@@ -51,7 +50,9 @@ class TitanTableBuilder : public TableBuilder {
 
   bool ok() const { return status().ok(); }
 
-  void AddBlob(const Slice& key, const Slice& value, std::string* index_value);
+  BlobIndices AddBlob(const BlobRecord& record);
+
+  void BatchInsertIndices(const BlobIndices& key_indices);
 
   bool ShouldMerge(const std::shared_ptr<BlobFileMeta>& file);
 

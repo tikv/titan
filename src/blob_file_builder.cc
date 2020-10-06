@@ -92,7 +92,6 @@ BlobIndices BlobFileBuilder::EnterUnbuffered() {
 }
 
 BlobIndices BlobFileBuilder::FlushSampleRecords() {
-  BlobIndices ret;
   assert(cached_indices_.size() == sample_records_.size());
   for (size_t i = 0; i < sample_records_.size(); i++) {
     const std::string& record_str = sample_records_[i];
@@ -100,10 +99,10 @@ BlobIndices BlobFileBuilder::FlushSampleRecords() {
         cached_indices_[i];
     encoder_.EncodeSlice(record_str);
     WriteEncoderData(&key_index.second->blob_handle);
-    ret.push_back(key_index);
   }
   sample_records_.clear();
   sample_str_len_ = 0;
+  BlobIndices ret = std::move(cached_indices_);
   cached_indices_.clear();
   return ret;
 }

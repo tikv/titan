@@ -1,11 +1,10 @@
-#include "file/filename.h"
-#include "test_util/testharness.h"
+#include <cinttypes>
 
 #include "blob_file_builder.h"
 #include "blob_file_cache.h"
 #include "blob_file_reader.h"
-
-#include <cinttypes>
+#include "file/filename.h"
+#include "test_util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -36,7 +35,7 @@ class BlobFileTest : public testing::Test {
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     const int n = 100;
-    std::vector<BlobHandle> handles(n);
+    BlobIndices key_indices;
 
     std::unique_ptr<WritableFileWriter> file;
     {
@@ -54,7 +53,15 @@ class BlobFileTest : public testing::Test {
       BlobRecord record;
       record.key = key;
       record.value = value;
-      builder->Add(record, &handles[i]);
+
+      std::unique_ptr<BlobIndex> idx(new BlobIndex);
+      BlobIndices cur_key_indices = builder->Add(record, std::move(idx));
+      if (!cur_key_indices.empty()) {
+        key_indices.insert(key_indices.end(),
+                           std::make_move_iterator(cur_key_indices.begin()),
+                           std::make_move_iterator(cur_key_indices.end()));
+      }
+
       ASSERT_OK(builder->status());
     }
     ASSERT_OK(builder->Finish());
@@ -66,6 +73,7 @@ class BlobFileTest : public testing::Test {
     ReadOptions ro;
     std::unique_ptr<BlobFilePrefetcher> prefetcher;
     ASSERT_OK(cache.NewPrefetcher(file_number_, file_size, &prefetcher));
+    ASSERT_EQ(key_indices.size(), n);
     for (int i = 0; i < n; i++) {
       auto key = GenKey(i);
       auto value = GenValue(i);
@@ -74,18 +82,19 @@ class BlobFileTest : public testing::Test {
       expect.value = value;
       BlobRecord record;
       PinnableSlice buffer;
-      ASSERT_OK(
-          cache.Get(ro, file_number_, file_size, handles[i], &record, &buffer));
+      BlobHandle blob_handle = key_indices[i].second->blob_handle;
+      ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
+                          &buffer));
       ASSERT_EQ(record, expect);
       buffer.Reset();
-      ASSERT_OK(
-          cache.Get(ro, file_number_, file_size, handles[i], &record, &buffer));
+      ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
+                          &buffer));
       ASSERT_EQ(record, expect);
       buffer.Reset();
-      ASSERT_OK(prefetcher->Get(ro, handles[i], &record, &buffer));
+      ASSERT_OK(prefetcher->Get(ro, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
       buffer.Reset();
-      ASSERT_OK(prefetcher->Get(ro, handles[i], &record, &buffer));
+      ASSERT_OK(prefetcher->Get(ro, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
     }
   }
@@ -97,7 +106,7 @@ class BlobFileTest : public testing::Test {
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     const int n = 100;
-    std::vector<BlobHandle> handles(n);
+    BlobIndices key_indices;
 
     std::unique_ptr<WritableFileWriter> file;
     {
@@ -115,7 +124,15 @@ class BlobFileTest : public testing::Test {
       BlobRecord record;
       record.key = key;
       record.value = value;
-      builder->Add(record, &handles[i]);
+
+      std::unique_ptr<BlobIndex> idx(new BlobIndex);
+      BlobIndices cur_key_indices = builder->Add(record, std::move(idx));
+      if (!cur_key_indices.empty()) {
+        key_indices.insert(key_indices.end(),
+                           std::make_move_iterator(cur_key_indices.begin()),
+                           std::make_move_iterator(cur_key_indices.end()));
+      }
+
       ASSERT_OK(builder->status());
     }
     ASSERT_OK(builder->Finish());
@@ -132,6 +149,8 @@ class BlobFileTest : public testing::Test {
     ASSERT_OK(BlobFileReader::Open(cf_options,
                                    std::move(random_access_file_reader),
                                    file_size, &blob_file_reader, nullptr));
+    ASSERT_EQ(key_indices.size(), n);
+
     for (int i = 0; i < n; i++) {
       auto key = GenKey(i);
       auto value = GenValue(i);
@@ -140,18 +159,19 @@ class BlobFileTest : public testing::Test {
       expect.value = value;
       BlobRecord record;
       PinnableSlice buffer;
-      ASSERT_OK(
-          cache.Get(ro, file_number_, file_size, handles[i], &record, &buffer));
+      BlobHandle blob_handle = key_indices[i].second->blob_handle;
+      ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
+                          &buffer));
       ASSERT_EQ(record, expect);
       buffer.Reset();
-      ASSERT_OK(
-          cache.Get(ro, file_number_, file_size, handles[i], &record, &buffer));
+      ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
+                          &buffer));
       ASSERT_EQ(record, expect);
       buffer.Reset();
-      ASSERT_OK(blob_file_reader->Get(ro, handles[i], &record, &buffer));
+      ASSERT_OK(blob_file_reader->Get(ro, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
       buffer.Reset();
-      ASSERT_OK(blob_file_reader->Get(ro, handles[i], &record, &buffer));
+      ASSERT_OK(blob_file_reader->Get(ro, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
     }
   }

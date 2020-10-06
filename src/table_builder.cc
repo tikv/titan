@@ -5,6 +5,7 @@
 #endif
 
 #include <inttypes.h>
+
 #include "monitoring/statistics.h"
 
 namespace rocksdb {
@@ -55,16 +56,15 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
              value.size() >= cf_options_.min_blob_size &&
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     // we write to blob file and insert index
-    std::string index_value;
-    AddBlob(ikey.user_key, value, &index_value);
+    BlobRecord record;
+    record.key = ikey.user_key;
+    record.value = value;
+    BlobIndices key_indices = AddBlob(record);
+    BatchInsertIndices(key_indices);
+
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
-    if (ok()) {
-      ikey.type = kTypeBlobIndex;
-      std::string index_key;
-      AppendInternalKey(&index_key, ikey);
-      base_builder_->Add(index_key, index_value);
-    }
+    if (ok()) return;
   } else if (ikey.type == kTypeBlobIndex && cf_options_.level_merge &&
              target_level_ >= merge_level_ &&
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
@@ -87,16 +87,14 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       // doing level merge.
       if (get_status.ok()) {
         std::string index_value;
-        AddBlob(ikey.user_key, record.value, &index_value);
+        BlobRecord blob_record;
+        blob_record.key = ikey.user_key;
+        blob_record.value = record.value;
+        BlobIndices key_indices = AddBlob(blob_record);
+        BatchInsertIndices(key_indices);
         UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                       &io_bytes_written_);
-        if (ok()) {
-          std::string index_key;
-          ikey.type = kTypeBlobIndex;
-          AppendInternalKey(&index_key, ikey);
-          base_builder_->Add(index_key, index_value);
-          return;
-        }
+        if (ok()) return;
       } else {
         ++error_read_cnt_;
         ROCKS_LOG_DEBUG(db_options_.info_log,
@@ -110,15 +108,15 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   }
 }
 
-void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
-                                std::string* index_value) {
-  if (!ok()) return;
+BlobIndices TitanTableBuilder::AddBlob(const BlobRecord& record) {
+  BlobIndices ret;
+  if (!ok()) return ret;
   StopWatch write_sw(db_options_.env, statistics(stats_),
                      TITAN_BLOB_FILE_WRITE_MICROS);
 
   if (!blob_builder_) {
     status_ = blob_manager_->NewFile(&blob_handle_);
-    if (!ok()) return;
+    if (!ok()) return ret;
     ROCKS_LOG_INFO(db_options_.info_log,
                    "Titan table builder created new blob file %" PRIu64 ".",
                    blob_handle_->GetNumber());
@@ -127,26 +125,42 @@ void TitanTableBuilder::AddBlob(const Slice& key, const Slice& value,
   }
 
   RecordTick(statistics(stats_), TITAN_BLOB_FILE_NUM_KEYS_WRITTEN);
-  RecordInHistogram(statistics(stats_), TITAN_KEY_SIZE, key.size());
-  RecordInHistogram(statistics(stats_), TITAN_VALUE_SIZE, value.size());
-  AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE, value.size());
-  bytes_written_ += key.size() + value.size();
+  RecordInHistogram(statistics(stats_), TITAN_KEY_SIZE, record.key.size());
+  RecordInHistogram(statistics(stats_), TITAN_VALUE_SIZE, record.value.size());
+  AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
+           record.value.size());
+  bytes_written_ += record.key.size() + record.value.size();
 
-  BlobIndex index;
-  BlobRecord record;
-  record.key = key;
-  record.value = value;
-  index.file_number = blob_handle_->GetNumber();
-  blob_builder_->Add(record, &index.blob_handle);
-  RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
-             index.blob_handle.size);
-  bytes_written_ += record.size();
-  if (ok()) {
-    index.EncodeTo(index_value);
-    if (blob_handle_->GetFile()->GetFileSize() >=
-        cf_options_.blob_file_target_size) {
-      FinishBlobFile();
+  std::unique_ptr<BlobIndex> index(new BlobIndex);
+  index->file_number = blob_handle_->GetNumber();
+  return blob_builder_->Add(record, std::move(index));
+}
+
+void TitanTableBuilder::BatchInsertIndices(const BlobIndices& key_indices) {
+  for (const std::pair<Slice, std::unique_ptr<BlobIndex>>& key_index :
+       key_indices) {
+    RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
+               key_index.second->blob_handle.size);
+    bytes_written_ += key_index.second->blob_handle.size;
+    if (ok()) {
+      std::string index_value;
+      key_index.second->EncodeTo(&index_value);
+
+      ParsedInternalKey ikey;
+      if (!ParseInternalKey(key_index.first, &ikey)) {
+        status_ = Status::Corruption(Slice());
+        return;
+      }
+      ikey.type = kTypeBlobIndex;
+      std::string index_key;
+      AppendInternalKey(&index_key, ikey);
+      base_builder_->Add(index_key, index_value);
     }
+  }
+  // FIXME: when buffering, we have to detect is this file hit size limit
+  if (blob_handle_->GetFile()->GetFileSize() >=
+      cf_options_.blob_file_target_size) {
+    FinishBlobFile();
   }
 }
 
