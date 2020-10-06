@@ -29,23 +29,28 @@ class BlobFileTest : public testing::Test {
   std::string GenValue(uint64_t i) { return std::string(1024, i); }
 
   void AddRecord(BlobFileBuilder* builder, BlobRecord& record,
-                 BlobIndices& key_indices) {
-    std::unique_ptr<BlobIndex> idx(new BlobIndex);
-    BlobIndices cur_key_indices = builder->Add(record, std::move(idx));
-    if (!cur_key_indices.empty()) {
-      key_indices.insert(key_indices.end(),
-                         std::make_move_iterator(cur_key_indices.begin()),
-                         std::make_move_iterator(cur_key_indices.end()));
+                 BlobFileBuilder::BlobRecordContexts& contexts) {
+    std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
+        new BlobFileBuilder::BlobRecordContext);
+    ctx->key = record.key.ToString();
+    BlobFileBuilder::BlobRecordContexts cur_contexts =
+        builder->Add(record, std::move(ctx));
+
+    if (!cur_contexts.empty()) {
+      contexts.insert(contexts.end(),
+                      std::make_move_iterator(cur_contexts.begin()),
+                      std::make_move_iterator(cur_contexts.end()));
     }
   }
 
-  Status Finish(BlobFileBuilder* builder, BlobIndices& key_indices) {
+  Status Finish(BlobFileBuilder* builder,
+                BlobFileBuilder::BlobRecordContexts& contexts) {
     Status s;
-    BlobIndices cur_key_indices = builder->Finish(&s);
-    if (!cur_key_indices.empty()) {
-      key_indices.insert(key_indices.end(),
-                         std::make_move_iterator(cur_key_indices.begin()),
-                         std::make_move_iterator(cur_key_indices.end()));
+    BlobFileBuilder::BlobRecordContexts cur_contexts = builder->Finish(&s);
+    if (!cur_contexts.empty()) {
+      contexts.insert(contexts.end(),
+                      std::make_move_iterator(cur_contexts.begin()),
+                      std::make_move_iterator(cur_contexts.end()));
     }
     return s;
   }
@@ -57,7 +62,7 @@ class BlobFileTest : public testing::Test {
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     const int n = 100;
-    BlobIndices key_indices;
+    BlobFileBuilder::BlobRecordContexts contexts;
 
     std::unique_ptr<WritableFileWriter> file;
     {
@@ -76,11 +81,11 @@ class BlobFileTest : public testing::Test {
       record.key = key;
       record.value = value;
 
-      AddRecord(builder.get(), record, key_indices);
+      AddRecord(builder.get(), record, contexts);
 
       ASSERT_OK(builder->status());
     }
-    ASSERT_OK(Finish(builder.get(), key_indices));
+    ASSERT_OK(Finish(builder.get(), contexts));
     ASSERT_OK(builder->status());
 
     uint64_t file_size = 0;
@@ -89,7 +94,7 @@ class BlobFileTest : public testing::Test {
     ReadOptions ro;
     std::unique_ptr<BlobFilePrefetcher> prefetcher;
     ASSERT_OK(cache.NewPrefetcher(file_number_, file_size, &prefetcher));
-    ASSERT_EQ(key_indices.size(), n);
+    ASSERT_EQ(contexts.size(), n);
     for (int i = 0; i < n; i++) {
       auto key = GenKey(i);
       auto value = GenValue(i);
@@ -98,7 +103,7 @@ class BlobFileTest : public testing::Test {
       expect.value = value;
       BlobRecord record;
       PinnableSlice buffer;
-      BlobHandle blob_handle = key_indices[i].second->blob_handle;
+      BlobHandle blob_handle = contexts[i]->index.blob_handle;
       ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
                           &buffer));
       ASSERT_EQ(record, expect);
@@ -122,7 +127,7 @@ class BlobFileTest : public testing::Test {
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     const int n = 100;
-    BlobIndices key_indices;
+    BlobFileBuilder::BlobRecordContexts contexts;
 
     std::unique_ptr<WritableFileWriter> file;
     {
@@ -141,12 +146,12 @@ class BlobFileTest : public testing::Test {
       record.key = key;
       record.value = value;
 
-      AddRecord(builder.get(), record, key_indices);
+      AddRecord(builder.get(), record, contexts);
 
       ASSERT_OK(builder->status());
     }
 
-    ASSERT_OK(Finish(builder.get(), key_indices));
+    ASSERT_OK(Finish(builder.get(), contexts));
     ASSERT_OK(builder->status());
 
     uint64_t file_size = 0;
@@ -160,7 +165,7 @@ class BlobFileTest : public testing::Test {
     ASSERT_OK(BlobFileReader::Open(cf_options,
                                    std::move(random_access_file_reader),
                                    file_size, &blob_file_reader, nullptr));
-    ASSERT_EQ(key_indices.size(), n);
+    ASSERT_EQ(contexts.size(), n);
 
     for (int i = 0; i < n; i++) {
       auto key = GenKey(i);
@@ -170,7 +175,7 @@ class BlobFileTest : public testing::Test {
       expect.value = value;
       BlobRecord record;
       PinnableSlice buffer;
-      BlobHandle blob_handle = key_indices[i].second->blob_handle;
+      BlobHandle blob_handle = contexts[i]->index.blob_handle;
       ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
                           &buffer));
       ASSERT_EQ(record, expect);

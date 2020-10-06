@@ -32,11 +32,15 @@ namespace titandb {
 // meta index block with block handles pointed to the meta blocks. The
 // meta block and the meta index block are formatted the same as the
 // BlockBasedTable.
-typedef std::vector<std::pair<std::string, std::unique_ptr<BlobIndex>>>
-    BlobIndices;
-
 class BlobFileBuilder {
  public:
+  class BlobRecordContext {
+   public:
+    std::string key;
+    BlobIndex index;
+  };
+  typedef std::vector<std::unique_ptr<BlobRecordContext>> BlobRecordContexts;
+
   // Constructs a builder that will store the contents of the file it
   // is building in "*file". Does not close the file. It is up to the
   // caller to sync and close the file after calling Finish().
@@ -45,14 +49,15 @@ class BlobFileBuilder {
 
   // Adds the record to the file, return `BlobIndices`
   // Notice: return value might be empty when builder is in `kBuffered` state,
-  // and the index parameter should set its `file_number` before passed in, the
-  // builder will only change the `blob_handle` of it
-  BlobIndices Add(const BlobRecord& record, std::unique_ptr<BlobIndex> index);
+  // and the ctx.index parameter should set its `file_number` before passed in,
+  // the builder will only change the `blob_handle` of it
+  BlobRecordContexts Add(const BlobRecord& record,
+                         std::unique_ptr<BlobRecordContext> ctx);
 
   // Enter unbuffered state, only be called after collecting enough samples
   // for compression dictionary. It will return `BlobIndices` of the buffered
   // records
-  BlobIndices EnterUnbuffered();
+  BlobRecordContexts EnterUnbuffered();
 
   // Returns non-ok iff some error has been detected.
   Status status() const { return status_; }
@@ -61,7 +66,7 @@ class BlobFileBuilder {
   // This method will return non-empty `BlobIndices` when it is called in
   // `kBuffered` state.
   // REQUIRES: Finish(), Abandon() have not been called.
-  BlobIndices Finish(Status* status);
+  BlobRecordContexts Finish(Status* status);
 
   // Abandons building the table. If the caller is not going to call
   // Finish(), it must call Abandon() before destroying this builder.
@@ -101,7 +106,7 @@ class BlobFileBuilder {
   void WriteRawBlock(const Slice& block, BlockHandle* handle);
   void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder,
                                  BlockHandle* handle);
-  BlobIndices FlushSampleRecords();
+  BlobRecordContexts FlushSampleRecords();
   void WriteEncoderData(BlobHandle* handle);
 
   TitanCFOptions cf_options_;
@@ -115,7 +120,7 @@ class BlobFileBuilder {
   uint64_t sample_str_len_ = 0;
   std::unique_ptr<CompressionDict> compression_dict_;
 
-  BlobIndices cached_indices_;
+  BlobRecordContexts cached_contexts_;
 
   uint64_t num_entries_ = 0;
   std::string smallest_key_;

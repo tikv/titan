@@ -66,27 +66,32 @@ class BlobFileIteratorTest : public testing::Test {
   }
 
   void AddKeyValue(const std::string& key, const std::string& value,
-                   BlobIndices& key_indices) {
+                   BlobFileBuilder::BlobRecordContexts& contexts) {
     BlobRecord record;
     record.key = key;
     record.value = value;
-    std::unique_ptr<BlobIndex> idx(new BlobIndex);
-    BlobIndices cur_key_indices = builder_->Add(record, std::move(idx));
+
+    std::unique_ptr<BlobFileBuilder::BlobRecordContext> c(
+        new BlobFileBuilder::BlobRecordContext);
+    c->key = std::string(key);
+
+    BlobFileBuilder::BlobRecordContexts cur_contexts =
+        builder_->Add(record, std::move(c));
     ASSERT_OK(builder_->status());
-    if (!cur_key_indices.empty()) {
-      key_indices.insert(key_indices.end(),
-                         std::make_move_iterator(cur_key_indices.begin()),
-                         std::make_move_iterator(cur_key_indices.end()));
+    if (!cur_contexts.empty()) {
+      contexts.insert(contexts.end(),
+                      std::make_move_iterator(cur_contexts.begin()),
+                      std::make_move_iterator(cur_contexts.end()));
     }
   }
 
-  void FinishBuilder(BlobIndices& key_indices) {
+  void FinishBuilder(BlobFileBuilder::BlobRecordContexts& contexts) {
     Status s;
-    BlobIndices cur_key_indices = builder_->Finish(&s);
-    if (!cur_key_indices.empty()) {
-      key_indices.insert(key_indices.end(),
-                         std::make_move_iterator(cur_key_indices.begin()),
-                         std::make_move_iterator(cur_key_indices.end()));
+    BlobFileBuilder::BlobRecordContexts cur_contexts = builder_->Finish(&s);
+    if (!cur_contexts.empty()) {
+      contexts.insert(contexts.end(),
+                      std::make_move_iterator(cur_contexts.begin()),
+                      std::make_move_iterator(cur_contexts.end()));
     }
     ASSERT_OK(s);
     ASSERT_OK(builder_->status());
@@ -105,24 +110,24 @@ class BlobFileIteratorTest : public testing::Test {
     NewBuilder();
 
     const int n = 1000;
-    BlobIndices key_indices;
+    BlobFileBuilder::BlobRecordContexts contexts;
     for (int i = 0; i < n; i++) {
-      AddKeyValue(GenKey(i), GenValue(i), key_indices);
+      AddKeyValue(GenKey(i), GenValue(i), contexts);
     }
 
-    FinishBuilder(key_indices);
+    FinishBuilder(contexts);
 
     NewBlobFileIterator();
 
     blob_file_iterator_->SeekToFirst();
-    ASSERT_EQ(key_indices.size(), n);
+    ASSERT_EQ(contexts.size(), n);
     for (int i = 0; i < n; blob_file_iterator_->Next(), i++) {
       ASSERT_OK(blob_file_iterator_->status());
       ASSERT_EQ(blob_file_iterator_->Valid(), true);
       ASSERT_EQ(GenKey(i), blob_file_iterator_->key());
       ASSERT_EQ(GenValue(i), blob_file_iterator_->value());
       BlobIndex blob_index = blob_file_iterator_->GetBlobIndex();
-      ASSERT_EQ(key_indices[i].second->blob_handle, blob_index.blob_handle);
+      ASSERT_EQ(contexts[i]->index.blob_handle, blob_index.blob_handle);
     }
   }
 };
@@ -135,73 +140,75 @@ TEST_F(BlobFileIteratorTest, Basic) {
 TEST_F(BlobFileIteratorTest, IterateForPrev) {
   NewBuilder();
   const int n = 1000;
-  BlobIndices key_indices;
+
+  BlobFileBuilder::BlobRecordContexts contexts;
   for (int i = 0; i < n; i++) {
-    AddKeyValue(GenKey(i), GenValue(i), key_indices);
+    AddKeyValue(GenKey(i), GenValue(i), contexts);
   }
 
-  FinishBuilder(key_indices);
+  FinishBuilder(contexts);
 
   NewBlobFileIterator();
 
   int i = n / 2;
-  ASSERT_EQ(key_indices.size(), n);
-  blob_file_iterator_->IterateForPrev(
-      key_indices[i].second->blob_handle.offset);
+  ASSERT_EQ(contexts.size(), n);
+  BlobHandle blob_handle = contexts[i]->index.blob_handle;
+  blob_file_iterator_->IterateForPrev(blob_handle.offset);
   ASSERT_OK(blob_file_iterator_->status());
   for (blob_file_iterator_->Next(); i < n; i++, blob_file_iterator_->Next()) {
     ASSERT_OK(blob_file_iterator_->status());
     ASSERT_EQ(blob_file_iterator_->Valid(), true);
     BlobIndex blob_index;
     blob_index = blob_file_iterator_->GetBlobIndex();
-    ASSERT_EQ(key_indices[i].second->blob_handle, blob_index.blob_handle);
+    ASSERT_EQ(blob_handle, blob_index.blob_handle);
     ASSERT_EQ(GenKey(i), blob_file_iterator_->key());
     ASSERT_EQ(GenValue(i), blob_file_iterator_->value());
   }
 
   auto idx = Random::GetTLSInstance()->Uniform(n);
-  blob_file_iterator_->IterateForPrev(
-      key_indices[idx].second->blob_handle.offset);
+  blob_handle = contexts[i]->index.blob_handle;
+  blob_file_iterator_->IterateForPrev(blob_handle.offset);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();
   ASSERT_OK(blob_file_iterator_->status());
   ASSERT_TRUE(blob_file_iterator_->Valid());
   BlobIndex blob_index;
   blob_index = blob_file_iterator_->GetBlobIndex();
-  ASSERT_EQ(key_indices[idx].second->blob_handle, blob_index.blob_handle);
+  ASSERT_EQ(blob_handle, blob_index.blob_handle);
 
   while ((idx = Random::GetTLSInstance()->Uniform(n)) == 0)
     ;
-  blob_file_iterator_->IterateForPrev(
-      key_indices[idx].second->blob_handle.offset - kRecordHeaderSize - 1);
+  blob_handle = contexts[i]->index.blob_handle;
+  blob_file_iterator_->IterateForPrev(blob_handle.offset - kRecordHeaderSize -
+                                      1);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();
   ASSERT_OK(blob_file_iterator_->status());
   ASSERT_TRUE(blob_file_iterator_->Valid());
   blob_index = blob_file_iterator_->GetBlobIndex();
-  ASSERT_EQ(key_indices[idx - 1].second->blob_handle, blob_index.blob_handle);
+  ASSERT_EQ(blob_handle, blob_index.blob_handle);
 
   idx = Random::GetTLSInstance()->Uniform(n);
-  blob_file_iterator_->IterateForPrev(
-      key_indices[idx].second->blob_handle.offset + 1);
+  blob_handle = contexts[i]->index.blob_handle;
+  blob_file_iterator_->IterateForPrev(blob_handle.offset + 1);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();
   ASSERT_OK(blob_file_iterator_->status());
   ASSERT_TRUE(blob_file_iterator_->Valid());
   blob_index = blob_file_iterator_->GetBlobIndex();
-  ASSERT_EQ(key_indices[idx].second->blob_handle, blob_index.blob_handle);
+  ASSERT_EQ(blob_handle, blob_index.blob_handle);
 }
 
 TEST_F(BlobFileIteratorTest, MergeIterator) {
   const int kMaxKeyNum = 1000;
-  BlobIndices key_indices;
+  BlobFileBuilder::BlobRecordContexts contexts;
   std::vector<std::unique_ptr<BlobFileIterator>> iters;
   NewBuilder();
   for (int i = 1; i < kMaxKeyNum; i++) {
-    AddKeyValue(GenKey(i), GenValue(i), key_indices);
+    AddKeyValue(GenKey(i), GenValue(i), contexts);
 
     if (i % 100 == 0) {
-      FinishBuilder(key_indices);
+      FinishBuilder(contexts);
       uint64_t file_size = 0;
       ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
       NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
@@ -215,7 +222,7 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
     }
   }
 
-  FinishBuilder(key_indices);
+  FinishBuilder(contexts);
   uint64_t file_size = 0;
   ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
   NewBlobFileReader(file_number_, 0, titan_options_, env_options_, env_,
@@ -232,7 +239,7 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
     ASSERT_EQ(iter.key(), GenKey(i));
     ASSERT_EQ(iter.value(), GenValue(i));
     ASSERT_EQ(iter.GetBlobIndex().blob_handle,
-              key_indices[i - 1].second->blob_handle);
+              contexts[i - 1]->index.blob_handle);
   }
   ASSERT_EQ(i, kMaxKeyNum);
 }

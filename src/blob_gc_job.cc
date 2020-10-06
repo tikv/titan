@@ -234,15 +234,20 @@ Status BlobGCJob::DoRunGC() {
     // blob index's size is counted in `RewriteValidKeyToLSM`
     metrics_.gc_bytes_written += blob_record.size();
 
-    std::unique_ptr<MergeBlobIndex> merge_blob_index(new MergeBlobIndex());
-    merge_blob_index->file_number = blob_file_handle->GetNumber();
-    merge_blob_index->source_file_number = blob_index.file_number;
-    merge_blob_index->source_file_offset = blob_index.blob_handle.offset;
-    merge_blob_index->source_file_size = blob_index.blob_handle.size;
-    BlobIndices key_indices =
-        blob_file_builder->Add(blob_record, std::move(merge_blob_index));
+    MergeBlobIndex merge_blob_index;
+    merge_blob_index.file_number = blob_file_handle->GetNumber();
+    merge_blob_index.source_file_number = blob_index.file_number;
+    merge_blob_index.source_file_offset = blob_index.blob_handle.offset;
+    merge_blob_index.source_file_size = blob_index.blob_handle.size;
+    std::unique_ptr<BlobGCJobRecordContext> ctx(new BlobGCJobRecordContext);
+    ctx->original_index = blob_index;
+    ctx->key = blob_record.key.ToString();
+    ctx->index = merge_blob_index;
 
-    BatchWriteNewIndices(key_indices, &s);
+    BlobFileBuilder::BlobRecordContexts contexts =
+        blob_file_builder->Add(blob_record, std::move(ctx));
+
+    BatchWriteNewIndices(contexts, &s);
 
     if (!s.ok()) {
       break;
@@ -265,35 +270,33 @@ Status BlobGCJob::DoRunGC() {
   return s;
 }
 
-void BlobGCJob::BatchWriteNewIndices(BlobIndices& key_indices, Status* s) {
+void BlobGCJob::BatchWriteNewIndices(
+    BlobFileBuilder::BlobRecordContexts& contexts, Status* s) {
   auto* cfh = blob_gc_->column_family_handle();
-  for (const std::pair<std::string, std::unique_ptr<BlobIndex>>& key_index :
-       key_indices) {
-    MergeBlobIndex* new_blob_index =
-        static_cast<MergeBlobIndex*>(key_index.second.get());
-    BlobIndex blob_index;
-    blob_index.file_number = new_blob_index->source_file_number;
-    blob_index.blob_handle.offset = new_blob_index->source_file_offset;
-    blob_index.blob_handle.size = new_blob_index->source_file_size;
+  for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& base_ctx :
+       contexts) {
+    BlobGCJobRecordContext* ctx =
+        static_cast<BlobGCJobRecordContext*>(base_ctx.get());
+    MergeBlobIndex* new_blob_index = static_cast<MergeBlobIndex*>(&ctx->index);
     std::string index_entry;
+    BlobIndex original_index = ctx->original_index;
     if (!gc_merge_rewrite_) {
       new_blob_index->EncodeToBase(&index_entry);
       // Store WriteBatch for rewriting new Key-Index pairs to LSM
-      GarbageCollectionWriteCallback callback(cfh, std::string(key_index.first),
-                                              std::move(blob_index));
+      GarbageCollectionWriteCallback callback(cfh, std::string(ctx->key),
+                                              std::move(original_index));
       callback.value = index_entry;
       rewrite_batches_.emplace_back(
           std::make_pair(WriteBatch(), std::move(callback)));
       auto& wb = rewrite_batches_.back().first;
-      *s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), key_index.first,
+      *s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), ctx->key,
                                             index_entry);
     } else {
       new_blob_index->EncodeTo(&index_entry);
       rewrite_batches_without_callback_.emplace_back(
-          std::make_pair(WriteBatch(), blob_index.blob_handle.size));
+          std::make_pair(WriteBatch(), original_index.blob_handle.size));
       auto& wb = rewrite_batches_without_callback_.back().first;
-      *s = WriteBatchInternal::Merge(&wb, cfh->GetID(), key_index.first,
-                                     index_entry);
+      *s = WriteBatchInternal::Merge(&wb, cfh->GetID(), ctx->key, index_entry);
     }
     if (!s->ok()) break;
   }
@@ -397,8 +400,8 @@ Status BlobGCJob::Finish() {
 Status BlobGCJob::InstallOutputBlobFiles() {
   Status s;
   for (auto& builder : blob_file_builders_) {
-    BlobIndices key_indices = builder.second->Finish(&s);
-    BatchWriteNewIndices(key_indices, &s);
+    BlobFileBuilder::BlobRecordContexts contexts = builder.second->Finish(&s);
+    BatchWriteNewIndices(contexts, &s);
     if (!s.ok()) {
       break;
     }

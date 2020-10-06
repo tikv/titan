@@ -38,6 +38,10 @@ class BlobGCJob {
   Status Finish();
 
  private:
+  class BlobGCJobRecordContext : public BlobFileBuilder::BlobRecordContext {
+   public:
+    BlobIndex original_index;
+  };
   class GarbageCollectionWriteCallback;
   friend class BlobGCJobTest;
 
@@ -90,7 +94,8 @@ class BlobGCJob {
   uint64_t io_bytes_written_ = 0;
 
   Status DoRunGC();
-  void BatchWriteNewIndices(BlobIndices &key_indices, Status *s);
+  void BatchWriteNewIndices(BlobFileBuilder::BlobRecordContexts &contexts,
+                            Status *s);
   Status BuildIterator(std::unique_ptr<BlobFileMergeIterator> *result);
   Status DiscardEntry(const Slice &key, const BlobIndex &blob_index,
                       bool *discardable);

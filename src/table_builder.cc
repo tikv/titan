@@ -59,8 +59,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     BlobRecord record;
     record.key = ikey.user_key;
     record.value = value;
-    BlobIndices key_indices = AddBlob(record);
-    BatchInsertIndices(key_indices);
+    BlobFileBuilder::BlobRecordContexts contexts = AddBlob(record, ikey);
+    BatchInsertIndices(contexts);
 
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
@@ -96,8 +96,9 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
         BlobRecord blob_record;
         blob_record.key = ikey.user_key;
         blob_record.value = record.value;
-        BlobIndices key_indices = AddBlob(blob_record);
-        BatchInsertIndices(key_indices);
+        BlobFileBuilder::BlobRecordContexts contexts =
+            AddBlob(blob_record, ikey);
+        BatchInsertIndices(contexts);
         UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                       &io_bytes_written_);
         if (ok()) return;
@@ -114,8 +115,9 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   }
 }
 
-BlobIndices TitanTableBuilder::AddBlob(const BlobRecord& record) {
-  BlobIndices ret;
+BlobFileBuilder::BlobRecordContexts TitanTableBuilder::AddBlob(
+    const BlobRecord& record, const ParsedInternalKey& ikey) {
+  BlobFileBuilder::BlobRecordContexts ret;
   if (!ok()) return ret;
   StopWatch write_sw(db_options_.env, statistics(stats_),
                      TITAN_BLOB_FILE_WRITE_MICROS);
@@ -137,26 +139,27 @@ BlobIndices TitanTableBuilder::AddBlob(const BlobRecord& record) {
            record.value.size());
   bytes_written_ += record.key.size() + record.value.size();
 
-  std::unique_ptr<BlobIndex> index(new BlobIndex);
-  index->file_number = blob_handle_->GetNumber();
-  return blob_builder_->Add(record, std::move(index));
+  RecordContext* cur_ctx = new RecordContext;
+  cur_ctx->key = record.key.ToString();
+  cur_ctx->index.file_number = blob_handle_->GetNumber();
+  cur_ctx->ikey = ParsedInternalKey(ikey);
+  std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(cur_ctx);
+  return blob_builder_->Add(record, std::move(ctx));
 }
 
-void TitanTableBuilder::BatchInsertIndices(const BlobIndices& key_indices) {
-  for (const std::pair<std::string, std::unique_ptr<BlobIndex>>& key_index :
-       key_indices) {
+void TitanTableBuilder::BatchInsertIndices(
+    const BlobFileBuilder::BlobRecordContexts& contexts) {
+  for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& base_ctx :
+       contexts) {
     RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
-               key_index.second->blob_handle.size);
-    bytes_written_ += key_index.second->blob_handle.size;
+               base_ctx->index.blob_handle.size);
+    bytes_written_ += base_ctx->index.blob_handle.size;
     if (ok()) {
       std::string index_value;
-      key_index.second->EncodeTo(&index_value);
+      base_ctx->index.EncodeTo(&index_value);
 
-      ParsedInternalKey ikey;
-      if (!ParseInternalKey(key_index.first, &ikey)) {
-        status_ = Status::Corruption(Slice());
-        return;
-      }
+      RecordContext* ctx = static_cast<RecordContext*>(base_ctx.get());
+      ParsedInternalKey ikey(ctx->ikey);
       ikey.type = kTypeBlobIndex;
       std::string index_key;
       AppendInternalKey(&index_key, ikey);
@@ -171,8 +174,8 @@ void TitanTableBuilder::FinishBlobFile() {
     uint64_t prev_bytes_written = 0;
     SavePrevIOBytes(&prev_bytes_read, &prev_bytes_written);
     Status s;
-    BlobIndices key_indices = blob_builder_->Finish(&s);
-    BatchInsertIndices(key_indices);
+    BlobFileBuilder::BlobRecordContexts contexts = blob_builder_->Finish(&s);
+    BatchInsertIndices(contexts);
 
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
