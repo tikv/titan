@@ -59,7 +59,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     BlobRecord record;
     record.key = ikey.user_key;
     record.value = value;
-    BlobFileBuilder::BlobRecordContexts contexts = AddBlob(record, ikey);
+    BlobFileBuilder::OutContexts contexts;
+    AddBlob(record, ikey, &contexts);
     AddToBaseTable(contexts);
 
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
@@ -91,8 +92,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
         BlobRecord blob_record;
         blob_record.key = ikey.user_key;
         blob_record.value = record.value;
-        BlobFileBuilder::BlobRecordContexts contexts =
-            AddBlob(blob_record, ikey);
+        BlobFileBuilder::OutContexts contexts;
+        AddBlob(blob_record, ikey, &contexts);
         AddToBaseTable(contexts);
         UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                       &io_bytes_written_);
@@ -110,16 +111,16 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   }
 }
 
-BlobFileBuilder::BlobRecordContexts TitanTableBuilder::AddBlob(
-    const BlobRecord& record, const ParsedInternalKey& ikey) {
-  BlobFileBuilder::BlobRecordContexts ret;
-  if (!ok()) return ret;
+void TitanTableBuilder::AddBlob(const BlobRecord& record,
+                                const ParsedInternalKey& ikey,
+                                BlobFileBuilder::OutContexts* contexts) {
+  if (!ok()) return;
   StopWatch write_sw(db_options_.env, statistics(stats_),
                      TITAN_BLOB_FILE_WRITE_MICROS);
 
   if (!blob_builder_) {
     status_ = blob_manager_->NewFile(&blob_handle_);
-    if (!ok()) return ret;
+    if (!ok()) return;
     ROCKS_LOG_INFO(db_options_.info_log,
                    "Titan table builder created new blob file %" PRIu64 ".",
                    blob_handle_->GetNumber());
@@ -138,11 +139,11 @@ BlobFileBuilder::BlobRecordContexts TitanTableBuilder::AddBlob(
       new BlobFileBuilder::BlobRecordContext);
   AppendInternalKey(&ctx->key, ikey);
   ctx->new_blob_index.file_number = blob_handle_->GetNumber();
-  return blob_builder_->Add(record, std::move(ctx));
+  blob_builder_->Add(record, std::move(ctx), contexts);
 }
 
 void TitanTableBuilder::AddToBaseTable(
-    const BlobFileBuilder::BlobRecordContexts& contexts, bool finishing) {
+    const BlobFileBuilder::OutContexts& contexts, bool finishing) {
   if (contexts.empty()) return;
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
        contexts) {
@@ -176,7 +177,8 @@ void TitanTableBuilder::FinishBlobFile() {
     uint64_t prev_bytes_written = 0;
     SavePrevIOBytes(&prev_bytes_read, &prev_bytes_written);
     Status s;
-    BlobFileBuilder::BlobRecordContexts contexts = blob_builder_->Finish(&s);
+    BlobFileBuilder::OutContexts contexts;
+    s = blob_builder_->Finish(&contexts);
     AddToBaseTable(contexts, true);
 
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,

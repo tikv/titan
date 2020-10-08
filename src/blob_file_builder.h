@@ -40,7 +40,7 @@ class BlobFileBuilder {
     BlobIndex original_blob_index;
     BlobIndex new_blob_index;
   };
-  typedef std::vector<std::unique_ptr<BlobRecordContext>> BlobRecordContexts;
+  typedef autovector<std::unique_ptr<BlobRecordContext>> OutContexts;
 
   // Constructs a builder that will store the contents of the file it
   // is building in "*file". Does not close the file. It is up to the
@@ -50,24 +50,24 @@ class BlobFileBuilder {
 
   // Adds the record to the file, return `BlobIndices`
   // Notice: return value might be empty when builder is in `kBuffered` state,
-  // and the ctx.index parameter should set its `file_number` before passed in,
-  // the builder will only change the `blob_handle` of it
-  BlobRecordContexts Add(const BlobRecord& record,
-                         std::unique_ptr<BlobRecordContext> ctx);
+  // and caller should set `ctx.new_blob_index.file_number` before pass it in,
+  // the file builder will only change the `blob_handle` of it
+  void Add(const BlobRecord& record, std::unique_ptr<BlobRecordContext> ctx,
+           OutContexts* out_ctx);
 
   // Enter unbuffered state, only be called after collecting enough samples
-  // for compression dictionary. It will return `BlobIndices` of the buffered
+  // for compression dictionary. It will modify `out_ctx` of the buffered
   // records
-  BlobRecordContexts EnterUnbuffered();
+  void EnterUnbuffered(OutContexts* out_ctx);
 
   // Returns non-ok iff some error has been detected.
   Status status() const { return status_; }
 
-  // Finishes building the table.
-  // This method will return non-empty `BlobIndices` when it is called in
+  // Finishes building the table, and return status.
+  // This method will return modify output contexts when it is called in
   // `kBuffered` state.
   // REQUIRES: Finish(), Abandon() have not been called.
-  BlobRecordContexts Finish(Status* status);
+  Status Finish(OutContexts* out_ctx);
 
   // Abandons building the table. If the caller is not going to call
   // Finish(), it must call Abandon() before destroying this builder.
@@ -107,7 +107,7 @@ class BlobFileBuilder {
   void WriteRawBlock(const Slice& block, BlockHandle* handle);
   void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder,
                                  BlockHandle* handle);
-  BlobRecordContexts FlushSampleRecords();
+  void FlushSampleRecords(OutContexts* out_ctx);
   void WriteEncoderData(BlobHandle* handle);
 
   TitanCFOptions cf_options_;
@@ -121,7 +121,7 @@ class BlobFileBuilder {
   uint64_t sample_str_len_ = 0;
   std::unique_ptr<CompressionDict> compression_dict_;
 
-  BlobRecordContexts cached_contexts_;
+  OutContexts cached_contexts_;
 
   uint64_t num_entries_ = 0;
   std::string smallest_key_;

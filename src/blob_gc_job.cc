@@ -239,8 +239,8 @@ Status BlobGCJob::DoRunGC() {
     ctx->original_blob_index = blob_index;
     ctx->new_blob_index.file_number = blob_file_handle->GetNumber();
 
-    BlobFileBuilder::BlobRecordContexts contexts =
-        blob_file_builder->Add(blob_record, std::move(ctx));
+    BlobFileBuilder::OutContexts contexts;
+    blob_file_builder->Add(blob_record, std::move(ctx), &contexts);
 
     BatchWriteNewIndices(contexts, &s);
 
@@ -265,8 +265,8 @@ Status BlobGCJob::DoRunGC() {
   return s;
 }
 
-void BlobGCJob::BatchWriteNewIndices(
-    BlobFileBuilder::BlobRecordContexts& contexts, Status* s) {
+void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
+                                     Status* s) {
   auto* cfh = blob_gc_->column_family_handle();
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
        contexts) {
@@ -405,7 +405,8 @@ Status BlobGCJob::Finish() {
 Status BlobGCJob::InstallOutputBlobFiles() {
   Status s;
   for (auto& builder : blob_file_builders_) {
-    BlobFileBuilder::BlobRecordContexts contexts = builder.second->Finish(&s);
+    BlobFileBuilder::OutContexts contexts;
+    s = builder.second->Finish(&contexts);
     BatchWriteNewIndices(contexts, &s);
     if (!s.ok()) {
       break;

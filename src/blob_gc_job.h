@@ -90,8 +90,7 @@ class BlobGCJob {
   uint64_t io_bytes_written_ = 0;
 
   Status DoRunGC();
-  void BatchWriteNewIndices(BlobFileBuilder::BlobRecordContexts &contexts,
-                            Status *s);
+  void BatchWriteNewIndices(BlobFileBuilder::OutContexts &contexts, Status *s);
   Status BuildIterator(std::unique_ptr<BlobFileMergeIterator> *result);
   Status DiscardEntry(const Slice &key, const BlobIndex &blob_index,
                       bool *discardable);

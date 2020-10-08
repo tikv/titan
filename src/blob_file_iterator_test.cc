@@ -66,7 +66,7 @@ class BlobFileIteratorTest : public testing::Test {
   }
 
   void AddKeyValue(const std::string& key, const std::string& value,
-                   BlobFileBuilder::BlobRecordContexts& contexts) {
+                   BlobFileBuilder::OutContexts& contexts) {
     BlobRecord record;
     record.key = key;
     record.value = value;
@@ -76,23 +76,20 @@ class BlobFileIteratorTest : public testing::Test {
     InternalKey ikey(key, 1, kTypeValue);
     c->key = ikey.Encode().ToString();
 
-    BlobFileBuilder::BlobRecordContexts cur_contexts =
-        builder_->Add(record, std::move(c));
+    BlobFileBuilder::OutContexts cur_contexts;
+    builder_->Add(record, std::move(c), &cur_contexts);
     ASSERT_OK(builder_->status());
-    if (!cur_contexts.empty()) {
-      contexts.insert(contexts.end(),
-                      std::make_move_iterator(cur_contexts.begin()),
-                      std::make_move_iterator(cur_contexts.end()));
+    for (size_t i = 0; i < cur_contexts.size(); i++) {
+      contexts.emplace_back(std::move(cur_contexts[i]));
     }
   }
 
-  void FinishBuilder(BlobFileBuilder::BlobRecordContexts& contexts) {
-    Status s;
-    BlobFileBuilder::BlobRecordContexts cur_contexts = builder_->Finish(&s);
-    if (!cur_contexts.empty()) {
-      contexts.insert(contexts.end(),
-                      std::make_move_iterator(cur_contexts.begin()),
-                      std::make_move_iterator(cur_contexts.end()));
+  void FinishBuilder(BlobFileBuilder::OutContexts& contexts) {
+    BlobFileBuilder::OutContexts cur_contexts;
+    Status s = builder_->Finish(&cur_contexts);
+
+    for (size_t i = 0; i < cur_contexts.size(); i++) {
+      contexts.emplace_back(std::move(cur_contexts[i]));
     }
     ASSERT_OK(s);
     ASSERT_OK(builder_->status());
@@ -111,7 +108,7 @@ class BlobFileIteratorTest : public testing::Test {
     NewBuilder();
 
     const int n = 1000;
-    BlobFileBuilder::BlobRecordContexts contexts;
+    BlobFileBuilder::OutContexts contexts;
     for (int i = 0; i < n; i++) {
       AddKeyValue(GenKey(i), GenValue(i), contexts);
     }
@@ -143,7 +140,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   NewBuilder();
   const int n = 1000;
 
-  BlobFileBuilder::BlobRecordContexts contexts;
+  BlobFileBuilder::OutContexts contexts;
   for (int i = 0; i < n; i++) {
     AddKeyValue(GenKey(i), GenValue(i), contexts);
   }
@@ -205,7 +202,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
 
 TEST_F(BlobFileIteratorTest, MergeIterator) {
   const int kMaxKeyNum = 1000;
-  BlobFileBuilder::BlobRecordContexts contexts;
+  BlobFileBuilder::OutContexts contexts;
   std::vector<std::unique_ptr<BlobFileIterator>> iters;
   NewBuilder();
   for (int i = 1; i < kMaxKeyNum; i++) {

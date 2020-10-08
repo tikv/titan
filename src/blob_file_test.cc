@@ -29,28 +29,23 @@ class BlobFileTest : public testing::Test {
   std::string GenValue(uint64_t i) { return std::string(1024, i); }
 
   void AddRecord(BlobFileBuilder* builder, BlobRecord& record,
-                 BlobFileBuilder::BlobRecordContexts& contexts) {
+                 BlobFileBuilder::OutContexts& contexts) {
     std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
         new BlobFileBuilder::BlobRecordContext);
     ctx->key = record.key.ToString();
-    BlobFileBuilder::BlobRecordContexts cur_contexts =
-        builder->Add(record, std::move(ctx));
-
-    if (!cur_contexts.empty()) {
-      contexts.insert(contexts.end(),
-                      std::make_move_iterator(cur_contexts.begin()),
-                      std::make_move_iterator(cur_contexts.end()));
+    BlobFileBuilder::OutContexts cur_contexts;
+    builder->Add(record, std::move(ctx), &cur_contexts);
+    for (size_t i = 0; i < cur_contexts.size(); i++) {
+      contexts.emplace_back(std::move(cur_contexts[i]));
     }
   }
 
   Status Finish(BlobFileBuilder* builder,
-                BlobFileBuilder::BlobRecordContexts& contexts) {
-    Status s;
-    BlobFileBuilder::BlobRecordContexts cur_contexts = builder->Finish(&s);
-    if (!cur_contexts.empty()) {
-      contexts.insert(contexts.end(),
-                      std::make_move_iterator(cur_contexts.begin()),
-                      std::make_move_iterator(cur_contexts.end()));
+                BlobFileBuilder::OutContexts& contexts) {
+    BlobFileBuilder::OutContexts cur_contexts;
+    Status s = builder->Finish(&cur_contexts);
+    for (size_t i = 0; i < cur_contexts.size(); i++) {
+      contexts.emplace_back(std::move(cur_contexts[i]));
     }
     return s;
   }
@@ -62,7 +57,7 @@ class BlobFileTest : public testing::Test {
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     const int n = 100;
-    BlobFileBuilder::BlobRecordContexts contexts;
+    BlobFileBuilder::OutContexts contexts;
 
     std::unique_ptr<WritableFileWriter> file;
     {
@@ -127,7 +122,7 @@ class BlobFileTest : public testing::Test {
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     const int n = 100;
-    BlobFileBuilder::BlobRecordContexts contexts;
+    BlobFileBuilder::OutContexts contexts;
 
     std::unique_ptr<WritableFileWriter> file;
     {

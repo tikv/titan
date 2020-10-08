@@ -50,10 +50,10 @@ class TitanTableBuilder : public TableBuilder {
 
   bool ok() const { return status().ok(); }
 
-  BlobFileBuilder::BlobRecordContexts AddBlob(const BlobRecord& record,
-                                              const ParsedInternalKey& ikey);
+  void AddBlob(const BlobRecord& record, const ParsedInternalKey& ikey,
+               BlobFileBuilder::OutContexts* contexts);
 
-  void AddToBaseTable(const BlobFileBuilder::BlobRecordContexts& contexts,
+  void AddToBaseTable(const BlobFileBuilder::OutContexts& contexts,
                       bool finishing = false);
 
   bool ShouldMerge(const std::shared_ptr<BlobFileMeta>& file);
