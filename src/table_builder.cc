@@ -65,11 +65,6 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
 
-    // FIXME: when buffering, we have to detect is this file hit size limit
-    if (blob_handle_->GetFile()->GetFileSize() >=
-        cf_options_.blob_file_target_size) {
-      FinishBlobFile();
-    }
     if (ok()) return;
   } else if (ikey.type == kTypeBlobIndex && cf_options_.level_merge &&
              target_level_ >= merge_level_ &&
@@ -147,7 +142,8 @@ BlobFileBuilder::BlobRecordContexts TitanTableBuilder::AddBlob(
 }
 
 void TitanTableBuilder::AddToBaseTable(
-    const BlobFileBuilder::BlobRecordContexts& contexts) {
+    const BlobFileBuilder::BlobRecordContexts& contexts, bool finishing) {
+  if (contexts.empty()) return;
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
        contexts) {
     RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
@@ -168,6 +164,10 @@ void TitanTableBuilder::AddToBaseTable(
       base_builder_->Add(index_key, index_value);
     }
   }
+  if (!finishing && blob_handle_->GetFile()->GetFileSize() >=
+                        cf_options_.blob_file_target_size) {
+    FinishBlobFile();
+  }
 }
 
 void TitanTableBuilder::FinishBlobFile() {
@@ -177,7 +177,7 @@ void TitanTableBuilder::FinishBlobFile() {
     SavePrevIOBytes(&prev_bytes_read, &prev_bytes_written);
     Status s;
     BlobFileBuilder::BlobRecordContexts contexts = blob_builder_->Finish(&s);
-    AddToBaseTable(contexts);
+    AddToBaseTable(contexts, true);
 
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);

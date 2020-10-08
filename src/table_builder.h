@@ -53,7 +53,8 @@ class TitanTableBuilder : public TableBuilder {
   BlobFileBuilder::BlobRecordContexts AddBlob(const BlobRecord& record,
                                               const ParsedInternalKey& ikey);
 
-  void AddToBaseTable(const BlobFileBuilder::BlobRecordContexts& contexts);
+  void AddToBaseTable(const BlobFileBuilder::BlobRecordContexts& contexts,
+                      bool finishing = false);
 
   bool ShouldMerge(const std::shared_ptr<BlobFileMeta>& file);
 
