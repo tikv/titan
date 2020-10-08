@@ -64,13 +64,19 @@ void BlobFileBuilder::EnterUnbuffered(OutContexts* out_ctx) {
   std::vector<size_t> sample_lens;
 
   for (const auto& record_str : sample_records_) {
+    if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0 &&
+        samples.size() >=
+            cf_options_.blob_file_compression_options.zstd_max_train_bytes) {
+      // Enough training data
+      break;
+    }
     size_t copy_len =
-        cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0
-            ? std::min(cf_options_.blob_file_compression_options
+        cf_options_.blob_file_compression_options.zstd_max_train_bytes == 0
+            ? record_str.size()
+            : std::min(cf_options_.blob_file_compression_options
                                .zstd_max_train_bytes -
-                           record_str.size(),
-                       record_str.size())
-            : record_str.size();
+                           samples.size(),
+                       record_str.size());
     samples.append(record_str, 0, copy_len);
     sample_lens.emplace_back(copy_len);
   }
@@ -84,9 +90,9 @@ void BlobFileBuilder::EnterUnbuffered(OutContexts* out_ctx) {
                           cf_options_.blob_file_compression_options.level));
   encoder_.SetCompressionDict(*compression_dict_);
 
-  builder_state_ = BuilderState::kUnbuffered;
+  FlushSampleRecords(out_ctx);
 
-  return FlushSampleRecords(out_ctx);
+  builder_state_ = BuilderState::kUnbuffered;
 }
 
 void BlobFileBuilder::FlushSampleRecords(OutContexts* out_ctx) {
