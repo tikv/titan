@@ -60,7 +60,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     record.key = ikey.user_key;
     record.value = value;
     BlobFileBuilder::BlobRecordContexts contexts = AddBlob(record, ikey);
-    BatchInsertIndices(contexts);
+    AddToBaseTable(contexts);
 
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
@@ -98,7 +98,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
         blob_record.value = record.value;
         BlobFileBuilder::BlobRecordContexts contexts =
             AddBlob(blob_record, ikey);
-        BatchInsertIndices(contexts);
+        AddToBaseTable(contexts);
         UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                       &io_bytes_written_);
         if (ok()) return;
@@ -147,7 +147,7 @@ BlobFileBuilder::BlobRecordContexts TitanTableBuilder::AddBlob(
   return blob_builder_->Add(record, std::move(ctx));
 }
 
-void TitanTableBuilder::BatchInsertIndices(
+void TitanTableBuilder::AddToBaseTable(
     const BlobFileBuilder::BlobRecordContexts& contexts) {
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& base_ctx :
        contexts) {
@@ -175,7 +175,7 @@ void TitanTableBuilder::FinishBlobFile() {
     SavePrevIOBytes(&prev_bytes_read, &prev_bytes_written);
     Status s;
     BlobFileBuilder::BlobRecordContexts contexts = blob_builder_->Finish(&s);
-    BatchInsertIndices(contexts);
+    AddToBaseTable(contexts);
 
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
