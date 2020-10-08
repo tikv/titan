@@ -215,8 +215,8 @@ Status TitanTableBuilder::status() const {
 }
 
 Status TitanTableBuilder::Finish() {
-  base_builder_->Finish();
   FinishBlobFile();
+  base_builder_->Finish();
   status_ = blob_manager_->BatchFinishFiles(cf_id_, finished_blobs_);
   if (!status_.ok()) {
     ROCKS_LOG_ERROR(db_options_.info_log,

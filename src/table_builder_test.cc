@@ -360,23 +360,20 @@ TEST_F(TableBuilderTest, Basic) {
 }
 
 TEST_F(TableBuilderTest, DictCompress) {
-  std::unique_ptr<WritableFileWriter> base_file;
-  NewBaseFileWriter(&base_file);
-  std::unique_ptr<TableBuilder> table_builder;
-
-  TitanCFOptions cf_options;
   CompressionOptions compression_opts;
   compression_opts.enabled = true;
   compression_opts.max_dict_bytes = 4000;
-  cf_options.blob_file_compression_options = compression_opts;
-  cf_options.compression = kZSTD;
+  cf_options_.blob_file_compression_options = compression_opts;
+  cf_options_.compression = kZSTD;
 
-  TableBuilderOptions options(
-      cf_ioptions_, cf_moptions_, cf_ioptions_.internal_comparator,
-      &collectors_, kZSTD, 0 /*sample_for_compression*/, compression_opts,
-      false /*skip_filters*/, kDefaultColumnFamilyName, 0 /*target_level*/);
-  table_builder.reset(
-      table_factory_->NewTableBuilder(options, 0, base_file.get()));
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
+      blob_file_set_.get(), nullptr));
+
+  std::unique_ptr<WritableFileWriter> base_file;
+  NewBaseFileWriter(&base_file);
+  std::unique_ptr<TableBuilder> table_builder;
+  NewTableBuilder(base_file.get(), &table_builder);
 
   // Build a base table and a blob file.
   const int n = 100;
@@ -399,7 +396,7 @@ TEST_F(TableBuilderTest, DictCompress) {
   NewFileReader(blob_name_, &file);
   uint64_t file_size = 0;
   ASSERT_OK(env_->GetFileSize(blob_name_, &file_size));
-  Status stat = BlobFileReader::Open(cf_options, std::move(file), file_size,
+  Status stat = BlobFileReader::Open(cf_options_, std::move(file), file_size,
                                      &blob_reader, nullptr);
   assert(stat.code() == Status::kNotSupported);
 }

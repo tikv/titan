@@ -38,6 +38,8 @@ class BlobFileReader {
 
   Status ReadRecord(const BlobHandle& handle, BlobRecord* record,
                     OwnedSlice* buffer);
+  static Status ReadHeader(BlobFileHeader* header,
+                           std::unique_ptr<RandomAccessFileReader>& file);
 
   TitanCFOptions options_;
   std::unique_ptr<RandomAccessFileReader> file_;
