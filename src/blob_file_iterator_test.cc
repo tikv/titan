@@ -162,13 +162,14 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
     ASSERT_EQ(blob_file_iterator_->Valid(), true);
     BlobIndex blob_index;
     blob_index = blob_file_iterator_->GetBlobIndex();
+    blob_handle = contexts[i]->new_blob_index.blob_handle;
     ASSERT_EQ(blob_handle, blob_index.blob_handle);
     ASSERT_EQ(GenKey(i), blob_file_iterator_->key());
     ASSERT_EQ(GenValue(i), blob_file_iterator_->value());
   }
 
   auto idx = Random::GetTLSInstance()->Uniform(n);
-  blob_handle = contexts[i]->new_blob_index.blob_handle;
+  blob_handle = contexts[idx]->new_blob_index.blob_handle;
   blob_file_iterator_->IterateForPrev(blob_handle.offset);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();
@@ -180,7 +181,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
 
   while ((idx = Random::GetTLSInstance()->Uniform(n)) == 0)
     ;
-  blob_handle = contexts[i]->new_blob_index.blob_handle;
+  blob_handle = contexts[idx]->new_blob_index.blob_handle;
   blob_file_iterator_->IterateForPrev(blob_handle.offset - kRecordHeaderSize -
                                       1);
   ASSERT_OK(blob_file_iterator_->status());
@@ -188,10 +189,11 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   ASSERT_OK(blob_file_iterator_->status());
   ASSERT_TRUE(blob_file_iterator_->Valid());
   blob_index = blob_file_iterator_->GetBlobIndex();
+  blob_handle = contexts[idx - 1]->new_blob_index.blob_handle;
   ASSERT_EQ(blob_handle, blob_index.blob_handle);
 
   idx = Random::GetTLSInstance()->Uniform(n);
-  blob_handle = contexts[i]->new_blob_index.blob_handle;
+  blob_handle = contexts[idx]->new_blob_index.blob_handle;
   blob_file_iterator_->IterateForPrev(blob_handle.offset + 1);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();
