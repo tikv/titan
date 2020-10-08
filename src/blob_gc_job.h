@@ -38,10 +38,6 @@ class BlobGCJob {
   Status Finish();
 
  private:
-  class BlobGCJobRecordContext : public BlobFileBuilder::BlobRecordContext {
-   public:
-    BlobIndex original_index;
-  };
   class GarbageCollectionWriteCallback;
   friend class BlobGCJobTest;
 

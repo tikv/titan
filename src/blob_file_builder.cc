@@ -40,7 +40,7 @@ BlobFileBuilder::BlobRecordContexts BlobFileBuilder::Add(
     }
   } else if (builder_state_ == BuilderState::kUnbuffered) {
     encoder_.EncodeRecord(record);
-    WriteEncoderData(&ctx->index.blob_handle);
+    WriteEncoderData(&ctx->new_blob_index.blob_handle);
     ret.push_back(std::move(ctx));
   }
 
@@ -97,7 +97,7 @@ BlobFileBuilder::BlobRecordContexts BlobFileBuilder::FlushSampleRecords() {
     const std::string& record_str = sample_records_[i];
     const std::unique_ptr<BlobRecordContext>& ctx = cached_contexts_[i];
     encoder_.EncodeSlice(record_str);
-    WriteEncoderData(&ctx->index.blob_handle);
+    WriteEncoderData(&ctx->new_blob_index.blob_handle);
   }
   sample_records_.clear();
   sample_str_len_ = 0;

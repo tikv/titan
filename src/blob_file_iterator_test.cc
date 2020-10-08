@@ -73,7 +73,8 @@ class BlobFileIteratorTest : public testing::Test {
 
     std::unique_ptr<BlobFileBuilder::BlobRecordContext> c(
         new BlobFileBuilder::BlobRecordContext);
-    c->key = std::string(key);
+    InternalKey ikey(key, 1, kTypeValue);
+    c->key = ikey.Encode().ToString();
 
     BlobFileBuilder::BlobRecordContexts cur_contexts =
         builder_->Add(record, std::move(c));
@@ -127,7 +128,8 @@ class BlobFileIteratorTest : public testing::Test {
       ASSERT_EQ(GenKey(i), blob_file_iterator_->key());
       ASSERT_EQ(GenValue(i), blob_file_iterator_->value());
       BlobIndex blob_index = blob_file_iterator_->GetBlobIndex();
-      ASSERT_EQ(contexts[i]->index.blob_handle, blob_index.blob_handle);
+      ASSERT_EQ(contexts[i]->new_blob_index.blob_handle,
+                blob_index.blob_handle);
     }
   }
 };
@@ -152,7 +154,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
 
   int i = n / 2;
   ASSERT_EQ(contexts.size(), n);
-  BlobHandle blob_handle = contexts[i]->index.blob_handle;
+  BlobHandle blob_handle = contexts[i]->new_blob_index.blob_handle;
   blob_file_iterator_->IterateForPrev(blob_handle.offset);
   ASSERT_OK(blob_file_iterator_->status());
   for (blob_file_iterator_->Next(); i < n; i++, blob_file_iterator_->Next()) {
@@ -166,7 +168,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   }
 
   auto idx = Random::GetTLSInstance()->Uniform(n);
-  blob_handle = contexts[i]->index.blob_handle;
+  blob_handle = contexts[i]->new_blob_index.blob_handle;
   blob_file_iterator_->IterateForPrev(blob_handle.offset);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();
@@ -178,7 +180,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
 
   while ((idx = Random::GetTLSInstance()->Uniform(n)) == 0)
     ;
-  blob_handle = contexts[i]->index.blob_handle;
+  blob_handle = contexts[i]->new_blob_index.blob_handle;
   blob_file_iterator_->IterateForPrev(blob_handle.offset - kRecordHeaderSize -
                                       1);
   ASSERT_OK(blob_file_iterator_->status());
@@ -189,7 +191,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   ASSERT_EQ(blob_handle, blob_index.blob_handle);
 
   idx = Random::GetTLSInstance()->Uniform(n);
-  blob_handle = contexts[i]->index.blob_handle;
+  blob_handle = contexts[i]->new_blob_index.blob_handle;
   blob_file_iterator_->IterateForPrev(blob_handle.offset + 1);
   ASSERT_OK(blob_file_iterator_->status());
   blob_file_iterator_->Next();
@@ -239,7 +241,7 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
     ASSERT_EQ(iter.key(), GenKey(i));
     ASSERT_EQ(iter.value(), GenValue(i));
     ASSERT_EQ(iter.GetBlobIndex().blob_handle,
-              contexts[i - 1]->index.blob_handle);
+              contexts[i - 1]->new_blob_index.blob_handle);
   }
   ASSERT_EQ(i, kMaxKeyNum);
 }

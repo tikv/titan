@@ -46,10 +46,6 @@ class TitanTableBuilder : public TableBuilder {
   TableProperties GetTableProperties() const override;
 
  private:
-  class RecordContext : public BlobFileBuilder::BlobRecordContext {
-   public:
-    ParsedInternalKey ikey;
-  };
   friend class TableBuilderTest;
 
   bool ok() const { return status().ok(); }

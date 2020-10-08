@@ -139,27 +139,29 @@ BlobFileBuilder::BlobRecordContexts TitanTableBuilder::AddBlob(
            record.value.size());
   bytes_written_ += record.key.size() + record.value.size();
 
-  RecordContext* cur_ctx = new RecordContext;
-  cur_ctx->key = record.key.ToString();
-  cur_ctx->index.file_number = blob_handle_->GetNumber();
-  cur_ctx->ikey = ParsedInternalKey(ikey);
-  std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(cur_ctx);
+  std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
+      new BlobFileBuilder::BlobRecordContext);
+  AppendInternalKey(&ctx->key, ikey);
+  ctx->new_blob_index.file_number = blob_handle_->GetNumber();
   return blob_builder_->Add(record, std::move(ctx));
 }
 
 void TitanTableBuilder::AddToBaseTable(
     const BlobFileBuilder::BlobRecordContexts& contexts) {
-  for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& base_ctx :
+  for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
        contexts) {
     RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
-               base_ctx->index.blob_handle.size);
-    bytes_written_ += base_ctx->index.blob_handle.size;
+               ctx->new_blob_index.blob_handle.size);
+    bytes_written_ += ctx->new_blob_index.blob_handle.size;
     if (ok()) {
       std::string index_value;
-      base_ctx->index.EncodeTo(&index_value);
+      ctx->new_blob_index.EncodeTo(&index_value);
 
-      RecordContext* ctx = static_cast<RecordContext*>(base_ctx.get());
-      ParsedInternalKey ikey(ctx->ikey);
+      ParsedInternalKey ikey;
+      if (!ParseInternalKey(ctx->key, &ikey)) {
+        status_ = Status::Corruption(Slice());
+        return;
+      }
       ikey.type = kTypeBlobIndex;
       std::string index_key;
       AppendInternalKey(&index_key, ikey);

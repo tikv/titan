@@ -103,7 +103,7 @@ class BlobFileTest : public testing::Test {
       expect.value = value;
       BlobRecord record;
       PinnableSlice buffer;
-      BlobHandle blob_handle = contexts[i]->index.blob_handle;
+      BlobHandle blob_handle = contexts[i]->new_blob_index.blob_handle;
       ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
                           &buffer));
       ASSERT_EQ(record, expect);
@@ -175,7 +175,7 @@ class BlobFileTest : public testing::Test {
       expect.value = value;
       BlobRecord record;
       PinnableSlice buffer;
-      BlobHandle blob_handle = contexts[i]->index.blob_handle;
+      BlobHandle blob_handle = contexts[i]->new_blob_index.blob_handle;
       ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
                           &buffer));
       ASSERT_EQ(record, expect);

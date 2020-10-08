@@ -36,8 +36,9 @@ class BlobFileBuilder {
  public:
   class BlobRecordContext {
    public:
-    std::string key;
-    BlobIndex index;
+    std::string key;  // original internal key
+    BlobIndex original_blob_index;
+    BlobIndex new_blob_index;
   };
   typedef std::vector<std::unique_ptr<BlobRecordContext>> BlobRecordContexts;
 
