@@ -1,9 +1,9 @@
-#include "rocksdb/convenience.h"
-#include "test_util/testharness.h"
-
 #include "blob_gc_job.h"
+
 #include "blob_gc_picker.h"
 #include "db_impl.h"
+#include "rocksdb/convenience.h"
+#include "test_util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
