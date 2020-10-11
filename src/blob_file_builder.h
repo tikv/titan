@@ -39,6 +39,12 @@ class BlobFileBuilder {
     std::string key;  // original internal key
     BlobIndex original_blob_index;
     BlobIndex new_blob_index;
+    class SmallKVContetx {
+     public:
+      SmallKVContetx() : is_small(false) {}
+      bool is_small;
+      std::string value;
+    } small_kv_ctx;
   };
   typedef autovector<std::unique_ptr<BlobRecordContext>> OutContexts;
 

@@ -53,20 +53,19 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       base_builder_->Add(key, value);
     }
   } else if (ikey.type == kTypeValue &&
-             value.size() >= cf_options_.min_blob_size &&
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
-    // we write to blob file and insert index
     BlobRecord record;
     record.key = ikey.user_key;
     record.value = value;
     BlobFileBuilder::OutContexts contexts;
+    // AddBlob will check the KV pair is small or not
     AddBlob(record, ikey, &contexts);
     AddToBaseTable(contexts);
-
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
 
     if (ok()) return;
+
   } else if (ikey.type == kTypeBlobIndex && cf_options_.level_merge &&
              target_level_ >= merge_level_ &&
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
@@ -127,8 +126,6 @@ void TitanTableBuilder::AddBlob(const BlobRecord& record,
     blob_builder_.reset(
         new BlobFileBuilder(db_options_, cf_options_, blob_handle_->GetFile()));
   }
-
-  RecordTick(statistics(stats_), TITAN_BLOB_FILE_NUM_KEYS_WRITTEN);
   RecordInHistogram(statistics(stats_), TITAN_KEY_SIZE, record.key.size());
   RecordInHistogram(statistics(stats_), TITAN_VALUE_SIZE, record.value.size());
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
@@ -139,6 +136,14 @@ void TitanTableBuilder::AddBlob(const BlobRecord& record,
       new BlobFileBuilder::BlobRecordContext);
   AppendInternalKey(&ctx->key, ikey);
   ctx->new_blob_index.file_number = blob_handle_->GetNumber();
+  if (record.value.size() < cf_options_.min_blob_size) {
+    // samll KV pair
+    // if `BlobFileBuilder` is in `kBuffered` state, the KV pair will be
+    // cached and returned later, otherwise, it will return immediately, and
+    // can be written into SST directly
+    ctx->small_kv_ctx.is_small = true;
+    ctx->small_kv_ctx.value = record.value.ToString();
+  }
   blob_builder_->Add(record, std::move(ctx), contexts);
 }
 
@@ -147,22 +152,27 @@ void TitanTableBuilder::AddToBaseTable(
   if (contexts.empty()) return;
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
        contexts) {
-    RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
-               ctx->new_blob_index.blob_handle.size);
-    bytes_written_ += ctx->new_blob_index.blob_handle.size;
-    if (ok()) {
-      std::string index_value;
-      ctx->new_blob_index.EncodeTo(&index_value);
+    ParsedInternalKey ikey;
+    if (!ParseInternalKey(ctx->key, &ikey)) {
+      status_ = Status::Corruption(Slice());
+      return;
+    }
+    if (ctx->small_kv_ctx.is_small) {
+      // write directly to base table
+      base_builder_->Add(ctx->key, ctx->small_kv_ctx.value);
+    } else {
+      RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
+                 ctx->new_blob_index.blob_handle.size);
+      bytes_written_ += ctx->new_blob_index.blob_handle.size;
+      if (ok()) {
+        std::string index_value;
+        ctx->new_blob_index.EncodeTo(&index_value);
 
-      ParsedInternalKey ikey;
-      if (!ParseInternalKey(ctx->key, &ikey)) {
-        status_ = Status::Corruption(Slice());
-        return;
+        ikey.type = kTypeBlobIndex;
+        std::string index_key;
+        AppendInternalKey(&index_key, ikey);
+        base_builder_->Add(index_key, index_value);
       }
-      ikey.type = kTypeBlobIndex;
-      std::string index_key;
-      AppendInternalKey(&index_key, ikey);
-      base_builder_->Add(index_key, index_value);
     }
   }
   if (!finishing && blob_handle_->GetFile()->GetFileSize() >=

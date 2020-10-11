@@ -27,6 +27,9 @@ void BlobFileBuilder::Add(const BlobRecord& record,
   if (!ok()) return;
   std::string key = record.key.ToString();
   if (builder_state_ == BuilderState::kBuffered) {
+    // Check flags, if it is a small KV pair, do nothing, just cache it
+    if (ctx->small_kv_ctx.is_small)
+      return cached_contexts_.emplace_back(std::move(ctx));
     std::string record_str;
     // Encode to take ownership of underlying string.
     record.EncodeTo(&record_str);
@@ -39,6 +42,10 @@ void BlobFileBuilder::Add(const BlobRecord& record,
       EnterUnbuffered(out_ctx);
     }
   } else if (builder_state_ == BuilderState::kUnbuffered) {
+    // Check flags, if it is a small KV pair, do nothing, just return it
+    // back, and it will be written into sst out side
+    if (ctx->small_kv_ctx.is_small)
+      return out_ctx->emplace_back(std::move(ctx));
     encoder_.EncodeRecord(record);
     WriteEncoderData(&ctx->new_blob_index.blob_handle);
     out_ctx->emplace_back(std::move(ctx));
@@ -96,14 +103,23 @@ void BlobFileBuilder::EnterUnbuffered(OutContexts* out_ctx) {
 }
 
 void BlobFileBuilder::FlushSampleRecords(OutContexts* out_ctx) {
-  assert(cached_contexts_.size() == sample_records_.size());
-  for (size_t i = 0; i < sample_records_.size(); i++) {
+  assert(cached_contexts_.size() >= sample_records_.size());
+  size_t i, j;
+  for (i = 0; i < sample_records_.size(); i++, j++) {
     const std::string& record_str = sample_records_[i];
-    const std::unique_ptr<BlobRecordContext>& ctx = cached_contexts_[i];
+    j = i;
+    for (; j < cached_contexts_.size() &&
+           cached_contexts_[j]->small_kv_ctx.is_small;
+         j++) {
+      out_ctx->emplace_back(std::move(cached_contexts_[j]));
+    }
+    const std::unique_ptr<BlobRecordContext>& ctx = cached_contexts_[j];
     encoder_.EncodeSlice(record_str);
     WriteEncoderData(&ctx->new_blob_index.blob_handle);
-    out_ctx->emplace_back(std::move(cached_contexts_[i]));
+    out_ctx->emplace_back(std::move(cached_contexts_[j]));
   }
+  assert(i == sample_records_.size());
+  assert(j == cached_contexts_.size());
   sample_records_.clear();
   sample_str_len_ = 0;
   cached_contexts_.clear();
