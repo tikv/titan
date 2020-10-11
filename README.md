@@ -44,3 +44,8 @@ bash scripts/format-diff.sh
 
 ## Compatibility with RocksDB
 Current version of Titan is developed and tested with RocksDB 6.4.
+KBZ*
+P*
+c.C.*
+*(*fix*]
+*cmd*
