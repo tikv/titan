@@ -117,15 +117,25 @@ void TitanTableBuilder::AddBlob(const BlobRecord& record,
   StopWatch write_sw(db_options_.env, statistics(stats_),
                      TITAN_BLOB_FILE_WRITE_MICROS);
 
-  if (!blob_builder_) {
+  // Init blob_builder_ first
+  if (!blob_builder_)
+    blob_builder_.reset(new BlobFileBuilder(db_options_, cf_options_, nullptr));
+  assert(blob_builder_);
+
+  bool is_small_kv = ikey.type == kTypeValue &&
+                     record.value.size() < cf_options_.min_blob_size;
+
+  // Only if this record is a small KV pair, can the blob_builder_ has no
+  // writer, otherwise should setup a writer
+  if (!blob_builder_->HasFileWriter() && !is_small_kv) {
     status_ = blob_manager_->NewFile(&blob_handle_);
     if (!ok()) return;
     ROCKS_LOG_INFO(db_options_.info_log,
                    "Titan table builder created new blob file %" PRIu64 ".",
                    blob_handle_->GetNumber());
-    blob_builder_.reset(
-        new BlobFileBuilder(db_options_, cf_options_, blob_handle_->GetFile()));
+    blob_builder_->SetFileWriter(blob_handle_->GetFile());
   }
+
   RecordInHistogram(statistics(stats_), TITAN_KEY_SIZE, record.key.size());
   RecordInHistogram(statistics(stats_), TITAN_VALUE_SIZE, record.value.size());
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
@@ -135,14 +145,15 @@ void TitanTableBuilder::AddBlob(const BlobRecord& record,
   std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
       new BlobFileBuilder::BlobRecordContext);
   AppendInternalKey(&ctx->key, ikey);
-  ctx->new_blob_index.file_number = blob_handle_->GetNumber();
-  if (record.value.size() < cf_options_.min_blob_size) {
+  if (is_small_kv) {
     // samll KV pair
     // if `BlobFileBuilder` is in `kBuffered` state, the KV pair will be
     // cached and returned later, otherwise, it will return immediately, and
     // can be written into SST directly
     ctx->small_kv_ctx.is_small = true;
     ctx->small_kv_ctx.value = record.value.ToString();
+  } else {
+    ctx->new_blob_index.file_number = blob_handle_->GetNumber();
   }
   blob_builder_->Add(record, std::move(ctx), contexts);
 }
@@ -175,8 +186,9 @@ void TitanTableBuilder::AddToBaseTable(
       }
     }
   }
-  if (!finishing && blob_handle_->GetFile()->GetFileSize() >=
-                        cf_options_.blob_file_target_size) {
+  if (!finishing && blob_builder_->HasFileWriter() &&
+      blob_handle_->GetFile()->GetFileSize() >=
+          cf_options_.blob_file_target_size) {
     FinishBlobFile();
   }
 }
@@ -195,16 +207,22 @@ void TitanTableBuilder::FinishBlobFile() {
                   &io_bytes_written_);
 
     if (ok()) {
-      ROCKS_LOG_INFO(db_options_.info_log,
-                     "Titan table builder finish output file %" PRIu64 ".",
-                     blob_handle_->GetNumber());
-      std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
-          blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(),
-          blob_builder_->NumEntries(), target_level_,
-          blob_builder_->GetSmallestKey(), blob_builder_->GetLargestKey());
-      file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
-      finished_blobs_.push_back({file, std::move(blob_handle_)});
-      blob_builder_.reset();
+      if (blob_builder_->HasFileWriter()) {
+        ROCKS_LOG_INFO(db_options_.info_log,
+                       "Titan table builder finish output file %" PRIu64 ".",
+                       blob_handle_->GetNumber());
+        std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
+            blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(),
+            blob_builder_->NumEntries(), target_level_,
+            blob_builder_->GetSmallestKey(), blob_builder_->GetLargestKey());
+        file->FileStateTransit(
+            BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
+        finished_blobs_.push_back({file, std::move(blob_handle_)});
+        blob_builder_.reset();
+      } else {
+        ROCKS_LOG_INFO(db_options_.info_log,
+                       "Titan table builder finish with no output file");
+      }
     } else {
       ROCKS_LOG_WARN(
           db_options_.info_log,
@@ -246,7 +264,7 @@ Status TitanTableBuilder::Finish() {
 
 void TitanTableBuilder::Abandon() {
   base_builder_->Abandon();
-  if (blob_builder_) {
+  if (blob_builder_ && blob_builder_->HasFileWriter()) {
     ROCKS_LOG_INFO(db_options_.info_log,
                    "Titan table builder abandoned. Delete output file %" PRIu64
                    ".",

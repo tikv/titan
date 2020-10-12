@@ -54,6 +54,12 @@ class BlobFileBuilder {
   BlobFileBuilder(const TitanDBOptions& db_options,
                   const TitanCFOptions& cf_options, WritableFileWriter* file);
 
+  // SetFileWriter can only be called when current writer is null.
+  void SetFileWriter(WritableFileWriter* file);
+
+  // If file_ is not null, return true.
+  bool HasFileWriter();
+
   // Adds the record to the file, return `BlobIndices`
   // Notice: return value might be empty when builder is in `kBuffered` state,
   // and caller should set `ctx.new_blob_index.file_number` before pass it in,
@@ -110,6 +116,7 @@ class BlobFileBuilder {
   BuilderState builder_state_;
 
   bool ok() const { return status().ok(); }
+  void WriteHeader();
   void WriteRawBlock(const Slice& block, BlockHandle* handle);
   void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder,
                                  BlockHandle* handle);

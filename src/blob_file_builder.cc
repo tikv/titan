@@ -13,13 +13,25 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
       file_(file),
       encoder_(cf_options_.blob_file_compression,
                cf_options.blob_file_compression_options) {
+  if (file_) WriteHeader();
+}
+
+void BlobFileBuilder::WriteHeader() {
   BlobFileHeader header;
-  if (cf_options.blob_file_compression_options.max_dict_bytes > 0)
+  if (cf_options_.blob_file_compression_options.max_dict_bytes > 0)
     header.flags |= BlobFileHeader::kHasUncompressionDictionary;
   std::string buffer;
   header.EncodeTo(&buffer);
   status_ = file_->Append(buffer);
 }
+
+void BlobFileBuilder::SetFileWriter(WritableFileWriter* writer) {
+  assert(file_ == nullptr);
+  file_ = writer;
+  if (file_) WriteHeader();
+}
+
+bool BlobFileBuilder::HasFileWriter() { return file_ != nullptr; }
 
 void BlobFileBuilder::Add(const BlobRecord& record,
                           std::unique_ptr<BlobRecordContext> ctx,
@@ -166,9 +178,9 @@ void BlobFileBuilder::WriteCompressionDictBlock(
 }
 
 Status BlobFileBuilder::Finish(OutContexts* out_ctx) {
-  if (!ok()) {
-    return status();
-  }
+  if (!HasFileWriter()) return status();
+
+  if (!ok()) return status();
 
   if (builder_state_ == BuilderState::kBuffered) {
     EnterUnbuffered(out_ctx);
