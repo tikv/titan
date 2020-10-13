@@ -60,17 +60,15 @@ class BlobFileBuilder {
   // If file_ is not null, return true.
   bool HasFileWriter();
 
-  // Adds the record to the file, return `BlobIndices`
-  // Notice: return value might be empty when builder is in `kBuffered` state,
-  // and caller should set `ctx.new_blob_index.file_number` before pass it in,
-  // the file builder will only change the `blob_handle` of it
+  // Tries to add the record to the file
+  // Notice:
+  // 1. When the record is a small KV pair, it will be write back to
+  //    `out_ctx` immediately, otherwise, it will be write into the blob file.
+  // 2. The `out_ctx` might be empty when builder is in `kBuffered` state.
+  // 3. Caller should set `ctx.new_blob_index.file_number` before pass it in,
+  //    the file builder will only change the `blob_handle` of it
   void Add(const BlobRecord& record, std::unique_ptr<BlobRecordContext> ctx,
            OutContexts* out_ctx);
-
-  // Enter unbuffered state, only be called after collecting enough samples
-  // for compression dictionary. It will modify `out_ctx` of the buffered
-  // records
-  void EnterUnbuffered(OutContexts* out_ctx);
 
   // Returns non-ok iff some error has been detected.
   Status status() const { return status_; }
@@ -116,6 +114,10 @@ class BlobFileBuilder {
   BuilderState builder_state_;
 
   bool ok() const { return status().ok(); }
+  // Enter unbuffered state, only be called after collecting enough samples
+  // for compression dictionary. It will modify `out_ctx` of the buffered
+  // records
+  void EnterUnbuffered(OutContexts* out_ctx);
   void WriteHeader();
   void WriteRawBlock(const Slice& block, BlockHandle* handle);
   void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder,

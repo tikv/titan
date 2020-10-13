@@ -13,6 +13,12 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
       file_(file),
       encoder_(cf_options_.blob_file_compression,
                cf_options.blob_file_compression_options) {
+#if ZSTD_VERSION_NUMBER < 10103
+  if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
+    status_ = Status::NotSupported("ZSTD version too old.");
+    return;
+  }
+#endif
   if (file_) WriteHeader();
 }
 

@@ -360,6 +360,7 @@ TEST_F(TableBuilderTest, Basic) {
 }
 
 TEST_F(TableBuilderTest, DictCompress) {
+#if ZSTD_VERSION_NUMBER >= 10103
   CompressionOptions compression_opts;
   compression_opts.enabled = true;
   compression_opts.max_dict_bytes = 4000;
@@ -399,6 +400,7 @@ TEST_F(TableBuilderTest, DictCompress) {
   Status stat = BlobFileReader::Open(cf_options_, std::move(file), file_size,
                                      &blob_reader, nullptr);
   assert(stat.code() == Status::kNotSupported);
+#endif
 }
 
 TEST_F(TableBuilderTest, NoBlob) {
