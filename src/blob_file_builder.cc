@@ -122,10 +122,9 @@ void BlobFileBuilder::EnterUnbuffered(OutContexts* out_ctx) {
 
 void BlobFileBuilder::FlushSampleRecords(OutContexts* out_ctx) {
   assert(cached_contexts_.size() >= sample_records_.size());
-  size_t i, j;
-  for (i = 0; i < sample_records_.size(); i++, j++) {
+  size_t i = 0, j = 0;
+  for (; i < sample_records_.size(); i++, j++) {
     const std::string& record_str = sample_records_[i];
-    j = i;
     for (; j < cached_contexts_.size() &&
            cached_contexts_[j]->small_kv_ctx.is_small;
          j++) {
