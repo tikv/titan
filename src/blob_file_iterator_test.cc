@@ -87,12 +87,12 @@ class BlobFileIteratorTest : public testing::Test {
   void FinishBuilder(BlobFileBuilder::OutContexts& contexts) {
     BlobFileBuilder::OutContexts cur_contexts;
     Status s = builder_->Finish(&cur_contexts);
+    ASSERT_OK(s);
+    ASSERT_OK(builder_->status());
 
     for (size_t i = 0; i < cur_contexts.size(); i++) {
       contexts.emplace_back(std::move(cur_contexts[i]));
     }
-    ASSERT_OK(s);
-    ASSERT_OK(builder_->status());
   }
 
   void NewBlobFileIterator() {

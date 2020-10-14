@@ -125,8 +125,9 @@ void TitanTableBuilder::AddBlob(const BlobRecord& record,
   bool is_small_kv = ikey.type == kTypeValue &&
                      record.value.size() < cf_options_.min_blob_size;
 
-  // Only if this record is a small KV pair, can the blob_builder_ has no
-  // writer, otherwise should setup a writer
+  // If we only write small KV pairs with dictionary compression, it may cause
+  // unnecessary blob file generation and fail the `NonBlob` test, so we allow
+  // nullable writer in this case, otherwise, the writer must not be nullptr.
   if (!blob_builder_->HasFileWriter() && !is_small_kv) {
     status_ = blob_manager_->NewFile(&blob_handle_);
     if (!ok()) return;

@@ -11,7 +11,7 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
                          : BuilderState::kUnbuffered),
       cf_options_(cf_options),
       file_(file),
-      encoder_(cf_options_.blob_file_compression,
+      encoder_(cf_options.blob_file_compression,
                cf_options.blob_file_compression_options) {
 #if ZSTD_VERSION_NUMBER < 10103
   if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
@@ -84,7 +84,7 @@ void BlobFileBuilder::EnterUnbuffered(OutContexts* out_ctx) {
   // Using collected samples to train the compression dictionary
   // Then replay those records in memory, encode them to blob file
   // When above things are done, transform builder state into unbuffered
-  std::string samples = "";
+  std::string samples;
   samples.reserve(sample_str_len_);
   std::vector<size_t> sample_lens;
 

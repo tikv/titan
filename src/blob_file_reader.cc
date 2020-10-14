@@ -100,7 +100,6 @@ Status BlobFileReader::ReadHeader(
   if (!s.ok()) return s;
 
   s = DecodeInto(buffer, header);
-  if (!s.ok()) return s;
 
   return s;
 }
