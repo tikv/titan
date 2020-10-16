@@ -31,23 +31,12 @@ void BlobFileBuilder::WriteHeader() {
   status_ = file_->Append(buffer);
 }
 
-void BlobFileBuilder::SetFileWriter(WritableFileWriter* writer) {
-  assert(file_ == nullptr);
-  file_ = writer;
-  if (file_) WriteHeader();
-}
-
-bool BlobFileBuilder::HasFileWriter() { return file_ != nullptr; }
-
 void BlobFileBuilder::Add(const BlobRecord& record,
                           std::unique_ptr<BlobRecordContext> ctx,
                           OutContexts* out_ctx) {
   if (!ok()) return;
   std::string key = record.key.ToString();
   if (builder_state_ == BuilderState::kBuffered) {
-    // Check flags, if it is a small KV pair, do nothing, just cache it
-    if (ctx->small_kv_ctx.is_small)
-      return cached_contexts_.emplace_back(std::move(ctx));
     std::string record_str;
     // Encode to take ownership of underlying string.
     record.EncodeTo(&record_str);
@@ -60,10 +49,6 @@ void BlobFileBuilder::Add(const BlobRecord& record,
       EnterUnbuffered(out_ctx);
     }
   } else if (builder_state_ == BuilderState::kUnbuffered) {
-    // Check flags, if it is a small KV pair, do nothing, just return it
-    // back, and it will be written into sst out side
-    if (ctx->small_kv_ctx.is_small)
-      return out_ctx->emplace_back(std::move(ctx));
     encoder_.EncodeRecord(record);
     WriteEncoderData(&ctx->new_blob_index.blob_handle);
     out_ctx->emplace_back(std::move(ctx));
@@ -78,6 +63,13 @@ void BlobFileBuilder::Add(const BlobRecord& record,
          0);
   assert(cf_options_.comparator->Compare(record.key, Slice(largest_key_)) >= 0);
   largest_key_.assign(record.key.data(), record.key.size());
+}
+
+void BlobFileBuilder::CacheSmallKV(const BlobRecord& record,
+                                   std::unique_ptr<BlobRecordContext> ctx) {
+  ctx->small_kv_ctx.is_small = true;
+  ctx->small_kv_ctx.value = record.value.ToString();
+  cached_contexts_.emplace_back(std::move(ctx));
 }
 
 void BlobFileBuilder::EnterUnbuffered(OutContexts* out_ctx) {
@@ -183,8 +175,6 @@ void BlobFileBuilder::WriteCompressionDictBlock(
 }
 
 Status BlobFileBuilder::Finish(OutContexts* out_ctx) {
-  if (!HasFileWriter()) return status();
-
   if (!ok()) return status();
 
   if (builder_state_ == BuilderState::kBuffered) {

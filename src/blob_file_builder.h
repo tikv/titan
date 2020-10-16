@@ -34,6 +34,25 @@ namespace titandb {
 // BlockBasedTable.
 class BlobFileBuilder {
  public:
+  // States of the builder.
+  //
+  // - `kBuffered`: This is the initial state where zero or more data blocks are
+  //   accumulated uncompressed in-memory. From this state, call
+  //   `EnterUnbuffered()` to finalize the compression dictionary if enabled,
+  //   compress/write out any buffered blocks, and proceed to the `kUnbuffered`
+  //   state.
+  //
+  // - `kUnbuffered`: This is the state when compression dictionary is finalized
+  //   either because it wasn't enabled in the first place or it's been created
+  //   from sampling previously buffered data. In this state, blocks are simply
+  //   compressed/written out as they fill up. From this state, call `Finish()`
+  //   to complete the file (write meta-blocks, etc.), or `Abandon()` to delete
+  //   the partially created file.
+  enum class BuilderState {
+    kBuffered,
+    kUnbuffered,
+  };
+
   class BlobRecordContext {
    public:
     std::string key;  // original internal key
@@ -54,21 +73,20 @@ class BlobFileBuilder {
   BlobFileBuilder(const TitanDBOptions& db_options,
                   const TitanCFOptions& cf_options, WritableFileWriter* file);
 
-  // SetFileWriter can only be called when current writer is null.
-  void SetFileWriter(WritableFileWriter* file);
-
-  // If file_ is not null, return true.
-  bool HasFileWriter();
-
   // Tries to add the record to the file
   // Notice:
-  // 1. When the record is a small KV pair, it will be write back to
-  //    `out_ctx` immediately, otherwise, it will be write into the blob file.
-  // 2. The `out_ctx` might be empty when builder is in `kBuffered` state.
-  // 3. Caller should set `ctx.new_blob_index.file_number` before pass it in,
+  // 1. The `out_ctx` might be empty when builder is in `kBuffered` state.
+  // 2. Caller should set `ctx.new_blob_index.file_number` before pass it in,
   //    the file builder will only change the `blob_handle` of it
   void Add(const BlobRecord& record, std::unique_ptr<BlobRecordContext> ctx,
            OutContexts* out_ctx);
+
+  // Cache small KV pair to prevent disorder issue
+  void CacheSmallKV(const BlobRecord& record,
+                    std::unique_ptr<BlobRecordContext> ctx);
+
+  // Returns builder state
+  BuilderState GetBuilderState() { return builder_state_; }
 
   // Returns non-ok iff some error has been detected.
   Status status() const { return status_; }
@@ -93,24 +111,6 @@ class BlobFileBuilder {
   uint64_t live_data_size() const { return live_data_size_; }
 
  private:
-  // States of the builder.
-  //
-  // - `kBuffered`: This is the initial state where zero or more data blocks are
-  //   accumulated uncompressed in-memory. From this state, call
-  //   `EnterUnbuffered()` to finalize the compression dictionary if enabled,
-  //   compress/write out any buffered blocks, and proceed to the `kUnbuffered`
-  //   state.
-  //
-  // - `kUnbuffered`: This is the state when compression dictionary is finalized
-  //   either because it wasn't enabled in the first place or it's been created
-  //   from sampling previously buffered data. In this state, blocks are simply
-  //   compressed/written out as they fill up. From this state, call `Finish()`
-  //   to complete the file (write meta-blocks, etc.), or `Abandon()` to delete
-  //   the partially created file.
-  enum class BuilderState {
-    kBuffered,
-    kUnbuffered,
-  };
   BuilderState builder_state_;
 
   bool ok() const { return status().ok(); }
