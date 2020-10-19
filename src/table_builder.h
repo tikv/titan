@@ -50,6 +50,14 @@ class TitanTableBuilder : public TableBuilder {
 
   bool ok() const { return status().ok(); }
 
+  bool builder_unbuffered() const {
+    return !blob_builder_ || blob_builder_->GetBuilderState() ==
+                                 BlobFileBuilder::BuilderState::kUnbuffered;
+  }
+
+  std::unique_ptr<BlobFileBuilder::BlobRecordContext> NewCachedRecordContext(
+      const ParsedInternalKey& ikey, const Slice& value);
+
   void AddBlob(const BlobRecord& record, const ParsedInternalKey& ikey,
                BlobFileBuilder::OutContexts* contexts);
 

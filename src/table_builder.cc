@@ -11,6 +11,20 @@
 namespace rocksdb {
 namespace titandb {
 
+std::unique_ptr<BlobFileBuilder::BlobRecordContext>
+TitanTableBuilder::NewCachedRecordContext(const ParsedInternalKey& ikey,
+                                          const Slice& value) {
+  BlobRecord record;
+  record.key = ikey.user_key;
+  record.value = value;
+  std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
+      new BlobFileBuilder::BlobRecordContext);
+  AppendInternalKey(&ctx->key, ikey);
+  ctx->cached_data.is_cached = true;
+  ctx->cached_data.value = value.ToString();
+  return ctx;
+}
+
 void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   if (!ok()) return;
 
@@ -43,6 +57,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       ikey.type = kTypeValue;
       std::string index_key;
       AppendInternalKey(&index_key, ikey);
+      assert(builder_unbuffered());
       base_builder_->Add(index_key, record.value);
       bytes_read_ += record.size();
     } else {
@@ -50,27 +65,22 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       // deleted. In this case we write the blob index as is to compaction
       // output.
       // TODO: return error if it is indeed an error.
+      assert(builder_unbuffered());
       base_builder_->Add(key, value);
     }
   } else if (ikey.type == kTypeValue &&
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     bool is_small_kv = value.size() < cf_options_.min_blob_size;
-    if (is_small_kv &&
-        (!blob_builder_ || blob_builder_->GetBuilderState() ==
-                               BlobFileBuilder::BuilderState::kUnbuffered)) {
+    if (is_small_kv && builder_unbuffered()) {
       // We can append this into SST safely, without disorder issue.
       base_builder_->Add(key, value);
       return;
     } else if (is_small_kv) {
       // We have to let builder to cache this KV pair, and it will be returned
       // when state changed
-      BlobRecord record;
-      record.key = ikey.user_key;
-      record.value = value;
-      std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
-          new BlobFileBuilder::BlobRecordContext);
-      AppendInternalKey(&ctx->key, ikey);
-      blob_builder_->CacheSmallKV(record, std::move(ctx));
+      std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
+          NewCachedRecordContext(ikey, value);
+      blob_builder_->CacheContext(std::move(ctx));
     } else {
       // We write to blob file and insert index
       BlobRecord record;
@@ -122,8 +132,15 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
                         index.file_number, get_status.ToString().c_str());
       }
     }
-    base_builder_->Add(key, value);
+    if (builder_unbuffered()) {
+      base_builder_->Add(key, value);
+    } else {
+      std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
+          NewCachedRecordContext(ikey, value);
+      blob_builder_->CacheContext(std::move(ctx));
+    }
   } else {
+    assert(builder_unbuffered());
     base_builder_->Add(key, value);
   }
 }
@@ -169,9 +186,9 @@ void TitanTableBuilder::AddToBaseTable(
       status_ = Status::Corruption(Slice());
       return;
     }
-    if (ctx->small_kv_ctx.is_small) {
+    if (ctx->cached_data.is_cached) {
       // write directly to base table
-      base_builder_->Add(ctx->key, ctx->small_kv_ctx.value);
+      base_builder_->Add(ctx->key, ctx->cached_data.value);
     } else {
       RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
                  ctx->new_blob_index.blob_handle.size);

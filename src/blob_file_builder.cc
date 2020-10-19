@@ -65,10 +65,7 @@ void BlobFileBuilder::Add(const BlobRecord& record,
   largest_key_.assign(record.key.data(), record.key.size());
 }
 
-void BlobFileBuilder::CacheSmallKV(const BlobRecord& record,
-                                   std::unique_ptr<BlobRecordContext> ctx) {
-  ctx->small_kv_ctx.is_small = true;
-  ctx->small_kv_ctx.value = record.value.ToString();
+void BlobFileBuilder::CacheContext(std::unique_ptr<BlobRecordContext> ctx) {
   cached_contexts_.emplace_back(std::move(ctx));
 }
 
@@ -118,7 +115,7 @@ void BlobFileBuilder::FlushSampleRecords(OutContexts* out_ctx) {
   for (; i < sample_records_.size(); i++, j++) {
     const std::string& record_str = sample_records_[i];
     for (; j < cached_contexts_.size() &&
-           cached_contexts_[j]->small_kv_ctx.is_small;
+           cached_contexts_[j]->cached_data.is_cached;
          j++) {
       out_ctx->emplace_back(std::move(cached_contexts_[j]));
     }

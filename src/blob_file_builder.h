@@ -58,12 +58,12 @@ class BlobFileBuilder {
     std::string key;  // original internal key
     BlobIndex original_blob_index;
     BlobIndex new_blob_index;
-    class SmallKVContetx {
+    class CachedData {
      public:
-      SmallKVContetx() : is_small(false) {}
-      bool is_small;
+      CachedData() : is_cached(false) {}
+      bool is_cached;
       std::string value;
-    } small_kv_ctx;
+    } cached_data;
   };
   typedef autovector<std::unique_ptr<BlobRecordContext>> OutContexts;
 
@@ -81,9 +81,8 @@ class BlobFileBuilder {
   void Add(const BlobRecord& record, std::unique_ptr<BlobRecordContext> ctx,
            OutContexts* out_ctx);
 
-  // Cache small KV pair to prevent disorder issue
-  void CacheSmallKV(const BlobRecord& record,
-                    std::unique_ptr<BlobRecordContext> ctx);
+  // Cache the context passed in to prevent disorder issue
+  void CacheContext(std::unique_ptr<BlobRecordContext> ctx);
 
   // Returns builder state
   BuilderState GetBuilderState() { return builder_state_; }
