@@ -69,6 +69,10 @@ add_library(titan_build_version OBJECT ${TITAN_BUILD_VERSION_CC})
 target_include_directories(titan_build_version PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/util)
 
+if (TRAVIS)
+  add_definitions(-DTRAVIS)
+endif()
+
 if (CODE_COVERAGE)
   target_compile_options(titan PRIVATE "--coverage")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
