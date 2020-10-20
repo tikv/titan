@@ -2,9 +2,7 @@ dist: focal
 
 language: cpp
 
-os:
-  - linux
-  - osx
+os: linux
 compiler: clang
 osx_image: xcode12.2
 
@@ -41,10 +39,16 @@ matrix:
       env:
         - COMPILER=gcc9
     - os: linux
+      arch: arm64
+      env:
+        - SANITIZER="ASAN"
+    - os: osx
+      env:
+        - SANITIZER="ASAN"
+    - os: linux
       compiler:
       env:
         - FORMATTER=ON
-
 
 install:
   # osx dependencies
