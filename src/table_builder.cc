@@ -82,11 +82,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       return;
     } else {
       // We write to blob file and insert index
-      BlobRecord record;
-      record.key = ikey.user_key;
-      record.value = value;
       BlobFileBuilder::OutContexts contexts;
-      AddBlob(record, ikey, &contexts);
+      AddBlob(ikey, value, &contexts);
       UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                     &io_bytes_written_);
       AddToBaseTable(contexts);
@@ -113,11 +110,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       // doing level merge.
       if (get_status.ok()) {
         std::string index_value;
-        BlobRecord blob_record;
-        blob_record.key = ikey.user_key;
-        blob_record.value = record.value;
         BlobFileBuilder::OutContexts contexts;
-        AddBlob(blob_record, ikey, &contexts);
+        AddBlob(ikey, record.value, &contexts);
         UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                       &io_bytes_written_);
         AddToBaseTable(contexts);
@@ -143,10 +137,15 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   }
 }
 
-void TitanTableBuilder::AddBlob(const BlobRecord& record,
-                                const ParsedInternalKey& ikey,
+void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
+                                const Slice& value,
                                 BlobFileBuilder::OutContexts* contexts) {
   if (!ok()) return;
+
+  BlobRecord record;
+  record.key = ikey.user_key;
+  record.value = value;
+
   StopWatch write_sw(db_options_.env, statistics(stats_),
                      TITAN_BLOB_FILE_WRITE_MICROS);
 
