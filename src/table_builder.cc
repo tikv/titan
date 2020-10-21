@@ -221,7 +221,7 @@ void TitanTableBuilder::FinishBlobFile() {
                   &io_bytes_written_);
     AddToBaseTable(contexts, true);
 
-    if (ok()) {
+    if (s.ok() && ok()) {
       ROCKS_LOG_INFO(db_options_.info_log,
                      "Titan table builder finish output file %" PRIu64 ".",
                      blob_handle_->GetNumber());
