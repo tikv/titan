@@ -3,6 +3,7 @@
 #include "blob_format.h"
 #include "table/meta_blocks.h"
 #include "titan/options.h"
+#include "util/autovector.h"
 #include "util/compression.h"
 #include "util/file_reader_writer.h"
 
@@ -53,13 +54,11 @@ class BlobFileBuilder {
     kUnbuffered,
   };
 
-  class BlobRecordContext {
-   public:
+  struct BlobRecordContext {
     std::string key;  // original internal key
     BlobIndex original_blob_index;
     BlobIndex new_blob_index;
-    class CachedData {
-     public:
+    struct CachedData {
       CachedData() : is_cached(false) {}
       bool is_cached;
       std::string value;

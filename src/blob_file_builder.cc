@@ -24,8 +24,9 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
 
 void BlobFileBuilder::WriteHeader() {
   BlobFileHeader header;
-  if (cf_options_.blob_file_compression_options.max_dict_bytes > 0)
+  if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
     header.flags |= BlobFileHeader::kHasUncompressionDictionary;
+  }
   std::string buffer;
   header.EncodeTo(&buffer);
   status_ = file_->Append(buffer);
@@ -48,7 +49,7 @@ void BlobFileBuilder::Add(const BlobRecord& record,
             cf_options_.blob_file_compression_options.zstd_max_train_bytes) {
       EnterUnbuffered(out_ctx);
     }
-  } else if (builder_state_ == BuilderState::kUnbuffered) {
+  } else {
     encoder_.EncodeRecord(record);
     WriteEncoderData(&ctx->new_blob_index.blob_handle);
     out_ctx->emplace_back(std::move(ctx));
