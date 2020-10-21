@@ -14,9 +14,6 @@ namespace titandb {
 std::unique_ptr<BlobFileBuilder::BlobRecordContext>
 TitanTableBuilder::NewCachedRecordContext(const ParsedInternalKey& ikey,
                                           const Slice& value) {
-  BlobRecord record;
-  record.key = ikey.user_key;
-  record.value = value;
   std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
       new BlobFileBuilder::BlobRecordContext);
   AppendInternalKey(&ctx->key, ikey);
@@ -57,7 +54,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       ikey.type = kTypeValue;
       std::string index_key;
       AppendInternalKey(&index_key, ikey);
-      assert(builder_unbuffered());
+      assert(blob_builder_ == nullptr);
       base_builder_->Add(index_key, record.value);
       bytes_read_ += record.size();
     } else {
@@ -65,22 +62,24 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       // deleted. In this case we write the blob index as is to compaction
       // output.
       // TODO: return error if it is indeed an error.
-      assert(builder_unbuffered());
+      assert(blob_builder_ == nullptr);
       base_builder_->Add(key, value);
     }
   } else if (ikey.type == kTypeValue &&
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     bool is_small_kv = value.size() < cf_options_.min_blob_size;
-    if (is_small_kv && builder_unbuffered()) {
-      // We can append this into SST safely, without disorder issue.
-      base_builder_->Add(key, value);
+    if (is_small_kv) {
+      if (builder_unbuffered()) {
+        // We can append this into SST safely, without disorder issue.
+        base_builder_->Add(key, value);
+      } else {
+        // We have to let builder to cache this KV pair, and it will be returned
+        // when state changed
+        std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
+            NewCachedRecordContext(ikey, value);
+        blob_builder_->CacheContext(std::move(ctx));
+      }
       return;
-    } else if (is_small_kv) {
-      // We have to let builder to cache this KV pair, and it will be returned
-      // when state changed
-      std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
-          NewCachedRecordContext(ikey, value);
-      blob_builder_->CacheContext(std::move(ctx));
     } else {
       // We write to blob file and insert index
       BlobRecord record;
@@ -88,11 +87,9 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       record.value = value;
       BlobFileBuilder::OutContexts contexts;
       AddBlob(record, ikey, &contexts);
-      AddToBaseTable(contexts);
       UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                     &io_bytes_written_);
-
-      if (ok()) return;
+      AddToBaseTable(contexts);
     }
   } else if (ikey.type == kTypeBlobIndex && cf_options_.level_merge &&
              target_level_ >= merge_level_ &&
@@ -121,9 +118,10 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
         blob_record.value = record.value;
         BlobFileBuilder::OutContexts contexts;
         AddBlob(blob_record, ikey, &contexts);
-        AddToBaseTable(contexts);
         UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                       &io_bytes_written_);
+        AddToBaseTable(contexts);
+
         if (ok()) return;
       } else {
         ++error_read_cnt_;
@@ -163,6 +161,7 @@ void TitanTableBuilder::AddBlob(const BlobRecord& record,
         new BlobFileBuilder(db_options_, cf_options_, blob_handle_->GetFile()));
   }
 
+  RecordTick(statistics(stats_), TITAN_BLOB_FILE_NUM_KEYS_WRITTEN);
   RecordInHistogram(statistics(stats_), TITAN_KEY_SIZE, record.key.size());
   RecordInHistogram(statistics(stats_), TITAN_VALUE_SIZE, record.value.size());
   AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
@@ -218,10 +217,9 @@ void TitanTableBuilder::FinishBlobFile() {
     Status s;
     BlobFileBuilder::OutContexts contexts;
     s = blob_builder_->Finish(&contexts);
-    AddToBaseTable(contexts, true);
-
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
+    AddToBaseTable(contexts, true);
 
     if (ok()) {
       ROCKS_LOG_INFO(db_options_.info_log,
@@ -257,6 +255,9 @@ Status TitanTableBuilder::status() const {
 
 Status TitanTableBuilder::Finish() {
   FinishBlobFile();
+  // `FinishBlobFile()` may transform its state from `kBuffered` to
+  // `kUnbuffered`, in this case, the relative blob handles will be updated, so
+  // `base_builder_->Finish()` have to be after `FinishBlobFile()`
   base_builder_->Finish();
   status_ = blob_manager_->BatchFinishFiles(cf_id_, finished_blobs_);
   if (!status_.ok()) {

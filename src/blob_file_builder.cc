@@ -19,7 +19,7 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
     return;
   }
 #endif
-  if (file_) WriteHeader();
+  WriteHeader();
 }
 
 void BlobFileBuilder::WriteHeader() {
@@ -99,21 +99,21 @@ void BlobFileBuilder::EnterUnbuffered(OutContexts* out_ctx) {
 
 void BlobFileBuilder::FlushSampleRecords(OutContexts* out_ctx) {
   assert(cached_contexts_.size() >= sample_records_.size());
-  size_t i = 0, j = 0;
-  for (; i < sample_records_.size(); i++, j++) {
-    const std::string& record_str = sample_records_[i];
-    for (; j < cached_contexts_.size() &&
-           cached_contexts_[j]->cached_data.is_cached;
-         j++) {
-      out_ctx->emplace_back(std::move(cached_contexts_[j]));
+  size_t sample_idx = 0, ctx_idx = 0;
+  for (; sample_idx < sample_records_.size(); sample_idx++, ctx_idx++) {
+    const std::string& record_str = sample_records_[sample_idx];
+    for (; ctx_idx < cached_contexts_.size() &&
+           cached_contexts_[ctx_idx]->cached_data.is_cached;
+         ctx_idx++) {
+      out_ctx->emplace_back(std::move(cached_contexts_[ctx_idx]));
     }
-    const std::unique_ptr<BlobRecordContext>& ctx = cached_contexts_[j];
+    const std::unique_ptr<BlobRecordContext>& ctx = cached_contexts_[ctx_idx];
     encoder_.EncodeSlice(record_str);
     WriteEncoderData(&ctx->new_blob_index.blob_handle);
-    out_ctx->emplace_back(std::move(cached_contexts_[j]));
+    out_ctx->emplace_back(std::move(cached_contexts_[ctx_idx]));
   }
-  assert(i == sample_records_.size());
-  assert(j == cached_contexts_.size());
+  assert(sample_idx == sample_records_.size());
+  assert(ctx_idx == cached_contexts_.size());
   sample_records_.clear();
   sample_str_len_ = 0;
   cached_contexts_.clear();
