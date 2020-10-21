@@ -79,21 +79,8 @@ void BlobFileBuilder::EnterUnbuffered(OutContexts* out_ctx) {
   std::vector<size_t> sample_lens;
 
   for (const auto& record_str : sample_records_) {
-    if (cf_options_.blob_file_compression_options.zstd_max_train_bytes > 0 &&
-        samples.size() >=
-            cf_options_.blob_file_compression_options.zstd_max_train_bytes) {
-      // Enough training data
-      break;
-    }
-    size_t copy_len =
-        cf_options_.blob_file_compression_options.zstd_max_train_bytes == 0
-            ? record_str.size()
-            : std::min(cf_options_.blob_file_compression_options
-                               .zstd_max_train_bytes -
-                           samples.size(),
-                       record_str.size());
-    samples.append(record_str, 0, copy_len);
-    sample_lens.emplace_back(copy_len);
+    samples.append(record_str, 0, record_str.size());
+    sample_lens.emplace_back(record_str.size());
   }
   std::string dict;
   dict = ZSTD_TrainDictionary(
