@@ -368,10 +368,6 @@ struct BlobFileFooter {
 
   BlockHandle meta_index_handle{BlockHandle::NullBlockHandle()};
 
-  // Points to a uncompression dictionary (which is also pointed to by the meta
-  // index) when `kHasUncompressionDictionary` is set in the header.
-  BlockHandle uncompression_dict_handle{BlockHandle::NullBlockHandle()};
-
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
 

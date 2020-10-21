@@ -188,7 +188,6 @@ Status BlobFileBuilder::Finish(OutContexts* out_ctx) {
     WriteCompressionDictBlock(&meta_index_builder, &uncompression_dict_handle);
     WriteRawBlock(meta_index_builder.Finish(), &meta_index_handle);
     footer.meta_index_handle = meta_index_handle;
-    footer.uncompression_dict_handle = uncompression_dict_handle;
   }
 
   std::string buffer;
