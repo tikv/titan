@@ -27,7 +27,8 @@ if (NOT DEFINED ROCKSDB_DIR)
   message(FATAL_ERROR "ROCKSDB_DIR is not defined.")
 endif()
 
-list(APPEND CMAKE_MODULE_PATH "${ROCKSDB_DIR}/cmake/modules/")
+set(CMAKE_MODULE_PATH "${ROCKSDB_DIR}/cmake/modules/")
+# list(APPEND CMAKE_MODULE_PATH "${ROCKSDB_DIR}/cmake/modules/")
 include(cmake/rocksdb_flags.cmake)
 
 include_directories(${ROCKSDB_DIR})
@@ -67,6 +68,10 @@ configure_file(util/titan_build_version.cc.in ${TITAN_BUILD_VERSION_CC} @ONLY)
 add_library(titan_build_version OBJECT ${TITAN_BUILD_VERSION_CC})
 target_include_directories(titan_build_version PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/util)
+
+if (TRAVIS)
+  add_definitions(-DTRAVIS)
+endif()
 
 if (CODE_COVERAGE)
   target_compile_options(titan PRIVATE "--coverage")

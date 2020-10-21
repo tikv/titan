@@ -1,23 +1,22 @@
-dist: bionic
+dist: focal
 
 language: cpp
 
-os:
-  - linux
-  - osx
+os: linux
 compiler: clang
-osx_image: xcode11.2
+osx_image: xcode12.2
 
 addons:
   apt:
-    sources:
-      - ubuntu-toolchain-r-test
-      - llvm-toolchain-xenial-7
     packages:
-      - g++-7
+      - clang-format-10
+      - g++-9
       - libgflags-dev
+      - liblz4-dev
+      - libsnappy-dev
+      - libzstd-dev
       - lcov
-      - clang-format-7
+      - zlib1g
 
 env:
   - BUILD_TYPE="Release"
@@ -38,12 +37,14 @@ matrix:
     - os: linux
       compiler:
       env:
-        - COMPILER=gcc7
+        - COMPILER=gcc9
+    - os: osx
+      env:
+        - SANITIZER="ASAN"
     - os: linux
       compiler:
       env:
         - FORMATTER=ON
-
 
 install:
   # osx dependencies
@@ -58,9 +59,9 @@ install:
       done
     fi
   - export CTEST_OUTPUT_ON_FAILURE=1
-  - if [ "${COMPILER}" == gcc7 ]; then
-      CC=gcc-7;
-      CXX=g++-7;
+  - if [ "${COMPILER}" == gcc9 ]; then
+      CC=gcc-9;
+      CXX=g++-9;
       export COVERAGE_OPT="-DCODE_COVERAGE=ON";
     fi
   - if [ ! -z "${BUILD_TYPE}" ]; then
@@ -72,6 +73,7 @@ install:
       export SANITIZER_OPT="-DWITH_${SANITIZER}=ON";
       export TOOLS_OPT="-DWITH_TITAN_TOOLS=OFF";
     fi
+  - export COMPRESSION_OPT="-DWITH_SNAPPY=ON -DWITH_LZ4=ON -DWITH_ZLIB=ON -DWITH_ZSTD=ON"
 
 script:
   - if [ -z "${FORMATTER}" ]; then
@@ -81,7 +83,7 @@ script:
     fi
 
 after_success:
-  - if [ "${COMPILER}" == gcc7 ]; then
+  - if [ "${COMPILER}" == gcc9 ]; then
       lcov --gcov-tool gcov-7 --directory . --capture --output-file coverage.info;
       lcov --remove coverage.info '/usr/*' --output-file coverage.info;
       lcov --list coverage.info;
