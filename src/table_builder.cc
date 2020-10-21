@@ -82,11 +82,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       return;
     } else {
       // We write to blob file and insert index
-      BlobFileBuilder::OutContexts contexts;
-      AddBlob(ikey, value, &contexts);
-      UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
-                    &io_bytes_written_);
-      AddToBaseTable(contexts);
+      AddBlob(ikey, value);
     }
   } else if (ikey.type == kTypeBlobIndex && cf_options_.level_merge &&
              target_level_ >= merge_level_ &&
@@ -109,13 +105,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       // If not ok, write original blob index as compaction output without
       // doing level merge.
       if (get_status.ok()) {
-        std::string index_value;
-        BlobFileBuilder::OutContexts contexts;
-        AddBlob(ikey, record.value, &contexts);
-        UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
-                      &io_bytes_written_);
-        AddToBaseTable(contexts);
-
+        AddBlob(ikey, record.value);
         if (ok()) return;
       } else {
         ++error_read_cnt_;
@@ -138,13 +128,18 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
 }
 
 void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
-                                const Slice& value,
-                                BlobFileBuilder::OutContexts* contexts) {
+                                const Slice& value) {
   if (!ok()) return;
 
   BlobRecord record;
   record.key = ikey.user_key;
   record.value = value;
+
+  uint64_t prev_bytes_read = 0;
+  uint64_t prev_bytes_written = 0;
+  SavePrevIOBytes(&prev_bytes_read, &prev_bytes_written);
+
+  BlobFileBuilder::OutContexts contexts;
 
   StopWatch write_sw(db_options_.env, statistics(stats_),
                      TITAN_BLOB_FILE_WRITE_MICROS);
@@ -171,11 +166,24 @@ void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
       new BlobFileBuilder::BlobRecordContext);
   AppendInternalKey(&ctx->key, ikey);
   ctx->new_blob_index.file_number = blob_handle_->GetNumber();
-  blob_builder_->Add(record, std::move(ctx), contexts);
+  blob_builder_->Add(record, std::move(ctx), &contexts);
+
+  UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
+                &io_bytes_written_);
+
+  if (blob_handle_->GetFile()->GetFileSize() >=
+      cf_options_.blob_file_target_size) {
+    // if blob file hit the size limit, we have to finish it
+    // in this case, when calling `BlobFileBuilder::Finish`, builder will be in
+    // unbuffered state, so it will not trigger another `AddToBaseTable` call
+    FinishBlobFile();
+  }
+
+  AddToBaseTable(contexts);
 }
 
 void TitanTableBuilder::AddToBaseTable(
-    const BlobFileBuilder::OutContexts& contexts, bool finishing) {
+    const BlobFileBuilder::OutContexts& contexts) {
   if (contexts.empty()) return;
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
        contexts) {
@@ -202,10 +210,6 @@ void TitanTableBuilder::AddToBaseTable(
       }
     }
   }
-  if (!finishing && blob_handle_->GetFile()->GetFileSize() >=
-                        cf_options_.blob_file_target_size) {
-    FinishBlobFile();
-  }
 }
 
 void TitanTableBuilder::FinishBlobFile() {
@@ -218,7 +222,7 @@ void TitanTableBuilder::FinishBlobFile() {
     s = blob_builder_->Finish(&contexts);
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
-    AddToBaseTable(contexts, true);
+    AddToBaseTable(contexts);
 
     if (s.ok() && ok()) {
       ROCKS_LOG_INFO(db_options_.info_log,

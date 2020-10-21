@@ -58,11 +58,9 @@ class TitanTableBuilder : public TableBuilder {
   std::unique_ptr<BlobFileBuilder::BlobRecordContext> NewCachedRecordContext(
       const ParsedInternalKey& ikey, const Slice& value);
 
-  void AddBlob(const ParsedInternalKey& ikey, const Slice& value,
-               BlobFileBuilder::OutContexts* contexts);
+  void AddBlob(const ParsedInternalKey& ikey, const Slice& value);
 
-  void AddToBaseTable(const BlobFileBuilder::OutContexts& contexts,
-                      bool finishing = false);
+  void AddToBaseTable(const BlobFileBuilder::OutContexts& contexts);
 
   bool ShouldMerge(const std::shared_ptr<BlobFileMeta>& file);
 
