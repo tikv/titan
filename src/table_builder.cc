@@ -17,8 +17,8 @@ TitanTableBuilder::NewCachedRecordContext(const ParsedInternalKey& ikey,
   std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
       new BlobFileBuilder::BlobRecordContext);
   AppendInternalKey(&ctx->key, ikey);
-  ctx->cached_data.is_cached = true;
-  ctx->cached_data.value = value.ToString();
+  ctx->has_value = true;
+  ctx->value = value.ToString();
   return ctx;
 }
 
@@ -77,7 +77,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
         // when state changed
         std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
             NewCachedRecordContext(ikey, value);
-        blob_builder_->CacheContext(std::move(ctx));
+        blob_builder_->AddSmall(std::move(ctx));
       }
       return;
     } else {
@@ -135,7 +135,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     } else {
       std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
           NewCachedRecordContext(ikey, value);
-      blob_builder_->CacheContext(std::move(ctx));
+      blob_builder_->AddSmall(std::move(ctx));
     }
   } else {
     assert(builder_unbuffered());
@@ -185,9 +185,9 @@ void TitanTableBuilder::AddToBaseTable(
       status_ = Status::Corruption(Slice());
       return;
     }
-    if (ctx->cached_data.is_cached) {
+    if (ctx->has_value) {
       // write directly to base table
-      base_builder_->Add(ctx->key, ctx->cached_data.value);
+      base_builder_->Add(ctx->key, ctx->value);
     } else {
       RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
                  ctx->new_blob_index.blob_handle.size);

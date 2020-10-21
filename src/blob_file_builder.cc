@@ -66,7 +66,7 @@ void BlobFileBuilder::Add(const BlobRecord& record,
   largest_key_.assign(record.key.data(), record.key.size());
 }
 
-void BlobFileBuilder::CacheContext(std::unique_ptr<BlobRecordContext> ctx) {
+void BlobFileBuilder::AddSmall(std::unique_ptr<BlobRecordContext> ctx) {
   cached_contexts_.emplace_back(std::move(ctx));
 }
 
@@ -103,7 +103,7 @@ void BlobFileBuilder::FlushSampleRecords(OutContexts* out_ctx) {
   for (; sample_idx < sample_records_.size(); sample_idx++, ctx_idx++) {
     const std::string& record_str = sample_records_[sample_idx];
     for (; ctx_idx < cached_contexts_.size() &&
-           cached_contexts_[ctx_idx]->cached_data.is_cached;
+           cached_contexts_[ctx_idx]->has_value;
          ctx_idx++) {
       out_ctx->emplace_back(std::move(cached_contexts_[ctx_idx]));
     }
