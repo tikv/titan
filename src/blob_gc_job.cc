@@ -232,6 +232,8 @@ Status BlobGCJob::DoRunGC() {
     // blob index's size is counted in `RewriteValidKeyToLSM`
     metrics_.gc_bytes_written += blob_record.size();
 
+    // BlobRecordContext require key to be an internal key. We encode key to
+    // internal key in spite we only need the user key.
     std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
         new BlobFileBuilder::BlobRecordContext);
     InternalKey ikey(blob_record.key, 1, kTypeValue);

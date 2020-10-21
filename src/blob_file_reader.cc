@@ -64,7 +64,7 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
   }
 
   BlobFileHeader header;
-  Status s = ReadHeader(&header, file);
+  Status s = ReadHeader(file, &header);
   if (!s.ok()) {
     return s;
   }
@@ -92,8 +92,8 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
   return Status::OK();
 }
 
-Status BlobFileReader::ReadHeader(
-    BlobFileHeader* header, std::unique_ptr<RandomAccessFileReader>& file) {
+Status BlobFileReader::ReadHeader(std::unique_ptr<RandomAccessFileReader>& file,
+                                  BlobFileHeader* header) {
   FixedSlice<BlobFileHeader::kMaxEncodedLength> buffer;
   Status s =
       file->Read(0, BlobFileHeader::kMaxEncodedLength, &buffer, buffer.get());
