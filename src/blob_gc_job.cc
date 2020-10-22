@@ -406,6 +406,10 @@ Status BlobGCJob::Finish() {
 
 Status BlobGCJob::InstallOutputBlobFiles() {
   Status s;
+  std::vector<
+      std::pair<std::shared_ptr<BlobFileMeta>, std::unique_ptr<BlobFileHandle>>>
+      files;
+  std::string tmp;
   for (auto& builder : blob_file_builders_) {
     BlobFileBuilder::OutContexts contexts;
     s = builder.second->Finish(&contexts);
@@ -414,27 +418,21 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       break;
     }
     metrics_.gc_num_new_files++;
+
+    auto file = std::make_shared<BlobFileMeta>(
+        builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(), 0,
+        0, builder.second->GetSmallestKey(), builder.second->GetLargestKey());
+    file->set_live_data_size(builder.second->live_data_size());
+    file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
+    RecordInHistogram(statistics(stats_), TITAN_GC_OUTPUT_FILE_SIZE,
+                      file->file_size());
+    if (!tmp.empty()) {
+      tmp.append(" ");
+    }
+    tmp.append(std::to_string(file->file_number()));
+    files.emplace_back(std::make_pair(file, std::move(builder.first)));
   }
   if (s.ok()) {
-    std::vector<std::pair<std::shared_ptr<BlobFileMeta>,
-                          std::unique_ptr<BlobFileHandle>>>
-        files;
-    std::string tmp;
-    for (auto& builder : blob_file_builders_) {
-      auto file = std::make_shared<BlobFileMeta>(
-          builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(),
-          0, 0, builder.second->GetSmallestKey(),
-          builder.second->GetLargestKey());
-      file->set_live_data_size(builder.second->live_data_size());
-      file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
-      RecordInHistogram(statistics(stats_), TITAN_GC_OUTPUT_FILE_SIZE,
-                        file->file_size());
-      if (!tmp.empty()) {
-        tmp.append(" ");
-      }
-      tmp.append(std::to_string(file->file_number()));
-      files.emplace_back(std::make_pair(file, std::move(builder.first)));
-    }
     ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
                      blob_gc_->column_family_handle()->GetName().c_str(),
                      tmp.c_str());
@@ -460,9 +458,9 @@ Status BlobGCJob::InstallOutputBlobFiles() {
                      "files: %s",
                      blob_gc_->column_family_handle()->GetName().c_str(),
                      to_delete_files.c_str());
-    // Do not set status `s` here, cause it may override the non-okay-status of
-    // `s` so that in the outer funcation it will rewrite blob indexes to LSM by
-    // mistake.
+    // Do not set status `s` here, cause it may override the non-okay-status
+    // of `s` so that in the outer funcation it will rewrite blob indexes to
+    // LSM by mistake.
     Status status = blob_file_manager_->BatchDeleteFiles(handles);
     if (!status.ok()) {
       ROCKS_LOG_WARN(db_options_.info_log,
@@ -470,6 +468,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
                      to_delete_files.c_str(), status.ToString().c_str());
     }
   }
+
   return s;
 }
 
