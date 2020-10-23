@@ -62,27 +62,29 @@ struct BlobRecord {
 class BlobEncoder {
  public:
   BlobEncoder(CompressionType compression, CompressionOptions compression_opt,
-              const CompressionDict& compression_dict)
+              const CompressionDict* compression_dict)
       : compression_opt_(compression_opt),
         compression_ctx_(compression),
-        compression_info_(new CompressionInfo(compression_opt, compression_ctx_,
-                                              compression_dict, compression,
-                                              0 /*sample_for_compression*/)) {}
+        compression_dict_(compression_dict),
+        compression_info_(new CompressionInfo(
+            compression_opt_, compression_ctx_, *compression_dict_, compression,
+            0 /*sample_for_compression*/)) {}
   BlobEncoder(CompressionType compression)
       : BlobEncoder(compression, CompressionOptions(),
-                    CompressionDict::GetEmptyDict()) {}
+                    &CompressionDict::GetEmptyDict()) {}
   BlobEncoder(CompressionType compression,
-              const CompressionDict& compression_dict)
+              const CompressionDict* compression_dict)
       : BlobEncoder(compression, CompressionOptions(), compression_dict) {}
   BlobEncoder(CompressionType compression, CompressionOptions compression_opt)
       : BlobEncoder(compression, compression_opt,
-                    CompressionDict::GetEmptyDict()) {}
+                    &CompressionDict::GetEmptyDict()) {}
 
   void EncodeRecord(const BlobRecord& record);
   void EncodeSlice(const Slice& record);
-  void SetCompressionDict(const CompressionDict& compression_dict) {
+  void SetCompressionDict(const CompressionDict* compression_dict) {
+    compression_dict_ = compression_dict;
     compression_info_.reset(new CompressionInfo(
-        compression_opt_, compression_ctx_, compression_dict,
+        compression_opt_, compression_ctx_, *compression_dict_,
         compression_info_->type(), compression_info_->SampleForCompression()));
   }
 
@@ -98,6 +100,7 @@ class BlobEncoder {
   std::string compressed_buffer_;
   CompressionOptions compression_opt_;
   CompressionContext compression_ctx_;
+  const CompressionDict* compression_dict_;
   std::unique_ptr<CompressionInfo> compression_info_;
 };
 

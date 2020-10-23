@@ -90,7 +90,7 @@ void BlobFileBuilder::EnterUnbuffered(OutContexts* out_ctx) {
   compression_dict_.reset(
       new CompressionDict(dict, cf_options_.blob_file_compression,
                           cf_options_.blob_file_compression_options.level));
-  encoder_.SetCompressionDict(*compression_dict_);
+  encoder_.SetCompressionDict(compression_dict_.get());
 
   FlushSampleRecords(out_ctx);
 
