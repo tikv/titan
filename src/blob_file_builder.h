@@ -116,8 +116,7 @@ class BlobFileBuilder {
   void EnterUnbuffered(OutContexts* out_ctx);
   void WriteHeader();
   void WriteRawBlock(const Slice& block, BlockHandle* handle);
-  void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder,
-                                 BlockHandle* handle);
+  void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder);
   void FlushSampleRecords(OutContexts* out_ctx);
   void WriteEncoderData(BlobHandle* handle);
 

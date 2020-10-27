@@ -152,10 +152,11 @@ void BlobFileBuilder::WriteRawBlock(const Slice& block, BlockHandle* handle) {
 }
 
 void BlobFileBuilder::WriteCompressionDictBlock(
-    MetaIndexBuilder* meta_index_builder, BlockHandle* handle) {
-  WriteRawBlock(compression_dict_->GetRawDict(), handle);
+    MetaIndexBuilder* meta_index_builder) {
+  BlockHandle handle;
+  WriteRawBlock(compression_dict_->GetRawDict(), &handle);
   if (ok()) {
-    meta_index_builder->Add(kCompressionDictBlock, *handle);
+    meta_index_builder->Add(kCompressionDictBlock, handle);
   }
 }
 
@@ -168,11 +169,10 @@ Status BlobFileBuilder::Finish(OutContexts* out_ctx) {
 
   BlobFileFooter footer;
   // if has compression dictionary, encode it into meta blocks
-  // and update relative fields in footer
   if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
-    BlockHandle meta_index_handle, uncompression_dict_handle;
+    BlockHandle meta_index_handle;
     MetaIndexBuilder meta_index_builder;
-    WriteCompressionDictBlock(&meta_index_builder, &uncompression_dict_handle);
+    WriteCompressionDictBlock(&meta_index_builder);
     WriteRawBlock(meta_index_builder.Finish(), &meta_index_handle);
     footer.meta_index_handle = meta_index_handle;
   }
