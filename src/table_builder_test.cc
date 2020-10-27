@@ -245,6 +245,13 @@ class TableBuilderTest : public testing::Test {
                        std::unique_ptr<TableBuilder>* result,
                        int target_level = 0) {
     CompressionOptions compression_opts;
+    NewTableBuilder(file, result, compression_opts, target_level);
+  }
+
+  void NewTableBuilder(WritableFileWriter* file,
+                       std::unique_ptr<TableBuilder>* result,
+                       CompressionOptions compression_opts,
+                       int target_level = 0) {
     TableBuilderOptions options(cf_ioptions_, cf_moptions_,
                                 cf_ioptions_.internal_comparator, &collectors_,
                                 kNoCompression, 0 /*sample_for_compression*/,
@@ -671,6 +678,103 @@ TEST_F(TableBuilderTest, LevelMerge) {
   }
 
   env_->DeleteFile(second_base_name);
+}
+
+// Write blob index, to test key order is correct with dictionary compression
+TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
+#if ZSTD_VERSION_NUMBER >= 10103
+  cf_options_.level_merge = true;
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
+      blob_file_set_.get(), nullptr));
+
+  std::unique_ptr<WritableFileWriter> base_file;
+  NewBaseFileWriter(&base_file);
+  std::unique_ptr<TableBuilder> table_builder;
+  NewTableBuilder(base_file.get(), &table_builder);
+
+  // Generate level 0 sst with blob file
+  int n = 100;
+  for (unsigned char i = 0; i < n; i++) {
+    if (i % 2 == 0) {
+      // key: 0, 2, 4, 6 ..98
+      std::string key(1, i);
+      InternalKey ikey(key, 1, kTypeValue);
+      std::string value(kMinBlobSize, i);
+      table_builder->Add(ikey.Encode(), value);
+    } else {
+      // key: 1, 3, 5, ..99
+      std::string key(1, i);
+      InternalKey ikey(key, 1, kTypeValue);
+      std::string value = std::string(1, i);
+      table_builder->Add(ikey.Encode(), value);
+    }
+  }
+  ASSERT_OK(table_builder->Finish());
+  ASSERT_OK(base_file->Sync(true));
+  ASSERT_OK(base_file->Close());
+
+  std::unique_ptr<TableReader> base_reader;
+  NewTableReader(base_name_, &base_reader);
+  ReadOptions ro;
+  std::unique_ptr<InternalIterator> first_iter;
+  first_iter.reset(base_reader->NewIterator(
+      ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
+      false /*skip_filters*/, TableReaderCaller::kUncategorized));
+
+  // Base file of last level sst
+  std::string second_base_name = base_name_ + "second";
+  NewFileWriter(second_base_name, &base_file);
+
+  CompressionOptions compression_opts;
+  compression_opts.enabled = true;
+  compression_opts.max_dict_bytes = 4000;
+  cf_options_.blob_file_compression_options = compression_opts;
+  cf_options_.compression = kZSTD;
+
+  NewTableBuilder(base_file.get(), &table_builder, compression_opts,
+                  cf_options_.num_levels - 1);
+
+  first_iter->SeekToFirst();
+  // compact data from level0 to level1
+  for (unsigned char i = 0; i < n; i++) {
+    ASSERT_TRUE(first_iter->Valid());
+    table_builder->Add(first_iter->key(), first_iter->value());
+    first_iter->Next();
+  }
+  ASSERT_OK(table_builder->Finish());
+  ASSERT_OK(base_file->Sync(true));
+  ASSERT_OK(base_file->Close());
+
+  std::unique_ptr<TableReader> second_base_reader;
+  NewTableReader(second_base_name, &second_base_reader);
+  std::unique_ptr<InternalIterator> second_iter;
+  second_iter.reset(second_base_reader->NewIterator(
+      ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
+      false /*skip_filters*/, TableReaderCaller::kUncategorized));
+
+  first_iter->SeekToFirst();
+  second_iter->SeekToFirst();
+  // check orders of keys
+  for (unsigned char i = 0; i < n; i++) {
+    ASSERT_TRUE(second_iter->Valid());
+
+    ASSERT_TRUE(first_iter->Valid());
+
+    // Compare sst key
+    ParsedInternalKey first_ikey, second_ikey;
+    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &first_ikey));
+    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &second_ikey));
+    ASSERT_EQ(first_ikey.type, second_ikey.type);
+    ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
+    // TODO: Compare blob records, need to implement decompression first
+
+    first_iter->Next();
+    second_iter->Next();
+  }
+
+  env_->DeleteFile(second_base_name);
+#endif
 }
 
 }  // namespace titandb
