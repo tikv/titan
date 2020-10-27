@@ -1,6 +1,6 @@
-#include "test_util/testharness.h"
-
 #include "blob_format.h"
+
+#include "test_util/testharness.h"
 #include "testutil.h"
 #include "util.h"
 
@@ -118,7 +118,7 @@ TEST(BlobFormatTest, BlobCompressionZSTD) {
   CompressionDict compression_dict(dict, kZSTD, 10);
   UncompressionDict uncompression_dict(dict, true);
 
-  BlobEncoder encoder(kZSTD, compression_dict);
+  BlobEncoder encoder(kZSTD, &compression_dict);
   BlobDecoder decoder(uncompression_dict);
 
   BlobRecord record;

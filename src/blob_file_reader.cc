@@ -8,10 +8,9 @@
 
 #include "file/filename.h"
 #include "test_util/sync_point.h"
+#include "titan_stats.h"
 #include "util/crc32c.h"
 #include "util/string_util.h"
-
-#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -64,9 +63,19 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
     return Status::Corruption("file is too short to be a blob file");
   }
 
+  BlobFileHeader header;
+  Status s = ReadHeader(file, &header);
+  if (!s.ok()) {
+    return s;
+  }
+  if (header.flags & BlobFileHeader::kHasUncompressionDictionary) {
+    return Status::NotSupported(
+        "blob file with dictionary compression is not supported yet");
+  }
+
   FixedSlice<BlobFileFooter::kEncodedLength> buffer;
-  Status s = file->Read(file_size - BlobFileFooter::kEncodedLength,
-                        BlobFileFooter::kEncodedLength, &buffer, buffer.get());
+  s = file->Read(file_size - BlobFileFooter::kEncodedLength,
+                 BlobFileFooter::kEncodedLength, &buffer, buffer.get());
   if (!s.ok()) {
     return s;
   }
@@ -81,6 +90,18 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
   reader->footer_ = footer;
   result->reset(reader);
   return Status::OK();
+}
+
+Status BlobFileReader::ReadHeader(std::unique_ptr<RandomAccessFileReader>& file,
+                                  BlobFileHeader* header) {
+  FixedSlice<BlobFileHeader::kMaxEncodedLength> buffer;
+  Status s =
+      file->Read(0, BlobFileHeader::kMaxEncodedLength, &buffer, buffer.get());
+  if (!s.ok()) return s;
+
+  s = DecodeInto(buffer, header);
+
+  return s;
 }
 
 BlobFileReader::BlobFileReader(const TitanCFOptions& options,
