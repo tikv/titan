@@ -106,9 +106,15 @@ class BlobEncoder {
 
 class BlobDecoder {
  public:
-  BlobDecoder(const UncompressionDict& uncompression_dict)
-      : uncompression_dict_(uncompression_dict) {}
-  BlobDecoder() : BlobDecoder(UncompressionDict::GetEmptyDict()) {}
+  BlobDecoder(const UncompressionDict* uncompression_dict,
+              CompressionType compression)
+      : compression_(compression),
+        uncompression_ctx_(compression),
+        uncompression_dict_(uncompression_dict),
+        uncompression_info_(uncompression_ctx_, *uncompression_dict_,
+                            compression) {}
+  BlobDecoder()
+      : BlobDecoder(&UncompressionDict::GetEmptyDict(), kNoCompression) {}
 
   Status DecodeHeader(Slice* src);
   Status DecodeRecord(Slice* src, BlobRecord* record, OwnedSlice* buffer);
@@ -120,7 +126,9 @@ class BlobDecoder {
   uint32_t header_crc_{0};
   uint32_t record_size_{0};
   CompressionType compression_{kNoCompression};
-  const UncompressionDict& uncompression_dict_;
+  UncompressionContext uncompression_ctx_;
+  const UncompressionDict* uncompression_dict_;
+  UncompressionInfo uncompression_info_;
 };
 
 // Format of blob handle (not fixed size):

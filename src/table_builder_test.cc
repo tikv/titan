@@ -400,13 +400,32 @@ TEST_F(TableBuilderTest, DictCompress) {
   std::unique_ptr<TableReader> base_reader;
   NewTableReader(base_name_, &base_reader);
   std::unique_ptr<BlobFileReader> blob_reader;
-  std::unique_ptr<RandomAccessFileReader> file;
-  NewFileReader(blob_name_, &file);
-  uint64_t file_size = 0;
-  ASSERT_OK(env_->GetFileSize(blob_name_, &file_size));
-  Status stat = BlobFileReader::Open(cf_options_, std::move(file), file_size,
-                                     &blob_reader, nullptr);
-  assert(stat.code() == Status::kNotSupported);
+  NewBlobFileReader(&blob_reader);
+
+  ReadOptions ro;
+  std::unique_ptr<InternalIterator> iter;
+  iter.reset(base_reader->NewIterator(ro, nullptr /*prefix_extractor*/,
+                                      nullptr /*arena*/, false /*skip_filters*/,
+                                      TableReaderCaller::kUncategorized));
+  iter->SeekToFirst();
+  for (char i = 0; i < n; i++) {
+    ASSERT_TRUE(iter->Valid());
+    std::string key(1, i);
+    ParsedInternalKey ikey;
+    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    ASSERT_EQ(ikey.user_key, key);
+    ASSERT_EQ(ikey.type, kTypeBlobIndex);
+    BlobIndex index;
+    ASSERT_OK(DecodeInto(iter->value(), &index));
+    ASSERT_EQ(index.file_number, kTestFileNumber);
+    BlobRecord record;
+    PinnableSlice buffer;
+    ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
+    ASSERT_EQ(record.key, key);
+    ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
+    iter->Next();
+  }
+
 #endif
 }
 

@@ -84,9 +84,7 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
   if (compression_ == kNoCompression) {
     return DecodeInto(input, record);
   }
-  UncompressionContext ctx(compression_);
-  UncompressionInfo info(ctx, uncompression_dict_, compression_);
-  Status s = Uncompress(info, input, buffer);
+  Status s = Uncompress(uncompression_info_, input, buffer);
   if (!s.ok()) {
     return s;
   }
