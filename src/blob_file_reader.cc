@@ -169,13 +169,12 @@ Status BlobFileReader::ReadRecord(const BlobHandle& handle, BlobRecord* record,
         " not equal to blob size " + ToString(handle.size));
   }
 
-  BlobDecoder decoder;
-  s = decoder.DecodeHeader(&blob);
+  s = decoder_.DecodeHeader(&blob);
   if (!s.ok()) {
     return s;
   }
   buffer->reset(std::move(ubuf), blob);
-  s = decoder.DecodeRecord(&blob, record, buffer);
+  s = decoder_.DecodeRecord(&blob, record, buffer);
   return s;
 }
 

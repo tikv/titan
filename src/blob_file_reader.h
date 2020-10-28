@@ -50,6 +50,8 @@ class BlobFileReader {
   // Information read from the file.
   BlobFileFooter footer_;
 
+  BlobDecoder decoder_;
+
   TitanStats* stats_;
 };
 
