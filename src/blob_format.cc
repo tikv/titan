@@ -1,5 +1,6 @@
 #include "blob_format.h"
 
+#include "table/block_based/block.h"
 #include "test_util/sync_point.h"
 #include "util/crc32c.h"
 
@@ -360,6 +361,77 @@ Status BlobFileFooter::DecodeFrom(Slice* src) {
 bool operator==(const BlobFileFooter& lhs, const BlobFileFooter& rhs) {
   return (lhs.meta_index_handle.offset() == rhs.meta_index_handle.offset() &&
           lhs.meta_index_handle.size() == rhs.meta_index_handle.size());
+}
+
+// Seek to the specified meta block.
+// Return true if it successfully seeks to that block.
+static Status SeekToMetaBlock(InternalIterator* meta_iter,
+                              const std::string& block_name, bool* is_found,
+                              BlockHandle* block_handle = nullptr) {
+  if (block_handle != nullptr) {
+    *block_handle = BlockHandle::NullBlockHandle();
+  }
+  *is_found = true;
+  meta_iter->Seek(block_name);
+  if (meta_iter->status().ok()) {
+    if (meta_iter->Valid() && meta_iter->key() == block_name) {
+      *is_found = true;
+      if (block_handle) {
+        Slice v = meta_iter->value();
+        return block_handle->DecodeFrom(&v);
+      }
+    } else {
+      *is_found = false;
+      return Status::OK();
+    }
+  }
+  return meta_iter->status();
+}
+
+Status InitUncompressionDecoder(
+    const BlobFileFooter& footer, RandomAccessFileReader* file,
+    std::unique_ptr<UncompressionDict>* uncompression_dict,
+    std::unique_ptr<BlobDecoder>* decoder) {
+  // 1. read meta index block
+  // 2. read dictionary
+  // 3. reset the decoder
+  assert(footer.meta_index_handle.size() > 0);
+  BlockHandle meta_index_handle = footer.meta_index_handle;
+  Slice blob;
+  CacheAllocationPtr ubuf(new char[meta_index_handle.size()]);
+  Status s = file->Read(meta_index_handle.offset(), meta_index_handle.size(),
+                        &blob, ubuf.get());
+  if (!s.ok()) {
+    return s;
+  }
+  BlockContents meta_block_content(std::move(ubuf), meta_index_handle.size());
+
+  std::unique_ptr<Block> meta(
+      new Block(std::move(meta_block_content), kDisableGlobalSequenceNumber));
+
+  std::unique_ptr<InternalIterator> meta_iter(
+      meta.get()->NewDataIterator(BytewiseComparator(), BytewiseComparator()));
+
+  bool dict_is_found = false;
+  BlockHandle dict_block;
+  s = SeekToMetaBlock(meta_iter.get(), kCompressionDictBlock, &dict_is_found,
+                      &dict_block);
+  if (!s.ok()) {
+    return s;
+  }
+  Slice dict_slice;
+  CacheAllocationPtr dict_buf(new char[dict_block.size()]);
+  s = file->Read(dict_block.offset(), dict_block.size(), &dict_slice,
+                 dict_buf.get());
+  if (!s.ok()) {
+    return s;
+  }
+
+  std::string dict_str(dict_buf.get());
+  uncompression_dict->reset(new UncompressionDict(dict_str, true));
+  decoder->reset(new BlobDecoder(uncompression_dict->get(), kZSTD));
+
+  return s;
 }
 
 }  // namespace titandb

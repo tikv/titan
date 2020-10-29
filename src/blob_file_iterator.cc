@@ -28,10 +28,7 @@ bool BlobFileIterator::Init() {
   }
   BlobFileHeader blob_file_header;
   status_ = blob_file_header.DecodeFrom(&slice);
-  if (blob_file_header.flags & BlobFileHeader::kHasUncompressionDictionary) {
-    status_ = Status::NotSupported(
-        "blob file with dictionary compression is not supported yet");
-  }
+
   if (!status_.ok()) {
     return false;
   }
@@ -50,6 +47,15 @@ bool BlobFileIterator::Init() {
   end_of_blob_record_ = file_size_ - BlobFileFooter::kEncodedLength -
                         blob_file_footer.meta_index_handle.size();
   assert(end_of_blob_record_ > BlobFileHeader::kMinEncodedLength);
+
+  if (blob_file_header.flags & BlobFileHeader::kHasUncompressionDictionary) {
+    status_ = InitUncompressionDecoder(blob_file_footer, file_.get(),
+                                       &uncompression_dict_, &decoder_);
+    if (!status_.ok()) {
+      return false;
+    }
+  }
+
   init_ = true;
   return true;
 }
@@ -92,9 +98,9 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
     status_ = file_->Read(iterate_offset_, kRecordHeaderSize, &header_buffer,
                           header_buffer.get(), true /*for_compaction*/);
     if (!status_.ok()) return;
-    status_ = decoder_.DecodeHeader(&header_buffer);
+    status_ = decoder_->DecodeHeader(&header_buffer);
     if (!status_.ok()) return;
-    total_length = kRecordHeaderSize + decoder_.GetRecordSize();
+    total_length = kRecordHeaderSize + decoder_->GetRecordSize();
   }
 
   if (iterate_offset_ > offset) iterate_offset_ -= total_length;
@@ -108,19 +114,19 @@ void BlobFileIterator::GetBlobRecord() {
   status_ = file_->Read(iterate_offset_, kRecordHeaderSize, &header_buffer,
                         header_buffer.get(), true /*for_compaction*/);
   if (!status_.ok()) return;
-  status_ = decoder_.DecodeHeader(&header_buffer);
+  status_ = decoder_->DecodeHeader(&header_buffer);
   if (!status_.ok()) return;
 
   Slice record_slice;
-  auto record_size = decoder_.GetRecordSize();
+  auto record_size = decoder_->GetRecordSize();
   buffer_.resize(record_size);
   // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
   // is only used for GC, we always set for_compaction to true.
   status_ = file_->Read(iterate_offset_ + kRecordHeaderSize, record_size,
                         &record_slice, buffer_.data(), true /*for_compaction*/);
   if (status_.ok()) {
-    status_ =
-        decoder_.DecodeRecord(&record_slice, &cur_blob_record_, &uncompressed_);
+    status_ = decoder_->DecodeRecord(&record_slice, &cur_blob_record_,
+                                     &uncompressed_);
   }
   if (!status_.ok()) return;
 

@@ -7,7 +7,6 @@
 #include <inttypes.h>
 
 #include "file/filename.h"
-#include "table/block_based/block.h"
 #include "test_util/sync_point.h"
 #include "titan_stats.h"
 #include "util/crc32c.h"
@@ -32,31 +31,6 @@ Status NewBlobFileReader(uint64_t file_number, uint64_t readahead_size,
       std::move(file), file_name, nullptr /*env*/, nullptr /*stats*/,
       0 /*hist_type*/, nullptr /*file_read_hist*/, env_options.rate_limiter));
   return s;
-}
-
-// Seek to the specified meta block.
-// Return true if it successfully seeks to that block.
-Status SeekToMetaBlock(InternalIterator* meta_iter,
-                       const std::string& block_name, bool* is_found,
-                       BlockHandle* block_handle = nullptr) {
-  if (block_handle != nullptr) {
-    *block_handle = BlockHandle::NullBlockHandle();
-  }
-  *is_found = true;
-  meta_iter->Seek(block_name);
-  if (meta_iter->status().ok()) {
-    if (meta_iter->Valid() && meta_iter->key() == block_name) {
-      *is_found = true;
-      if (block_handle) {
-        Slice v = meta_iter->value();
-        return block_handle->DecodeFrom(&v);
-      }
-    } else {
-      *is_found = false;
-      return Status::OK();
-    }
-  }
-  return meta_iter->status();
 }
 
 const uint64_t kMaxReadaheadSize = 256 << 10;
@@ -111,44 +85,12 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
   auto reader = new BlobFileReader(options, std::move(file), stats);
   reader->footer_ = footer;
   if (header.flags & BlobFileHeader::kHasUncompressionDictionary) {
-    // 1. read meta index block
-    // 2. read dictionary
-    // 3. reset the decoder
-    assert(footer.meta_index_handle.size() > 0);
-    BlockHandle meta_index_handle = footer.meta_index_handle;
-    Slice blob;
-    CacheAllocationPtr ubuf(new char[meta_index_handle.size()]);
-    s = reader->file_->Read(meta_index_handle.offset(),
-                            meta_index_handle.size(), &blob, ubuf.get());
+    s = InitUncompressionDecoder(footer, reader->file_.get(),
+                                 &reader->uncompression_dict_,
+                                 &reader->decoder_);
     if (!s.ok()) {
       return s;
     }
-    BlockContents meta_block_content(std::move(ubuf), meta_index_handle.size());
-
-    std::unique_ptr<Block> meta(
-        new Block(std::move(meta_block_content), kDisableGlobalSequenceNumber));
-
-    std::unique_ptr<InternalIterator> meta_iter(meta.get()->NewDataIterator(
-        BytewiseComparator(), BytewiseComparator()));
-
-    bool dict_is_found = false;
-    BlockHandle dict_block;
-    s = SeekToMetaBlock(meta_iter.get(), kCompressionDictBlock, &dict_is_found,
-                        &dict_block);
-    if (!s.ok()) {
-      return s;
-    }
-    Slice dict_slice;
-    CacheAllocationPtr dict_buf(new char[dict_block.size()]);
-    s = reader->file_->Read(dict_block.offset(), dict_block.size(), &dict_slice,
-                            dict_buf.get());
-    if (!s.ok()) {
-      return s;
-    }
-    std::string dict_str(dict_buf.get());
-    reader->uncompression_dict_.reset(new UncompressionDict(dict_str, true));
-    reader->decoder_.reset(
-        new BlobDecoder(reader->uncompression_dict_.get(), kZSTD));
   }
   result->reset(reader);
   return Status::OK();
