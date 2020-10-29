@@ -392,6 +392,9 @@ Status InitUncompressionDecoder(
     const BlobFileFooter& footer, RandomAccessFileReader* file,
     std::unique_ptr<UncompressionDict>* uncompression_dict,
     std::unique_ptr<BlobDecoder>* decoder) {
+#if ZSTD_VERSION_NUMBER < 10103
+  return Status::NotSupported("the version of libztsd is too low");
+#endif
   // 1. read meta index block
   // 2. read dictionary
   // 3. reset the decoder
@@ -427,7 +430,7 @@ Status InitUncompressionDecoder(
     return s;
   }
 
-  std::string dict_str(dict_buf.get());
+  std::string dict_str(dict_buf.get(), dict_buf.get() + dict_block.size());
   uncompression_dict->reset(new UncompressionDict(dict_str, true));
   decoder->reset(new BlobDecoder(uncompression_dict->get(), kZSTD));
 

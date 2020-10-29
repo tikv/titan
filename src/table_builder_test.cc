@@ -372,7 +372,7 @@ TEST_F(TableBuilderTest, DictCompress) {
   compression_opts.enabled = true;
   compression_opts.max_dict_bytes = 4000;
   cf_options_.blob_file_compression_options = compression_opts;
-  cf_options_.compression = kZSTD;
+  cf_options_.blob_file_compression = kZSTD;
 
   table_factory_.reset(new TitanTableFactory(
       db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
@@ -435,7 +435,7 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
   compression_opts.enabled = true;
   compression_opts.max_dict_bytes = 4000;
   cf_options_.blob_file_compression_options = compression_opts;
-  cf_options_.compression = kZSTD;
+  cf_options_.blob_file_compression = kZSTD;
 
   table_factory_.reset(new TitanTableFactory(
       db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
@@ -749,7 +749,7 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
   compression_opts.enabled = true;
   compression_opts.max_dict_bytes = 4000;
   cf_options_.blob_file_compression_options = compression_opts;
-  cf_options_.compression = kZSTD;
+  cf_options_.blob_file_compression = kZSTD;
 
   NewTableBuilder(base_file.get(), &table_builder, compression_opts,
                   cf_options_.num_levels - 1);
