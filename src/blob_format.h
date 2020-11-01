@@ -110,15 +110,19 @@ class BlobDecoder {
   BlobDecoder(const UncompressionDict* uncompression_dict,
               CompressionType compression)
       : compression_(compression),
-        uncompression_ctx_(compression),
         uncompression_dict_(uncompression_dict),
-        uncompression_info_(uncompression_ctx_, *uncompression_dict_,
-                            compression) {}
+        uncompression_ctx_(new UncompressionContext(compression)),
+        uncompression_info_(new UncompressionInfo(
+            *uncompression_ctx_, *uncompression_dict_, compression)) {}
   BlobDecoder()
       : BlobDecoder(&UncompressionDict::GetEmptyDict(), kNoCompression) {}
 
   Status DecodeHeader(Slice* src);
   Status DecodeRecord(Slice* src, BlobRecord* record, OwnedSlice* buffer);
+
+  void SetUncompressionDict(const UncompressionDict* uncompression_dict) {
+    uncompression_dict_ = uncompression_dict;
+  }
 
   size_t GetRecordSize() const { return record_size_; }
 
@@ -127,9 +131,9 @@ class BlobDecoder {
   uint32_t header_crc_{0};
   uint32_t record_size_{0};
   CompressionType compression_{kNoCompression};
-  UncompressionContext uncompression_ctx_;
   const UncompressionDict* uncompression_dict_;
-  UncompressionInfo uncompression_info_;
+  std::unique_ptr<UncompressionContext> uncompression_ctx_;
+  std::unique_ptr<UncompressionInfo> uncompression_info_;
 };
 
 // Format of blob handle (not fixed size):
@@ -403,7 +407,7 @@ Status DecodeInto(const Slice& src, T* target) {
 Status InitUncompressionDecoder(
     const BlobFileFooter& footer, RandomAccessFileReader* file,
     std::unique_ptr<UncompressionDict>* uncompression_dict,
-    std::unique_ptr<BlobDecoder>* decoder);
+    BlobDecoder* decoder);
 
 }  // namespace titandb
 }  // namespace rocksdb

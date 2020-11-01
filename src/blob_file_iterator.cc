@@ -50,7 +50,7 @@ bool BlobFileIterator::Init() {
 
   if (blob_file_header.flags & BlobFileHeader::kHasUncompressionDictionary) {
     status_ = InitUncompressionDecoder(blob_file_footer, file_.get(),
-                                       &uncompression_dict_, &decoder_);
+                                       &uncompression_dict_, decoder_.get());
     // the layout of blob file is like:
     // |  ....   |
     // | records |

@@ -66,7 +66,14 @@ Status BlobDecoder::DecodeHeader(Slice* src) {
   if (!GetFixed32(src, &record_size_) || !GetChar(src, &compression)) {
     return Status::Corruption("BlobHeader");
   }
+
+  CompressionType old_compression = compression_;
   compression_ = static_cast<CompressionType>(compression);
+  if (old_compression != compression_) {
+    uncompression_ctx_.reset(new UncompressionContext(compression_));
+    uncompression_info_.reset(new UncompressionInfo(
+        *uncompression_ctx_, *uncompression_dict_, compression_));
+  }
 
   return Status::OK();
 }
@@ -85,7 +92,7 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
   if (compression_ == kNoCompression) {
     return DecodeInto(input, record);
   }
-  Status s = Uncompress(uncompression_info_, input, buffer);
+  Status s = Uncompress(*uncompression_info_, input, buffer);
   if (!s.ok()) {
     return s;
   }
@@ -391,7 +398,7 @@ static Status SeekToMetaBlock(InternalIterator* meta_iter,
 Status InitUncompressionDecoder(
     const BlobFileFooter& footer, RandomAccessFileReader* file,
     std::unique_ptr<UncompressionDict>* uncompression_dict,
-    std::unique_ptr<BlobDecoder>* decoder) {
+    BlobDecoder* decoder) {
 #if ZSTD_VERSION_NUMBER < 10103
   return Status::NotSupported("the version of libztsd is too low");
 #endif
@@ -432,7 +439,7 @@ Status InitUncompressionDecoder(
 
   std::string dict_str(dict_buf.get(), dict_buf.get() + dict_block.size());
   uncompression_dict->reset(new UncompressionDict(dict_str, true));
-  decoder->reset(new BlobDecoder(uncompression_dict->get(), kZSTD));
+  decoder->SetUncompressionDict(uncompression_dict->get());
 
   return s;
 }

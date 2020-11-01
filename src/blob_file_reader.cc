@@ -87,7 +87,7 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
   if (header.flags & BlobFileHeader::kHasUncompressionDictionary) {
     s = InitUncompressionDecoder(footer, reader->file_.get(),
                                  &reader->uncompression_dict_,
-                                 &reader->decoder_);
+                                 reader->decoder_.get());
     if (!s.ok()) {
       return s;
     }
