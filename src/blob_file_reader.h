@@ -52,9 +52,6 @@ class BlobFileReader {
 
   std::unique_ptr<UncompressionDict> uncompression_dict_;
 
-  std::unique_ptr<BlobDecoder> decoder_ =
-      std::unique_ptr<BlobDecoder>(new BlobDecoder);
-
   TitanStats* stats_;
 };
 

@@ -108,7 +108,7 @@ class BlobEncoder {
 class BlobDecoder {
  public:
   BlobDecoder(const UncompressionDict* uncompression_dict,
-              CompressionType compression)
+              CompressionType compression = kNoCompression)
       : compression_(compression),
         uncompression_dict_(uncompression_dict),
         uncompression_ctx_(new UncompressionContext(compression)),
@@ -401,13 +401,12 @@ Status DecodeInto(const Slice& src, T* target) {
   return s;
 }
 
-// Init uncompression dictionary and decoder
+// Init uncompression dictionary
 // called by BlobFileReader and BlobFileIterator when blob file has
 // uncompression dictionary
-Status InitUncompressionDecoder(
+Status InitUncompressionDict(
     const BlobFileFooter& footer, RandomAccessFileReader* file,
-    std::unique_ptr<UncompressionDict>* uncompression_dict,
-    BlobDecoder* decoder);
+    std::unique_ptr<UncompressionDict>* uncompression_dict);
 
 }  // namespace titandb
 }  // namespace rocksdb

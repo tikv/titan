@@ -85,9 +85,8 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
   auto reader = new BlobFileReader(options, std::move(file), stats);
   reader->footer_ = footer;
   if (header.flags & BlobFileHeader::kHasUncompressionDictionary) {
-    s = InitUncompressionDecoder(footer, reader->file_.get(),
-                                 &reader->uncompression_dict_,
-                                 reader->decoder_.get());
+    s = InitUncompressionDict(footer, reader->file_.get(),
+                              &reader->uncompression_dict_);
     if (!s.ok()) {
       return s;
     }
@@ -173,12 +172,13 @@ Status BlobFileReader::ReadRecord(const BlobHandle& handle, BlobRecord* record,
         " not equal to blob size " + ToString(handle.size));
   }
 
-  s = decoder_->DecodeHeader(&blob);
+  BlobDecoder decoder(uncompression_dict_.get());
+  s = decoder.DecodeHeader(&blob);
   if (!s.ok()) {
     return s;
   }
   buffer->reset(std::move(ubuf), blob);
-  s = decoder_->DecodeRecord(&blob, record, buffer);
+  s = decoder.DecodeRecord(&blob, record, buffer);
   return s;
 }
 

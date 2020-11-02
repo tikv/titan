@@ -395,16 +395,15 @@ static Status SeekToMetaBlock(InternalIterator* meta_iter,
   return meta_iter->status();
 }
 
-Status InitUncompressionDecoder(
+Status InitUncompressionDict(
     const BlobFileFooter& footer, RandomAccessFileReader* file,
-    std::unique_ptr<UncompressionDict>* uncompression_dict,
-    BlobDecoder* decoder) {
+    std::unique_ptr<UncompressionDict>* uncompression_dict) {
 #if ZSTD_VERSION_NUMBER < 10103
   return Status::NotSupported("the version of libztsd is too low");
 #endif
   // 1. read meta index block
   // 2. read dictionary
-  // 3. reset the decoder
+  // 3. reset the dictionary
   assert(footer.meta_index_handle.size() > 0);
   BlockHandle meta_index_handle = footer.meta_index_handle;
   Slice blob;
@@ -439,7 +438,6 @@ Status InitUncompressionDecoder(
 
   std::string dict_str(dict_buf.get(), dict_buf.get() + dict_block.size());
   uncompression_dict->reset(new UncompressionDict(dict_str, true));
-  decoder->SetUncompressionDict(uncompression_dict->get());
 
   return s;
 }

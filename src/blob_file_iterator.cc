@@ -49,8 +49,9 @@ bool BlobFileIterator::Init() {
                         kBlockTrailerSize;
 
   if (blob_file_header.flags & BlobFileHeader::kHasUncompressionDictionary) {
-    status_ = InitUncompressionDecoder(blob_file_footer, file_.get(),
-                                       &uncompression_dict_, decoder_.get());
+    status_ = InitUncompressionDict(blob_file_footer, file_.get(),
+                                    &uncompression_dict_);
+    decoder_->SetUncompressionDict(uncompression_dict_.get());
     // the layout of blob file is like:
     // |  ....   |
     // | records |
