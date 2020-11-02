@@ -67,14 +67,7 @@ Status BlobDecoder::DecodeHeader(Slice* src) {
     return Status::Corruption("BlobHeader");
   }
 
-  CompressionType old_compression = compression_;
   compression_ = static_cast<CompressionType>(compression);
-  if (old_compression != compression_) {
-    uncompression_ctx_.reset(new UncompressionContext(compression_));
-    uncompression_info_.reset(new UncompressionInfo(
-        *uncompression_ctx_, *uncompression_dict_, compression_));
-  }
-
   return Status::OK();
 }
 
@@ -92,7 +85,9 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
   if (compression_ == kNoCompression) {
     return DecodeInto(input, record);
   }
-  Status s = Uncompress(*uncompression_info_, input, buffer);
+  UncompressionContext ctx(compression_);
+  UncompressionInfo info(ctx, *uncompression_dict_, compression_);
+  Status s = Uncompress(info, input, buffer);
   if (!s.ok()) {
     return s;
   }

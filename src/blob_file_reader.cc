@@ -172,7 +172,9 @@ Status BlobFileReader::ReadRecord(const BlobHandle& handle, BlobRecord* record,
         " not equal to blob size " + ToString(handle.size));
   }
 
-  BlobDecoder decoder(uncompression_dict_.get());
+  BlobDecoder decoder(uncompression_dict_ == nullptr
+                          ? &UncompressionDict::GetEmptyDict()
+                          : uncompression_dict_.get());
   s = decoder.DecodeHeader(&blob);
   if (!s.ok()) {
     return s;

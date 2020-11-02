@@ -109,11 +109,8 @@ class BlobDecoder {
  public:
   BlobDecoder(const UncompressionDict* uncompression_dict,
               CompressionType compression = kNoCompression)
-      : compression_(compression),
-        uncompression_dict_(uncompression_dict),
-        uncompression_ctx_(new UncompressionContext(compression)),
-        uncompression_info_(new UncompressionInfo(
-            *uncompression_ctx_, *uncompression_dict_, compression)) {}
+      : compression_(compression), uncompression_dict_(uncompression_dict) {}
+
   BlobDecoder()
       : BlobDecoder(&UncompressionDict::GetEmptyDict(), kNoCompression) {}
 
@@ -132,8 +129,6 @@ class BlobDecoder {
   uint32_t record_size_{0};
   CompressionType compression_{kNoCompression};
   const UncompressionDict* uncompression_dict_;
-  std::unique_ptr<UncompressionContext> uncompression_ctx_;
-  std::unique_ptr<UncompressionInfo> uncompression_info_;
 };
 
 // Format of blob handle (not fixed size):

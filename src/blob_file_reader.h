@@ -50,7 +50,7 @@ class BlobFileReader {
   // Information read from the file.
   BlobFileFooter footer_;
 
-  std::unique_ptr<UncompressionDict> uncompression_dict_;
+  std::unique_ptr<UncompressionDict> uncompression_dict_ = nullptr;
 
   TitanStats* stats_;
 };
