@@ -28,7 +28,6 @@ bool BlobFileIterator::Init() {
   }
   BlobFileHeader blob_file_header;
   status_ = blob_file_header.DecodeFrom(&slice);
-
   if (!status_.ok()) {
     return false;
   }

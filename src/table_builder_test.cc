@@ -425,7 +425,7 @@ TEST_F(TableBuilderTest, DictCompress) {
     ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
     iter->Next();
   }
-
+  ASSERT_TRUE(!iter->Valid());
 #endif
 }
 

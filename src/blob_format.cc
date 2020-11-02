@@ -373,18 +373,14 @@ static Status SeekToMetaBlock(InternalIterator* meta_iter,
   if (block_handle != nullptr) {
     *block_handle = BlockHandle::NullBlockHandle();
   }
-  *is_found = true;
+  *is_found = false;
   meta_iter->Seek(block_name);
-  if (meta_iter->status().ok()) {
-    if (meta_iter->Valid() && meta_iter->key() == block_name) {
-      *is_found = true;
-      if (block_handle) {
-        Slice v = meta_iter->value();
-        return block_handle->DecodeFrom(&v);
-      }
-    } else {
-      *is_found = false;
-      return Status::OK();
+  if (meta_iter->status().ok() && meta_iter->Valid() &&
+      meta_iter->key() == block_name) {
+    *is_found = true;
+    if (block_handle) {
+      Slice v = meta_iter->value();
+      return block_handle->DecodeFrom(&v);
     }
   }
   return meta_iter->status();
@@ -420,6 +416,11 @@ Status InitUncompressionDict(
   BlockHandle dict_block;
   s = SeekToMetaBlock(meta_iter.get(), kCompressionDictBlock, &dict_is_found,
                       &dict_block);
+
+  if (!dict_is_found) {
+    return Status::NotFound("uncompression dict");
+  }
+
   if (!s.ok()) {
     return s;
   }
