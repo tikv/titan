@@ -5,7 +5,6 @@
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"
 #include "table/format.h"
-#include "table/internal_iterator.h"
 #include "util.h"
 
 namespace rocksdb {
@@ -395,13 +394,6 @@ Status DecodeInto(const Slice& src, T* target) {
   }
   return s;
 }
-
-// Init uncompression dictionary
-// called by BlobFileReader and BlobFileIterator when blob file has
-// uncompression dictionary
-Status InitUncompressionDict(
-    const BlobFileFooter& footer, RandomAccessFileReader* file,
-    std::unique_ptr<UncompressionDict>* uncompression_dict);
 
 }  // namespace titandb
 }  // namespace rocksdb

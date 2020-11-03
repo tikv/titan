@@ -1,5 +1,6 @@
 #include "blob_file_iterator.h"
 
+#include "blob_file_reader.h"
 #include "util.h"
 #include "util/crc32c.h"
 
