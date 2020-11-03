@@ -464,6 +464,8 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
   ASSERT_OK(base_file->Close());
   std::unique_ptr<TableReader> base_reader;
   NewTableReader(base_name_, &base_reader);
+  std::unique_ptr<BlobFileReader> blob_reader;
+  NewBlobFileReader(&blob_reader);
 
   ReadOptions ro;
   std::unique_ptr<InternalIterator> iter;
@@ -483,7 +485,14 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
       ASSERT_EQ(iter->value(), std::string(1, i));
     } else {
       ASSERT_EQ(ikey.type, kTypeBlobIndex);
-      // TODO: reading is not implmented yet
+      BlobIndex index;
+      ASSERT_OK(DecodeInto(iter->value(), &index));
+      ASSERT_EQ(index.file_number, kTestFileNumber);
+      BlobRecord record;
+      PinnableSlice buffer;
+      ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
+      ASSERT_EQ(record.key, key);
+      ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
     }
     iter->Next();
   }
@@ -772,6 +781,9 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
       ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
       false /*skip_filters*/, TableReaderCaller::kUncategorized));
 
+  std::unique_ptr<BlobFileReader> blob_reader;
+  NewBlobFileReader(&blob_reader);
+
   first_iter->SeekToFirst();
   second_iter->SeekToFirst();
   // check orders of keys
@@ -786,7 +798,27 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
     ASSERT_TRUE(ParseInternalKey(first_iter->key(), &second_ikey));
     ASSERT_EQ(first_ikey.type, second_ikey.type);
     ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
-    // TODO: Compare blob records, need to implement decompression first
+
+    if (i % 2 == 0) {
+      // key: 0, 2, 4, 6 ..98
+      ASSERT_EQ(second_ikey.type, kTypeBlobIndex);
+      std::string key(1, i);
+
+      BlobIndex index;
+      ASSERT_OK(DecodeInto(second_iter->value(), &index));
+      BlobRecord record;
+      PinnableSlice buffer;
+      ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
+      ASSERT_EQ(record.key, key);
+      ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
+    } else {
+      // key: 1, 3, 5, ..99
+      std::string key(1, i);
+      std::string value = std::string(1, i);
+
+      ASSERT_EQ(second_ikey.type, kTypeValue);
+      ASSERT_EQ(second_iter->value(), value);
+    }
 
     first_iter->Next();
     second_iter->Next();
