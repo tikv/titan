@@ -59,8 +59,7 @@ class BlobFileIterator {
   bool valid_{false};
 
   std::unique_ptr<UncompressionDict> uncompression_dict_;
-  std::unique_ptr<BlobDecoder> decoder_ =
-      std::unique_ptr<BlobDecoder>(new BlobDecoder);
+  BlobDecoder decoder_;
 
   uint64_t iterate_offset_{0};
   std::vector<char> buffer_;

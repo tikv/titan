@@ -416,14 +416,14 @@ Status InitUncompressionDict(
   BlockHandle dict_block;
   s = SeekToMetaBlock(meta_iter.get(), kCompressionDictBlock, &dict_is_found,
                       &dict_block);
+  if (!s.ok()) {
+    return s;
+  }
 
   if (!dict_is_found) {
     return Status::NotFound("uncompression dict");
   }
 
-  if (!s.ok()) {
-    return s;
-  }
   Slice dict_slice;
   CacheAllocationPtr dict_buf(new char[dict_block.size()]);
   s = file->Read(dict_block.offset(), dict_block.size(), &dict_slice,
