@@ -16,6 +16,27 @@ bool GetChar(Slice* src, unsigned char* value) {
   return true;
 }
 
+// Seek to the specified meta block.
+// Return true if it successfully seeks to that block.
+Status SeekToMetaBlock(InternalIterator* meta_iter,
+                       const std::string& block_name, bool* is_found,
+                       BlockHandle* block_handle = nullptr) {
+  if (block_handle != nullptr) {
+    *block_handle = BlockHandle::NullBlockHandle();
+  }
+  *is_found = false;
+  meta_iter->Seek(block_name);
+  if (meta_iter->status().ok() && meta_iter->Valid() &&
+      meta_iter->key() == block_name) {
+    *is_found = true;
+    if (block_handle) {
+      Slice v = meta_iter->value();
+      return block_handle->DecodeFrom(&v);
+    }
+  }
+  return meta_iter->status();
+}
+
 }  // namespace
 
 void BlobRecord::EncodeTo(std::string* dst) const {
@@ -365,30 +386,10 @@ bool operator==(const BlobFileFooter& lhs, const BlobFileFooter& rhs) {
           lhs.meta_index_handle.size() == rhs.meta_index_handle.size());
 }
 
-// Seek to the specified meta block.
-// Return true if it successfully seeks to that block.
-static Status SeekToMetaBlock(InternalIterator* meta_iter,
-                              const std::string& block_name, bool* is_found,
-                              BlockHandle* block_handle = nullptr) {
-  if (block_handle != nullptr) {
-    *block_handle = BlockHandle::NullBlockHandle();
-  }
-  *is_found = false;
-  meta_iter->Seek(block_name);
-  if (meta_iter->status().ok() && meta_iter->Valid() &&
-      meta_iter->key() == block_name) {
-    *is_found = true;
-    if (block_handle) {
-      Slice v = meta_iter->value();
-      return block_handle->DecodeFrom(&v);
-    }
-  }
-  return meta_iter->status();
-}
-
 Status InitUncompressionDict(
     const BlobFileFooter& footer, RandomAccessFileReader* file,
     std::unique_ptr<UncompressionDict>* uncompression_dict) {
+  // TODO: Cache the compression dictionary in either block cache or blob cache.
 #if ZSTD_VERSION_NUMBER < 10103
   return Status::NotSupported("the version of libztsd is too low");
 #endif
@@ -410,7 +411,7 @@ Status InitUncompressionDict(
       new Block(std::move(meta_block_content), kDisableGlobalSequenceNumber));
 
   std::unique_ptr<InternalIterator> meta_iter(
-      meta.get()->NewDataIterator(BytewiseComparator(), BytewiseComparator()));
+      meta->NewDataIterator(BytewiseComparator(), BytewiseComparator()));
 
   bool dict_is_found = false;
   BlockHandle dict_block;
