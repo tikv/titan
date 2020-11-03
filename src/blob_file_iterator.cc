@@ -43,9 +43,11 @@ bool BlobFileIterator::Init() {
   if (!status_.ok()) return false;
   BlobFileFooter blob_file_footer;
   status_ = blob_file_footer.DecodeFrom(&slice);
-  end_of_blob_record_ = file_size_ - BlobFileFooter::kEncodedLength -
-                        blob_file_footer.meta_index_handle.size() -
-                        kBlockTrailerSize;
+  end_of_blob_record_ = file_size_ - BlobFileFooter::kEncodedLength;
+  if (!blob_file_footer.meta_index_handle.IsNull()) {
+    end_of_blob_record_ -=
+        (blob_file_footer.meta_index_handle.size() + kBlockTrailerSize);
+  }
 
   if (blob_file_header.flags & BlobFileHeader::kHasUncompressionDictionary) {
     status_ = InitUncompressionDict(blob_file_footer, file_.get(),
