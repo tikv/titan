@@ -136,6 +136,18 @@ TEST_F(BlobFileIteratorTest, Basic) {
   TestBlobFileIterator();
 }
 
+TEST_F(BlobFileIteratorTest, DictCompress) {
+#if ZSTD_VERSION_NUMBER >= 10103
+  CompressionOptions compression_opts;
+  compression_opts.enabled = true;
+  compression_opts.max_dict_bytes = 4000;
+  titan_options_.blob_file_compression = kZSTD;
+  titan_options_.blob_file_compression_options = compression_opts;
+
+  TestBlobFileIterator();
+#endif
+}
+
 TEST_F(BlobFileIteratorTest, IterateForPrev) {
   NewBuilder();
   const int n = 1000;

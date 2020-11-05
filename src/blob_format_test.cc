@@ -119,7 +119,7 @@ TEST(BlobFormatTest, BlobCompressionZSTD) {
   UncompressionDict uncompression_dict(dict, true);
 
   BlobEncoder encoder(kZSTD, &compression_dict);
-  BlobDecoder decoder(uncompression_dict);
+  BlobDecoder decoder(&uncompression_dict, kZSTD);
 
   BlobRecord record;
   record.key = "key1";

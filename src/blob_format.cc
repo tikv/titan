@@ -65,8 +65,8 @@ Status BlobDecoder::DecodeHeader(Slice* src) {
   if (!GetFixed32(src, &record_size_) || !GetChar(src, &compression)) {
     return Status::Corruption("BlobHeader");
   }
-  compression_ = static_cast<CompressionType>(compression);
 
+  compression_ = static_cast<CompressionType>(compression);
   return Status::OK();
 }
 
@@ -85,7 +85,7 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
     return DecodeInto(input, record);
   }
   UncompressionContext ctx(compression_);
-  UncompressionInfo info(ctx, uncompression_dict_, compression_);
+  UncompressionInfo info(ctx, *uncompression_dict_, compression_);
   Status s = Uncompress(info, input, buffer);
   if (!s.ok()) {
     return s;
