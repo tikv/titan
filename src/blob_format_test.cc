@@ -99,10 +99,8 @@ std::string CreateDict() {
   BlobEncoder encoder(kZSTD);
 
   for (int i = 0; i < sample_count; ++i) {
-    std::string key = "key" + std::to_string(i);
-    std::string value = "value" + std::to_string(i);
-    record.key = Slice(key);
-    record.value = Slice(value);
+    record.key = "key" + std::to_string(i);
+    record.value = "value" + std::to_string(i);
     encoder.EncodeRecord(record);
 
     std::string encoded_record = encoder.GetRecord().ToString();
