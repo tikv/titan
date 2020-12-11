@@ -31,16 +31,17 @@ class TitanCompactionFilter final : public CompactionFilter {
 
   const char *Name() const override { return filter_name_.c_str(); }
 
-  Decision FilterV2(int level, const Slice &key, ValueType value_type,
-                    const Slice &value, std::string *new_value,
+  Decision FilterV3(int level, const Slice &key, SequenceNumber seqno,
+                    ValueType value_type, const Slice &value,
+                    std::string *new_value,
                     std::string *skip_until) const override {
     if (skip_value_) {
-      return original_filter_->FilterV3(level, key, 0 /*seqno*/, value_type,
-                                        Slice(), new_value, skip_until);
+      return original_filter_->FilterV3(level, key, seqno, value_type, Slice(),
+                                        new_value, skip_until);
     }
     if (value_type != kBlobIndex) {
-      return original_filter_->FilterV3(level, key, 0 /*seqno */, value_type,
-                                        value, new_value, skip_until);
+      return original_filter_->FilterV3(level, key, seqno, value_type, value,
+                                        new_value, skip_until);
     }
 
     BlobIndex blob_index;
@@ -74,7 +75,7 @@ class TitanCompactionFilter final : public CompactionFilter {
       return Decision::kKeep;
     } else if (s.ok()) {
       auto decision = original_filter_->FilterV3(
-          level, key, 0 /*seqno*/, kValue, record.value, new_value, skip_until);
+          level, key, seqno, kValue, record.value, new_value, skip_until);
 
       // It would be a problem if it change the value whereas the value_type
       // is still kBlobIndex. For now, just returns kKeep.
@@ -98,13 +99,6 @@ class TitanCompactionFilter final : public CompactionFilter {
       // GetBlobRecord failed, keep the value.
       return Decision::kKeep;
     }
-  }
-
-  Decision FilterV3(int level, const Slice &key, SequenceNumber /*seqno*/,
-                    ValueType value_type, const Slice &value,
-                    std::string *new_value,
-                    std::string *skip_until) const override {
-    return FilterV2(level, key, value_type, value, new_value, skip_until);
   }
 
  private:
