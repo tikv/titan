@@ -38,6 +38,10 @@ matrix:
       compiler:
       env:
         - COMPILER=gcc9
+    - os: linux
+      arch: arm64
+      env:
+        - SANITIZER="ASAN"
     - os: osx
       env:
         - SANITIZER="ASAN"
