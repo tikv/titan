@@ -381,7 +381,6 @@ TEST_F(TitanDBTest, Basic) {
 }
 
 TEST_F(TitanDBTest, DictCompressOptions) {
-  printf("gzh: begin of TitanDBTest::DictCompressOptions\n");
   options_.min_blob_size = 1;
   options_.blob_file_compression = CompressionType::kZSTD;
   options_.blob_file_compression_options.window_bits = -14;
@@ -398,7 +397,6 @@ TEST_F(TitanDBTest, DictCompressOptions) {
   }
   Flush();
   VerifyDB(data);
-  printf("gzh: end of TitanDBTest::DictCompressOptions\n");
 }
 
 TEST_F(TitanDBTest, TableFactory) { TestTableFactory(); }
