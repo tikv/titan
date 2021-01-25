@@ -465,7 +465,7 @@ TEST_F(TableBuilderTest, DictCompressOptions) {
     }
     table_builder->Add(ikey.Encode(), value);
   }
-  ASSERT_EQ(n/2, table_builder->NumEntries());
+  ASSERT_EQ(n / 2, table_builder->NumEntries());
   ASSERT_OK(table_builder->Finish());
 #endif
 }
