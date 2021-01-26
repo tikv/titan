@@ -290,7 +290,11 @@ void TitanTableBuilder::Abandon() {
 }
 
 uint64_t TitanTableBuilder::NumEntries() const {
-  return base_builder_->NumEntries();
+  if (builder_unbuffered()) {
+    return base_builder_->NumEntries();
+  } else {
+    return blob_builder_->NumEntries() + blob_builder_->NumSampleEntries();
+  }
 }
 
 uint64_t TitanTableBuilder::FileSize() const {

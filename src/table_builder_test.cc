@@ -429,6 +429,47 @@ TEST_F(TableBuilderTest, DictCompress) {
 #endif
 }
 
+TEST_F(TableBuilderTest, DictCompressOptions) {
+#if ZSTD_VERSION_NUMBER >= 10103
+  CompressionOptions compression_opts;
+  compression_opts.window_bits = -14;
+  compression_opts.level = 32767;
+  compression_opts.strategy = 0;
+  compression_opts.max_dict_bytes = 4000;
+  compression_opts.zstd_max_train_bytes = 0;
+
+  compression_opts.enabled = true;
+  compression_opts.max_dict_bytes = 4000;
+  cf_options_.blob_file_compression_options = compression_opts;
+  cf_options_.blob_file_compression = kZSTD;
+
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
+      blob_file_set_.get(), nullptr));
+
+  std::unique_ptr<WritableFileWriter> base_file;
+  NewBaseFileWriter(&base_file);
+  std::unique_ptr<TableBuilder> table_builder;
+  NewTableBuilder(base_file.get(), &table_builder);
+
+  // Build a base table and a blob file.
+  const int n = 100;
+  for (char i = 0; i < n; i++) {
+    std::string key(1, i);
+    InternalKey ikey(key, 1, kTypeValue);
+    std::string value;
+    if (i % 2 == 0) {
+      value = std::string(1, i);
+    } else {
+      value = std::string(kMinBlobSize, i);
+    }
+    table_builder->Add(ikey.Encode(), value);
+  }
+  ASSERT_EQ(n / 2, table_builder->NumEntries());
+  ASSERT_OK(table_builder->Finish());
+#endif
+}
+
 TEST_F(TableBuilderTest, DictCompressDisorder) {
 #if ZSTD_VERSION_NUMBER >= 10103
   CompressionOptions compression_opts;

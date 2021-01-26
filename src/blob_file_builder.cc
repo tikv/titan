@@ -112,6 +112,10 @@ void BlobFileBuilder::FlushSampleRecords(OutContexts* out_ctx) {
     WriteEncoderData(&ctx->new_blob_index.blob_handle);
     out_ctx->emplace_back(std::move(cached_contexts_[ctx_idx]));
   }
+  for (; ctx_idx < cached_contexts_.size(); ctx_idx++) {
+    assert(cached_contexts_[ctx_idx]->has_value);
+    out_ctx->emplace_back(std::move(cached_contexts_[ctx_idx]));
+  }
   assert(sample_idx == sample_records_.size());
   assert(ctx_idx == cached_contexts_.size());
   sample_records_.clear();
