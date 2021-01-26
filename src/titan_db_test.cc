@@ -380,6 +380,25 @@ TEST_F(TitanDBTest, Basic) {
   }
 }
 
+TEST_F(TitanDBTest, DictCompressOptions) {
+  options_.min_blob_size = 1;
+  options_.blob_file_compression = CompressionType::kZSTD;
+  options_.blob_file_compression_options.window_bits = -14;
+  options_.blob_file_compression_options.level = 32767;
+  options_.blob_file_compression_options.strategy = 0;
+  options_.blob_file_compression_options.max_dict_bytes = 6400;
+  options_.blob_file_compression_options.zstd_max_train_bytes = 0;
+
+  const uint64_t kNumKeys = 500;
+  std::map<std::string, std::string> data;
+  Open();
+  for (uint64_t k = 1; k <= kNumKeys; k++) {
+    Put(k, &data);
+  }
+  Flush();
+  VerifyDB(data);
+}
+
 TEST_F(TitanDBTest, TableFactory) { TestTableFactory(); }
 
 TEST_F(TitanDBTest, DbIter) {

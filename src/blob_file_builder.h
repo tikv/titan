@@ -100,6 +100,8 @@ class BlobFileBuilder {
 
   // Number of calls to Add() so far.
   uint64_t NumEntries();
+  // Number of sample records
+  uint64_t NumSampleEntries() { return sample_records_.size(); }
 
   const std::string& GetSmallestKey() { return smallest_key_; }
   const std::string& GetLargestKey() { return largest_key_; }
