@@ -60,6 +60,17 @@ void TitanCFOptions::Dump(Logger* logger) const {
   }
   ROCKS_LOG_HEADER(logger, "TitanCFOptions.blob_file_compression        : %s",
                    compression_str.c_str());
+  ROCKS_LOG_HEADER(logger, "TItanCFOptions.blob_file_compression_options: ");
+  ROCKS_LOG_HEADER(logger, "    window_bits : %d",
+                   blob_file_compression_options.window_bits);
+  ROCKS_LOG_HEADER(logger, "    level : %d",
+                   blob_file_compression_options.level);
+  ROCKS_LOG_HEADER(logger, "    strategy : %d",
+                   blob_file_compression_options.strategy);
+  ROCKS_LOG_HEADER(logger, "    max_dict_bytes : %" PRIu32,
+                   blob_file_compression_options.max_dict_bytes);
+  ROCKS_LOG_HEADER(logger, "    zstd_max_train_bytes : %" PRIu32,
+                   blob_file_compression_options.zstd_max_train_bytes);
   ROCKS_LOG_HEADER(logger,
                    "TitanCFOptions.blob_file_target_size        : %" PRIu64,
                    blob_file_target_size);
