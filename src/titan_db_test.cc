@@ -389,7 +389,7 @@ TEST_F(TitanDBTest, DictCompressOptions) {
   options_.blob_file_compression_options.max_dict_bytes = 6400;
   options_.blob_file_compression_options.zstd_max_train_bytes = 0;
 
-  const uint64_t kNumKeys = 501;
+  const uint64_t kNumKeys = 500;
   std::map<std::string, std::string> data;
   Open();
   for (uint64_t k = 1; k <= kNumKeys; k++) {
