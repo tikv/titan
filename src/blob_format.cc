@@ -300,6 +300,17 @@ TitanInternalStats::StatsType BlobFileMeta::GetDiscardableRatioLevel() const {
   return type;
 }
 
+void BlobFileMeta::Dump(bool with_keys) const {
+  fprintf(stdout, "file %" PRIu64 ", size %" PRIu64 ", level %" PRIu32,
+          file_number_, file_size_, file_level_);
+  if (with_keys) {
+    fprintf(stdout, ", smallest key: %s, largest key: %s",
+            Slice(smallest_key_).ToString(true /*hex*/).c_str(),
+            Slice(largest_key_).ToString(true /*hex*/).c_str());
+  }
+  fprintf(stdout, "\n");
+}
+
 void BlobFileHeader::EncodeTo(std::string* dst) const {
   PutFixed32(dst, kHeaderMagicNumber);
   PutFixed32(dst, version);

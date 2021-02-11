@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <unordered_map>
 
 #include "blob_file_set.h"
@@ -104,6 +105,17 @@ class EditCollector {
     return Status::Corruption("No next file number in manifest file");
   }
 
+  void Dump(bool with_keys) const {
+    if (has_next_file_number_) {
+      fprintf(stdout, "next_file_number: %" PRIu64 "\n", next_file_number_);
+      for (auto& cf : column_families_) {
+        fprintf(stdout, "column family: %" PRIu32 "\n", cf.first);
+        cf.second.Dump(with_keys);
+        fprintf(stdout, "\n");
+      }
+    }
+  }
+
  private:
   class CFEditCollector {
    public:
@@ -194,6 +206,31 @@ class EditCollector {
 
       storage->ComputeGCScore();
       return Status::OK();
+    }
+
+    void Dump(bool with_keys) const {
+      std::vector<uint64_t> files;
+      files.reserve(added_files_.size());
+      for (auto& file : added_files_) {
+        files.push_back(file.first);
+      }
+      sort(files.begin(), files.end());
+      for (uint64_t file : files) {
+        if (deleted_files_.count(file) == 0) {
+          added_files_.at(file)->Dump(with_keys);
+        }
+      }
+      bool has_additional_deletion = false;
+      for (auto& file : deleted_files_) {
+        if (added_files_.count(file.first) == 0) {
+          if (!has_additional_deletion) {
+            fprintf(stdout, "additional deletion:\n");
+            has_additional_deletion = true;
+          }
+          fprintf(stdout, "file %" PRIu64 ", seq %" PRIu64 "\n", file.first,
+                  file.second);
+        }
+      }
     }
 
    private:
