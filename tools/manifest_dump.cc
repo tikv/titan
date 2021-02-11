@@ -37,7 +37,7 @@ namespace titandb {
 
 int manifest_dump() {
   if (FLAGS_path.empty()) {
-    fprintf(stderr, "Manifest file path not given.");
+    fprintf(stderr, "Manifest file path not given.\n");
     return 1;
   }
   Env* env = Env::Default();
