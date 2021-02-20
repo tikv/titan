@@ -10,26 +10,25 @@ int main() {
 
 #include <memory>
 
-#include "util/gflags_compat.h"
-
+#include "edit_collector.h"
 #include "rocksdb/env.h"
 #include "util/file_reader_writer.h"
-
-#include "edit_collector.h"
+#include "util/gflags_compat.h"
 #include "version_edit.h"
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::SetUsageMessage;
 
 DEFINE_string(path, "", "Path for Titan manifest file.");
-DEFINE_bool(ignore_tail_err, true, "Ignore error encounter towards the tail of manifest.");
+DEFINE_bool(ignore_tail_err, true,
+            "Ignore error encounter towards the tail of manifest.");
 DEFINE_bool(verbose, false, "Output each manifest record.");
 DEFINE_bool(with_keys, false, "Output blob file boundary keys");
 
-#define handle_error(s, location) \
-  if (!s.ok()) { \
+#define handle_error(s, location)                                           \
+  if (!s.ok()) {                                                            \
     fprintf(stderr, "error when %s: %s\n", location, s.ToString().c_str()); \
-    return 1; \
+    return 1;                                                               \
   }
 
 namespace rocksdb {
@@ -53,7 +52,8 @@ int manifest_dump() {
   // Open log reader.
   LogReporter reporter;
   reporter.status = &s;
-  log::Reader log_reader(nullptr, std::move(file_reader), &reporter, true /*checksum*/, 0 /*log_num*/);
+  log::Reader log_reader(nullptr, std::move(file_reader), &reporter,
+                         true /*checksum*/, 0 /*log_num*/);
   Slice record;
   std::string scratch;
 
@@ -81,8 +81,8 @@ int manifest_dump() {
 }  // namespace rocksdb
 
 int main(int argc, char** argv) {
-  SetUsageMessage(std::string("\nUSAGE\n") + std::string(argv[0]) + 
-    " [OPTIONS]...");
+  SetUsageMessage(std::string("\nUSAGE\n") + std::string(argv[0]) +
+                  " [OPTIONS]...");
   ParseCommandLineFlags(&argc, &argv, true);
   return rocksdb::titandb::manifest_dump();
 }

@@ -1,13 +1,13 @@
 #pragma once
 
+#include <inttypes.h>
+
 #include <algorithm>
 #include <unordered_map>
 
 #include "blob_file_set.h"
 #include "util/string_util.h"
 #include "version_edit.h"
-
-#include <inttypes.h>
 
 namespace rocksdb {
 namespace titandb {
