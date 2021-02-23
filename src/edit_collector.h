@@ -214,7 +214,7 @@ class EditCollector {
       for (auto& file : added_files_) {
         files.push_back(file.first);
       }
-      sort(files.begin(), files.end());
+      std::sort(files.begin(), files.end());
       for (uint64_t file : files) {
         if (deleted_files_.count(file) == 0) {
           added_files_.at(file)->Dump(with_keys);
