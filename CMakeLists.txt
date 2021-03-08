@@ -144,6 +144,10 @@ if (WITH_TITAN_TOOLS)
   add_executable(titandb_bench tools/db_bench.cc tools/db_bench_tool.cc)
   target_include_directories(titandb_bench PRIVATE ${gflags_INCLUDE_DIR})
   target_link_libraries(titandb_bench ${TOOLS_LIBS})
+
+  add_executable(titan_manifest_dump tools/manifest_dump.cc)
+  target_include_directories(titan_manifest_dump PRIVATE ${gflags_INCLUDE_DIR})
+  target_link_libraries(titan_manifest_dump ${TOOLS_LIBS})
 endif()
 
 # Installation - copy lib/ and include/

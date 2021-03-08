@@ -288,6 +288,7 @@ class BlobFileMeta {
                 (file_size_ - kBlobMaxHeaderSize - kBlobFooterSize));
   }
   TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
+  void Dump(bool with_keys) const;
 
  private:
   // Persistent field

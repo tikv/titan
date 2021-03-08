@@ -38,13 +38,6 @@ Status BlobFileSet::Open(
 }
 
 Status BlobFileSet::Recover() {
-  struct LogReporter : public log::Reader::Reporter {
-    Status* status;
-    void Corruption(size_t, const Status& s) override {
-      if (status->ok()) *status = s;
-    }
-  };
-
   // Reads "CURRENT" file, which contains the name of the current manifest file.
   std::string manifest;
   Status s = ReadFileToString(env_, CurrentFileName(dirname_), &manifest);
