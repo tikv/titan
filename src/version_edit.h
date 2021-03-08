@@ -42,6 +42,8 @@ class VersionEdit {
 
   friend bool operator==(const VersionEdit& lhs, const VersionEdit& rhs);
 
+  void Dump(bool with_keys) const;
+
  private:
   friend class BlobFileSet;
   friend class VersionTest;
