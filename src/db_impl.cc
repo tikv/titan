@@ -16,6 +16,7 @@
 #include "logging/log_buffer.h"
 #include "monitoring/statistics_impl.h"
 #include "port/port.h"
+#include "util/mutexlock.h"
 #include "table_factory.h"
 #include "titan_build_version.h"
 #include "titan_stats.h"
@@ -760,6 +761,66 @@ void TitanDBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
   // We can record here whether the oldest snapshot is released.
   // If not, we can just skip the next round of purging obsolete files.
   db_->ReleaseSnapshot(snapshot);
+}
+
+Status TitanDBImpl::DisableFileDeletions() {
+  // Disable base DB file deletions.
+  Status s = db_impl_->DisableFileDeletions();
+  if (!s.ok()) {
+    return s;
+  }
+
+  int count = 0;
+  {
+    // Hold delete_titandb_file_mutex_ to make sure no
+    // PurgeObsoleteFiles job is running.
+    MutexLock l(&delete_titandb_file_mutex_);
+    count = ++disable_titandb_file_deletions_;
+  }
+
+  ROCKS_LOG_INFO(db_options_.info_log,
+                 "Disalbed blob file deletions. count: %d", count);
+  return Status::OK();
+}
+
+Status TitanDBImpl::EnableFileDeletions(bool force) {
+  // Enable base DB file deletions.
+  Status s = db_impl_->EnableFileDeletions(force);
+  if (!s.ok()) {
+    return s;
+  }
+
+  int count = 0;
+  {
+    MutexLock l(&delete_titandb_file_mutex_);
+    if (force) {
+      disable_titandb_file_deletions_ = 0;
+    } else if (disable_titandb_file_deletions_ > 0) {
+      count = --disable_titandb_file_deletions_;
+    }
+    assert(count >= 0);
+  }
+
+  ROCKS_LOG_INFO(db_options_.info_log, "Enabled blob file deletions. count: %d",
+                 count);
+  return Status::OK();
+}
+
+Status TitanDBImpl::GetTitanLiveFiles(std::vector<std::string>& base_ret,
+                    uint64_t* base_manifest_file_size,
+                    std::vector<std::string>& titan_ret,
+                    uint64_t* titan_manifest_file_size,
+                    bool flush_memtable) {
+  // Hold a lock in the beginning to avoid updates to base DB during the call
+  MutexLock l(&mutex_);
+  Status s = db_->GetLiveFiles(base_ret, base_manifest_file_size, flush_memtable);
+  if (!s.ok()) {
+    return s;
+  }
+
+  blob_file_set_->GetLiveFiles(&titan_ret, titan_manifest_file_size);
+
+  return Status::OK();
 }
 
 Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,

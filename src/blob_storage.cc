@@ -187,6 +187,19 @@ void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
   }
 }
 
+
+void BlobStorage::GetLiveFiles(std::vector<std::string>* live_files) {
+  MutexLock l(&mutex_);
+
+  for (auto &file : files_) {
+    if (!file.second->is_obsolete()) {
+      uint64_t file_number = file.first;
+      // relative to dbname, the form like: "/titandb/[0-9].blob"
+      live_files->emplace_back(BlobFileName("", "titandb", file_number));
+    }
+  }
+}
+
 void BlobStorage::ComputeGCScore() {
   // TODO: no need to recompute all everytime
   MutexLock l(&mutex_);

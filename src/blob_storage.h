@@ -104,6 +104,9 @@ class BlobStorage {
   void GetObsoleteFiles(std::vector<std::string>* obsolete_files,
                         SequenceNumber oldest_sequence);
 
+  // Gets all live blob files (start with '/titandb' prefix)
+  void GetLiveFiles(std::vector<std::string>* live_files);
+
   // Mark the file as obsolete, and retrun value indicates whether the file is
   // founded.
   bool MarkFileObsolete(uint64_t file_number, SequenceNumber obsolete_sequence);

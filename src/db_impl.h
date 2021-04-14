@@ -110,6 +110,17 @@ class TitanDBImpl : public TitanDB {
 
   void ReleaseSnapshot(const Snapshot* snapshot) override;
 
+  using TitanDB::DisableFileDeletions;
+  Status DisableFileDeletions() override;
+
+  using TitanDB::EnableFileDeletions;
+  Status EnableFileDeletions(bool force) override;
+
+  Status GetTitanLiveFiles(std::vector<std::string>& base_ret,
+                              uint64_t* base_manifest_file_size,
+                              std::vector<std::string>& titan_ret,
+                              uint64_t* titan_manifest_file_size,
+                              bool flush_memtable = true) override;
   Status DeleteFilesInRanges(ColumnFamilyHandle* column_family,
                              const RangePtr* ranges, size_t n,
                              bool include_end = true) override;
@@ -323,6 +334,13 @@ class TitanDBImpl : public TitanDB {
   int unscheduled_gc_ = 0;
   // REQUIRE: mutex_ held.
   int drop_cf_requests_ = 0;
+
+  // PurgeObsoleteFiles, DisableFileDeletions and EnableFileDeletions block
+  // on the mutex to avoid contention.
+  mutable port::Mutex delete_titandb_file_mutex_;
+
+  // REQUIRES: access with delete_titandb_file_mutex_ held.
+  int disable_titandb_file_deletions_ = 0;
 
   std::atomic_bool shuting_down_{false};
 };

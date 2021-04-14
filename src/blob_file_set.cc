@@ -326,5 +326,26 @@ void BlobFileSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
   obsolete_manifests_.clear();
 }
 
+void BlobFileSet::GetLiveFiles(std::vector<std::string>* live_files, uint64_t* manifest_file_size) {
+  for (auto it = column_families_.begin(); it != column_families_.end();) {
+    auto& cf_id = it->first;
+
+    if (obsolete_columns_.find(cf_id) == obsolete_columns_.end()) {
+      auto& blob_storage = it->second;
+      // get live blob file
+      blob_storage->GetLiveFiles(live_files);
+    }
+
+    ++it;
+  }
+  // append current MANIFEST and CURRENT file name
+  std::string file_name = DescriptorFileName("/titandb", next_file_number_.load()-1);
+  live_files->push_back(file_name);
+  live_files->push_back(CurrentFileName("/titandb"));
+
+  // find current length of titandb manifest file while holding the mutex lock
+  *manifest_file_size = manifest_->file()->GetFileSize();
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
