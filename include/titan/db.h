@@ -118,9 +118,10 @@ class TitanDB : public StackableDB {
     return Status::NotSupported("TitanDB doesn't support this operation");
   }
 
-  // Get TitanDB live files base on rocksdb::DB::GetLiveFiles
+  // Get TitanDB live files base on rocksdb::DB::GetLiveFiles 
+  // 
   // base_ret and base_manifest_file_size are derived from rocksdb::DB::GetLiveFiles
-  // titan_ret is the list of all files in dirname_ directory
+  // titan_ret is the list of all files in dirname_ directory(including obsolete files)
   // titan_manifest_file_size is the size of manifest file in dirname_ directory
   virtual Status GetTitanLiveFiles(std::vector<std::string>& base_ret,
                               uint64_t* base_manifest_file_size,

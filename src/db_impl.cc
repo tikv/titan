@@ -811,16 +811,30 @@ Status TitanDBImpl::GetTitanLiveFiles(std::vector<std::string>& base_ret,
                     std::vector<std::string>& titan_ret,
                     uint64_t* titan_manifest_file_size,
                     bool flush_memtable) {
-  // Hold a lock in the beginning to avoid updates to base DB during the call
-  MutexLock l(&mutex_);
-  Status s = db_->GetLiveFiles(base_ret, base_manifest_file_size, flush_memtable);
+  // We can not hold titan db mutex in the beginning to avoid updates to base DB 
+  // during call GetLiveFiles, because in DB::GetLiveFiles maybe happen flush 
+  // memtable. Flush memtable operation hold titan db mutex, this can cause dead lock.
+  // So: 
+  // 1. DisableFileDeletions, this will prevent blob files being deleted.
+  // 2. Call db_->GetLiveFiles without mutex to get all live file about base db.
+  // 3. Collect all file（live + obsolete）about titandb
+  // 4. EnableFileDeletions
+  // This will include redundant blob files, but hopefully not a lot of them, and on 
+  // restart Titan will recalculate GC stats and GC out those redundant blob files.
+  Status s = DisableFileDeletions();
+  if (!s.ok()) {
+    return s;
+  }
+  
+  s = db_->GetLiveFiles(base_ret, base_manifest_file_size, flush_memtable);
   if (!s.ok()) {
     return s;
   }
 
-  blob_file_set_->GetLiveFiles(&titan_ret, titan_manifest_file_size);
+  MutexLock l(&mutex_);
+  blob_file_set_->GetAllFiles(&titan_ret, titan_manifest_file_size);
 
-  return Status::OK();
+  return EnableFileDeletions(false);
 }
 
 Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,

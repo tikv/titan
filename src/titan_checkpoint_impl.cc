@@ -1,6 +1,6 @@
 #include "titan_checkpoint_impl.h"
 
-#include <iostream>
+
 #include <cinttypes>
 #include "file/file_util.h"
 #include "file/filename.h"
@@ -176,7 +176,7 @@ Status TitanCheckpointImpl::CreateCustomCheckpoint(
   bool same_fs = true;
   VectorLogPtr live_wal_files;
 
-  bool flush_memtable = false;
+  bool flush_memtable = true;
   if (s.ok()) {
     if (!db_options.allow_2pc) {
       if (log_size_for_flush == port::kMaxUint64) {
@@ -316,15 +316,7 @@ Status TitanCheckpointImpl::CreateCustomCheckpoint(
         s = copy_file_cb(db_->GetName(), src_fname, 0, type);        
       }
     }
-    if ((type != kTableFile && type != kBlobFile) || (!same_fs)) {
-      if (type == kDescriptorFile) {
-        s = copy_file_cb(db_->GetName(), src_fname,
-                (in_titan_dir) ? titan_manifest_file_size : base_manifest_file_size,
-                type);  
-      } else {
-        s = copy_file_cb(db_->GetName(), src_fname, 0, type);        
-      }
-    }
+    
   }
   // Write manifest name to CURRENT file
   if (s.ok() && !base_current_fname.empty() && !base_manifest_fname.empty()) {

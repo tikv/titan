@@ -153,13 +153,16 @@ Status BlobFileSet::OpenManifest(uint64_t file_number) {
     ImmutableDBOptions ioptions(db_options_);
     s = SyncTitanManifest(env_, stats_, &ioptions, manifest_->file());
   }
+  uint64_t old_manifest_file_number = manifest_file_number_;
   if (s.ok()) {
     // Makes "CURRENT" file that points to the new manifest file.
     s = SetCurrentFile(env_, dirname_, file_number, nullptr);
+    manifest_file_number_ = file_number;
   }
 
   if (!s.ok()) {
     manifest_.reset();
+    manifest_file_number_ = old_manifest_file_number;
     obsolete_manifests_.emplace_back(file_name);
   }
   return s;
@@ -326,22 +329,16 @@ void BlobFileSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
   obsolete_manifests_.clear();
 }
 
-void BlobFileSet::GetLiveFiles(std::vector<std::string>* live_files, uint64_t* manifest_file_size) {
-  for (auto it = column_families_.begin(); it != column_families_.end();) {
-    auto& cf_id = it->first;
-
-    if (obsolete_columns_.find(cf_id) == obsolete_columns_.end()) {
-      auto& blob_storage = it->second;
+void BlobFileSet::GetAllFiles(std::vector<std::string>* files, uint64_t* manifest_file_size) {
+  for (auto it = column_families_.begin(); it != column_families_.end(); ++it) {
+    auto& blob_storage = it->second;
       // get live blob file
-      blob_storage->GetLiveFiles(live_files);
-    }
-
-    ++it;
+    blob_storage->GetAllFiles(files);
   }
   // append current MANIFEST and CURRENT file name
-  std::string file_name = DescriptorFileName("/titandb", next_file_number_.load()-1);
-  live_files->push_back(file_name);
-  live_files->push_back(CurrentFileName("/titandb"));
+  std::string file_name = DescriptorFileName("/titandb", manifest_file_number_);
+  files->push_back(file_name);
+  files->push_back(CurrentFileName("/titandb"));
 
   // find current length of titandb manifest file while holding the mutex lock
   *manifest_file_size = manifest_->file()->GetFileSize();
