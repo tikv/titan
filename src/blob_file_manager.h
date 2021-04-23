@@ -26,6 +26,7 @@ class BlobFileManager {
   // Creates a new file. The new file should not be accessed until
   // FinishFile() has been called.
   // If successful, sets "*handle* to the new file handle.
+  // And also, sets the IOPriority to the new file handle.
   virtual Status NewFile(std::unique_ptr<BlobFileHandle>* handle,
                          Env::IOPriority pri = Env::IOPriority::IO_LOW) = 0;
 
