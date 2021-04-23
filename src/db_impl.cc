@@ -30,7 +30,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
   FileManager(TitanDBImpl* db) : db_(db) {}
 
   Status NewFile(std::unique_ptr<BlobFileHandle>* handle,
-                 Env:IOPriority pri) override {
+                 Env::IOPriority pri) override {
     auto number = db_->blob_file_set_->NewFileNumber();
     auto name = BlobFileName(db_->dirname_, number);
 
