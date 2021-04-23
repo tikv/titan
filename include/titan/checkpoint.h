@@ -5,16 +5,15 @@
 namespace rocksdb {
 namespace titandb {
 
-
 class Checkpoint {
  public:
   // Creates a Checkpoint object to be used for creating openable snapshots
   static Status Create(TitanDB* db, Checkpoint** checkpoint_ptr);
-  
+
   // Builds an openable snapshot of TitanDB. checkpoint_dir should contain an
   // absolute path. The specified directory should not exist, since it will be
   // created by the API.
-  // When a checkpoint is created: 
+  // When a checkpoint is created:
   // (1) SST and blob files are hard linked if the output directory is on the
   // same filesystem as the database, and copied otherwise.
   // (2) other required files (like MANIFEST) are always copied.

@@ -16,11 +16,11 @@
 #include "logging/log_buffer.h"
 #include "monitoring/statistics_impl.h"
 #include "port/port.h"
-#include "util/mutexlock.h"
 #include "table_factory.h"
 #include "titan_build_version.h"
 #include "titan_stats.h"
 #include "util/autovector.h"
+#include "util/mutexlock.h"
 #include "util/threadpool_imp.h"
 
 namespace rocksdb {
@@ -806,33 +806,15 @@ Status TitanDBImpl::EnableFileDeletions(bool force) {
   return Status::OK();
 }
 
-Status TitanDBImpl::GetTitanLiveFiles(std::vector<std::string>& base_ret,
-                    uint64_t* base_manifest_file_size,
-                    std::vector<std::string>& titan_ret,
-                    uint64_t* titan_manifest_file_size,
-                    bool flush_memtable) {
-  // We can not hold titan db mutex in the beginning to avoid updates to base DB 
-  // during call GetLiveFiles, because in DB::GetLiveFiles maybe happen flush 
-  // memtable. Flush memtable operation hold titan db mutex, this can cause dead lock.
-  // So: 
-  // 1. DisableFileDeletions, this will prevent blob files being deleted.
-  // 2. Call db_->GetLiveFiles without mutex to get all live file about base db.
-  // 3. Collect all file（live + obsolete）about titandb
-  // 4. EnableFileDeletions
-  // This will include redundant blob files, but hopefully not a lot of them, and on 
-  // restart Titan will recalculate GC stats and GC out those redundant blob files.
+Status TitanDBImpl::GetAllTitanFiles(std::vector<std::string>& files,
+                                     std::vector<VersionEdit>* edits) {
   Status s = DisableFileDeletions();
-  if (!s.ok()) {
-    return s;
-  }
-  
-  s = db_->GetLiveFiles(base_ret, base_manifest_file_size, flush_memtable);
   if (!s.ok()) {
     return s;
   }
 
   MutexLock l(&mutex_);
-  blob_file_set_->GetAllFiles(&titan_ret, titan_manifest_file_size);
+  blob_file_set_->GetAllFiles(&files, edits);
 
   return EnableFileDeletions(false);
 }

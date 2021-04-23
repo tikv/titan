@@ -1,6 +1,4 @@
 #include <thread>
-#include "titan/checkpoint.h"
-#include "titan/db.h"
 
 #include "port/port.h"
 #include "port/stack_trace.h"
@@ -9,6 +7,8 @@
 #include "test_util/sync_point.h"
 #include "test_util/testharness.h"
 #include "test_util/testutil.h"
+#include "titan/checkpoint.h"
+#include "titan/db.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -84,6 +84,13 @@ class CheckpointTest : public testing::Test {
     }
   }
 
+  void DropColumnFamily(int cf) {
+    auto handle = handles_[cf];
+    ASSERT_OK(db_->DropColumnFamily(handle));
+    ASSERT_OK(db_->DestroyColumnFamilyHandle(handle));
+    handles_.erase(handles_.begin() + cf);
+  }
+
   void CreateAndReopenWithCF(const std::vector<std::string>& cfs,
                              const TitanOptions& options) {
     CreateColumnFamilies(cfs, options);
@@ -102,9 +109,8 @@ class CheckpointTest : public testing::Test {
     ASSERT_OK(TryReopenWithColumnFamilies(cfs, options));
   }
 
-  Status TryReopenWithColumnFamilies(
-      const std::vector<std::string>& cfs,
-      const std::vector<TitanOptions>& options) {
+  Status TryReopenWithColumnFamilies(const std::vector<std::string>& cfs,
+                                     const std::vector<TitanOptions>& options) {
     Close();
     EXPECT_EQ(cfs.size(), options.size());
     std::vector<TitanCFDescriptor> column_families;
@@ -122,9 +128,7 @@ class CheckpointTest : public testing::Test {
     return TryReopenWithColumnFamilies(cfs, v_opts);
   }
 
-  void Reopen(const TitanOptions& options) {
-    ASSERT_OK(TryReopen(options));
-  }
+  void Reopen(const TitanOptions& options) { ASSERT_OK(TryReopen(options)); }
 
   void CompactAll() {
     for (auto h : handles_) {
@@ -158,12 +162,12 @@ class CheckpointTest : public testing::Test {
     std::string titandb_path = dbname + "/titandb";
     // Ignore error in case directory does not exist
     env_->GetChildren(titandb_path, &filenames);
-    
+
     for (auto& fname : filenames) {
       std::string file_path = titandb_path + "/" + fname;
       env_->DeleteFile(file_path);
-    } 
-  
+    }
+
     env_->DeleteDir(titandb_path);
     // Destroy base db
     return DestroyDB(dbname, options);
@@ -196,9 +200,7 @@ class CheckpointTest : public testing::Test {
     return db_->Put(wo, handles_[cf], k, v);
   }
 
-  Status Delete(const std::string& k) {
-    return db_->Delete(WriteOptions(), k);
-  }
+  Status Delete(const std::string& k) { return db_->Delete(WriteOptions(), k); }
 
   Status Delete(int cf, const std::string& k) {
     return db_->Delete(WriteOptions(), handles_[cf], k);
@@ -250,7 +252,7 @@ TEST_F(CheckpointTest, GetSnapshotLink) {
     Status s;
     options.create_if_missing = true;
     ASSERT_OK(TitanDB::Open(options, dbname_, &db_));
-    
+
     std::string small_key = std::string("small");
     std::string large_key = std::string("large");
     std::string small_value_v1 = std::string("v1");
@@ -302,7 +304,8 @@ TEST_F(CheckpointTest, GetSnapshotLink) {
 
 TEST_F(CheckpointTest, CheckpointCF) {
   TitanOptions options = CurrentOptions();
-  CreateAndReopenWithCF({"one", "two", "three", "four", "five", "six"}, options);
+  CreateAndReopenWithCF({"one", "two", "three", "four", "five", "six"},
+                        options);
   rocksdb::SyncPoint::GetInstance()->LoadDependency(
       {{"CheckpointTest::CheckpointCF:2", "DBImpl::GetLiveFiles:2"},
        {"DBImpl::GetLiveFiles:1", "CheckpointTest::CheckpointCF:1"}});
@@ -355,13 +358,14 @@ TEST_F(CheckpointTest, CheckpointCF) {
   // Open snapshot and verify contents while DB is running
   options.create_if_missing = false;
   std::vector<std::string> cfs;
-  cfs=  {kDefaultColumnFamilyName, "one", "two", "three", "four", "five", "six"};
+  cfs = {
+      kDefaultColumnFamilyName, "one", "two", "three", "four", "five", "six"};
   std::vector<TitanCFDescriptor> column_families;
-    for (size_t i = 0; i < cfs.size(); ++i) {
-      column_families.push_back(TitanCFDescriptor(cfs[i], options));
-    }
-  ASSERT_OK(TitanDB::Open(options, snapshot_name_,
-        column_families, &cphandles, &snapshotDB));
+  for (size_t i = 0; i < cfs.size(); ++i) {
+    column_families.push_back(TitanCFDescriptor(cfs[i], options));
+  }
+  ASSERT_OK(TitanDB::Open(options, snapshot_name_, column_families, &cphandles,
+                          &snapshotDB));
   ASSERT_OK(snapshotDB->Get(roptions, cphandles[0], "Default", &result));
   ASSERT_EQ("Default1", result);
   ASSERT_OK(snapshotDB->Get(roptions, cphandles[1], "one", &result));
@@ -369,7 +373,7 @@ TEST_F(CheckpointTest, CheckpointCF) {
   ASSERT_OK(snapshotDB->Get(roptions, cphandles[6], "six", &result));
   ASSERT_EQ(large_value_2, result);
   for (auto h : cphandles) {
-      delete h;
+    delete h;
   }
   cphandles.clear();
   delete snapshotDB;
@@ -384,7 +388,7 @@ TEST_F(CheckpointTest, CheckpointCFNoFlush) {
 
   ASSERT_OK(Put(0, "Default", "Default"));
   ASSERT_OK(Put(1, "one", "one"));
-  Flush();
+  ASSERT_OK(Flush());
   ASSERT_OK(Put(2, "two", "two"));
   std::string large_value_1 = GenLargeValue(options.min_blob_size, '1');
   ASSERT_OK(Put(3, "three", large_value_1));
@@ -425,7 +429,7 @@ TEST_F(CheckpointTest, CheckpointCFNoFlush) {
     column_families.push_back(TitanCFDescriptor(cfs[i], options));
   }
   ASSERT_OK(TitanDB::Open(options, snapshot_name_, column_families, &cphandles,
-                     &snapshotDB));
+                          &snapshotDB));
   ASSERT_OK(snapshotDB->Get(roptions, cphandles[0], "Default", &result));
   ASSERT_EQ("Default", result);
   ASSERT_OK(snapshotDB->Get(roptions, cphandles[1], "one", &result));
@@ -448,17 +452,13 @@ TEST_F(CheckpointTest, CurrentFileModifiedWhileCheckpointing) {
   Reopen(options);
 
   rocksdb::SyncPoint::GetInstance()->LoadDependency(
-      {// Get past the flush in the checkpoint thread before adding any keys to
-       // the db so the checkpoint thread won't hit the WriteManifest
-       // syncpoints.
-       {"DBImpl::GetLiveFiles:1",
+      {{"TitanCheckpointImpl::CreateCustomCheckpoint::AfterGetAllTitanFiles",
         "CheckpointTest::CurrentFileModifiedWhileCheckpointing:PrePut"},
-       // Roll the manifest during checkpointing right after live files are
-       // snapshotted.
-       {"TitanCheckpointImpl::CreateCheckpoint:SavedLiveFiles1",
+       {"TitanCheckpointImpl::CreateCustomCheckpoint:BeforeTitanDBCheckpoint1",
         "VersionSet::LogAndApply:WriteManifest"},
        {"VersionSet::LogAndApply:WriteManifestDone",
-        "TitanCheckpointImpl::CreateCheckpoint:SavedLiveFiles2"}});
+        "TitanCheckpointImpl::CreateCustomCheckpoint::"
+        "BeforeTitanDBCheckpoint2"}});
   rocksdb::SyncPoint::GetInstance()->EnableProcessing();
 
   rocksdb::port::Thread t([&]() {
@@ -484,7 +484,6 @@ TEST_F(CheckpointTest, CurrentFileModifiedWhileCheckpointing) {
   snapshotDB = nullptr;
 }
 
-
 TEST_F(CheckpointTest, CheckpointInvalidDirectoryName) {
   for (std::string checkpoint_dir : {"", "/", "////"}) {
     Checkpoint* checkpoint;
@@ -496,9 +495,13 @@ TEST_F(CheckpointTest, CheckpointInvalidDirectoryName) {
 
 TEST_F(CheckpointTest, CheckpointWithParallelWrites) {
   ASSERT_OK(Put("key1", "val1"));
-  port::Thread thread([this]() { 
+  port::Thread thread([this]() {
     ASSERT_OK(Put("key2", "val2"));
-    ASSERT_OK(Put("key3", GenLargeValue(CurrentOptions().min_blob_size, 'v')));
+    ASSERT_OK(Put("key3", "val3"));
+    ASSERT_OK(Put("key4", "val4"));
+    ASSERT_OK(Put("key5", GenLargeValue(CurrentOptions().min_blob_size, '5')));
+    ASSERT_OK(Put("key6", GenLargeValue(CurrentOptions().min_blob_size, '6')));
+    ASSERT_OK(Put("key7", GenLargeValue(CurrentOptions().min_blob_size, '7')));
   });
   Checkpoint* checkpoint;
   ASSERT_OK(Checkpoint::Create(db_, &checkpoint));
@@ -537,6 +540,79 @@ TEST_F(CheckpointTest, CheckpointWithUnsyncedDataDropped) {
   db_ = nullptr;
 }
 
+TEST_F(CheckpointTest, GCWhileCheckpointing) {
+  TitanOptions options = CurrentOptions();
+  options.max_background_gc = 1;
+  options.disable_background_gc = true;
+  options.blob_file_discardable_ratio = 0.01;
+  CreateAndReopenWithCF({"one", "two", "three"}, options);
+
+  std::string large_value_1 = GenLargeValue(options.min_blob_size, '1');
+  std::string large_value_2 = GenLargeValue(options.min_blob_size, '2');
+
+  ASSERT_OK(Put(0, "Default", "Default"));
+  ASSERT_OK(Put(1, "one", "one"));
+  ASSERT_OK(Put(2, "two", large_value_1));
+  ASSERT_OK(Put(3, "three", large_value_2));
+  ASSERT_OK(Flush());
+
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanCheckpointImpl::CreateCustomCheckpoint::AfterGetAllTitanFiles",
+        // Drop CF and GC after created base db checkpoint
+        "CheckpointTest::DeleteBlobWhileCheckpointing::DropCF"},
+       {"CheckpointTest::DeleteBlobWhileCheckpointing::WaitGC",
+        "BlobGCJob::Finish::AfterRewriteValidKeyToLSM"},
+       {"CheckpointTest::DeleteBlobWhileCheckpointing::GCFinish",
+        "TitanCheckpointImpl::CreateCustomCheckpoint::"
+        "BeforeTitanDBCheckpoint1"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  rocksdb::port::Thread t([&]() {
+    Checkpoint* checkpoint;
+    ASSERT_OK(Checkpoint::Create(db_, &checkpoint));
+    ASSERT_OK(checkpoint->CreateCheckpoint(snapshot_name_));
+    delete checkpoint;
+  });
+
+  TEST_SYNC_POINT("CheckpointTest::DeleteBlobWhileCheckpointing::DropCF");
+  DropColumnFamily(2);
+  TEST_SYNC_POINT("CheckpointTest::DeleteBlobWhileCheckpointing::WaitGC");
+  CompactAll();
+  TEST_SYNC_POINT("CheckpointTest::DeleteBlobWhileCheckpointing::GCFinish");
+  t.join();
+
+  TitanDB* snapshotDB;
+  ReadOptions roptions;
+  std::string result;
+  std::vector<ColumnFamilyHandle*> cphandles;
+  options.create_if_missing = false;
+  std::vector<std::string> cfs;
+  cfs = {kDefaultColumnFamilyName, "one", "two", "three"};
+  std::vector<TitanCFDescriptor> column_families;
+  for (size_t i = 0; i < cfs.size(); ++i) {
+    column_families.push_back(TitanCFDescriptor(cfs[i], options));
+  }
+  ASSERT_OK(TitanDB::Open(options, snapshot_name_, column_families, &cphandles,
+                          &snapshotDB));
+  ASSERT_OK(snapshotDB->Get(roptions, cphandles[0], "Default", &result));
+  ASSERT_EQ("Default", result);
+  ASSERT_OK(snapshotDB->Get(roptions, cphandles[1], "one", &result));
+  ASSERT_EQ("one", result);
+  ASSERT_OK(snapshotDB->Get(roptions, cphandles[2], "two", &result));
+  ASSERT_EQ(large_value_1, result);
+  ASSERT_OK(snapshotDB->Get(roptions, cphandles[3], "three", &result));
+  ASSERT_EQ(large_value_2, result);
+  CompactAll();
+  ASSERT_OK(snapshotDB->Get(roptions, cphandles[2], "two", &result));
+  ASSERT_EQ(large_value_1, result);
+  for (auto h : cphandles) {
+    delete h;
+  }
+  cphandles.clear();
+  delete snapshotDB;
+  snapshotDB = nullptr;
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
 
@@ -545,5 +621,3 @@ int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-
-

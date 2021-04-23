@@ -329,19 +329,40 @@ void BlobFileSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
   obsolete_manifests_.clear();
 }
 
-void BlobFileSet::GetAllFiles(std::vector<std::string>* files, uint64_t* manifest_file_size) {
-  for (auto it = column_families_.begin(); it != column_families_.end(); ++it) {
-    auto& blob_storage = it->second;
-      // get live blob file
-    blob_storage->GetAllFiles(files);
-  }
-  // append current MANIFEST and CURRENT file name
-  std::string file_name = DescriptorFileName("/titandb", manifest_file_number_);
-  files->push_back(file_name);
-  files->push_back(CurrentFileName("/titandb"));
+void BlobFileSet::GetAllFiles(std::vector<std::string>* files, 
+                              std::vector<VersionEdit>* edits) {
+  std::vector<std::string> all_blob_files;
 
-  // find current length of titandb manifest file while holding the mutex lock
-  *manifest_file_size = manifest_->file()->GetFileSize();
+  edits->clear();
+  edits->reserve(column_families_.size());
+  bool set_next_file_number = false;
+  for (auto& cf : column_families_) {
+    VersionEdit edit;
+    auto& blob_storage = cf.second;
+    // Get all blob files
+    blob_storage->GetAllFiles(&all_blob_files);
+    // Add all blob files to version_edit
+    edit.SetColumnFamilyID(cf.first);
+    if (!set_next_file_number) {
+      edit.SetNextFileNumber(next_file_number_.load());
+      set_next_file_number = true;
+    }
+    for (auto& file : blob_storage->files_) {
+      edit.AddBlobFile(file.second);
+    }
+    edits->emplace_back(edit);
+  }
+
+  files->clear();
+  files->reserve(all_blob_files.size() + 2);
+
+  for (auto& live_file : all_blob_files) {
+    files->emplace_back(live_file);
+  }
+
+  // Append current MANIFEST and CURRENT file name
+  files->emplace_back(DescriptorFileName("/titandb", manifest_file_number_));
+  files->emplace_back(CurrentFileName("/titandb"));
 }
 
 }  // namespace titandb

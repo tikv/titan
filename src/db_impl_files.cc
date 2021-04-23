@@ -5,7 +5,7 @@ namespace titandb {
 
 Status TitanDBImpl::PurgeObsoleteFilesImpl() {
   Status s;
-  
+
   MutexLock delete_file_lock(&delete_titandb_file_mutex_);
   if (disable_titandb_file_deletions_ > 0) {
     return s;

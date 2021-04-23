@@ -83,7 +83,8 @@ class BlobFileSet {
                         SequenceNumber oldest_sequence);
 
   // REQUIRES: mutex is held
-  void GetAllFiles(std::vector<std::string>* files, uint64_t* manifest_file_size);
+  void GetAllFiles(std::vector<std::string>* files, 
+                   std::vector<VersionEdit>* edits);
 
   // REQUIRES: mutex is held
   bool IsColumnFamilyObsolete(uint32_t cf_id) {
