@@ -24,7 +24,8 @@ class FileManager : public BlobFileManager {
         number_(kTestFileNumber),
         blob_file_set_(blob_file_set) {}
 
-  Status NewFile(std::unique_ptr<BlobFileHandle>* handle) override {
+  Status NewFile(std::unique_ptr<BlobFileHandle>* handle,
+                 Env::IOPriority pri = Env::IOPriority::IO_LOW) override {
     auto number = number_.fetch_add(1);
     auto name = BlobFileName(db_options_.dirname, number);
     std::unique_ptr<WritableFileWriter> file;
@@ -32,6 +33,7 @@ class FileManager : public BlobFileManager {
       std::unique_ptr<WritableFile> f;
       Status s = env_->NewWritableFile(name, &f, env_options_);
       if (!s.ok()) return s;
+      f->SetIOPriority(pri);
       file.reset(new WritableFileWriter(std::move(f), name, env_options_));
     }
     handle->reset(new FileHandle(number, name, std::move(file)));
