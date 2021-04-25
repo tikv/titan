@@ -211,7 +211,7 @@ Status BlobGCJob::DoRunGC() {
             std::move(blob_file_handle), std::move(blob_file_builder)));
       }
       // Set the GC's blob file with a low_io pri in ratelimiter
-      s = blob_file_manager_->NewFile(&blob_file_handle, 
+      s = blob_file_manager_->NewFile(&blob_file_handle,
                                       Env::IOPriority::IO_LOW);
       if (!s.ok()) {
         break;
