@@ -41,11 +41,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       s = db_->env_->NewWritableFile(name, &f, db_->env_options_);
       if (!s.ok()) return s;
 
-      // Set the io priority for WritableFile in Flush or GC.
-      // Or the ratelimiter will use the default priority IO_ALL
-      // which won't be limited in ratelimiter.
       f->SetIOPriority(pri);
-
       file.reset(new WritableFileWriter(std::move(f), name, db_->env_options_));
     }
 

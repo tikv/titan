@@ -25,10 +25,14 @@ class BlobFileManager {
 
   // Creates a new file. The new file should not be accessed until
   // FinishFile() has been called.
-  // If successful, sets "*handle* to the new file handle.
-  // And also, sets the IOPriority to the new file handle.
+  // If successful, sets "*handle* to the new file handle with given
+  // IOPriority.
+  //
+  // The reason why set the io priority for WritableFile in Flush,
+  // Compaction and GC is that the ratelimiter will use the default
+  // priority IO_TOTAL which won't be limited in ratelimiter.
   virtual Status NewFile(std::unique_ptr<BlobFileHandle>* handle,
-                         Env::IOPriority pri = Env::IOPriority::IO_LOW) = 0;
+                         Env::IOPriority pri = Env::IOPriority::IO_TOTAL) = 0;
 
   // Finishes the file with the provided metadata. Stops writting to
   // the file anymore.
