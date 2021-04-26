@@ -146,8 +146,11 @@ void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
 
   // Init blob_builder_ first
   if (!blob_builder_) {
-    // Set the Flush's blob file with a high_io pri in ratelimiter
-    status_ = blob_manager_->NewFile(&blob_handle_, Env::IOPriority::IO_HIGH);
+    // Set the Flush's blob file with a high_io pri  and the Compaction's
+    // Blob file with a low_io pri in ratelimiter.
+    status_ = blob_manager_->NewFile(
+        &blob_handle_,
+        target_level_ > 0 ? Env::IOPriority::IO_LOW : Env::IOPriority::IO_HIGH);
     if (!ok()) return;
     ROCKS_LOG_INFO(db_options_.info_log,
                    "Titan table builder created new blob file %" PRIu64 ".",
