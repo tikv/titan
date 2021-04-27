@@ -17,6 +17,13 @@ addons:
       - libzstd-dev
       - lcov
       - zlib1g
+  homebrew:
+    packages:
+      - gflags
+      - zstd
+      - lz4
+      - snappy
+      - xz
 
 env:
   - BUILD_TYPE="Release"
@@ -51,17 +58,6 @@ matrix:
         - FORMATTER=ON
 
 install:
-  # osx dependencies
-  - if [ "${TRAVIS_OS_NAME}" == osx ]; then
-      to_install=( "gflags" "zstd" "lz4" "snappy" "xz" );
-      brew list > tmp;
-      for ins in ${to_install[*]}; do
-        grep -q "$ins" tmp;
-        if [ $? -ne 0 ]; then
-          brew install "$ins";
-        fi
-      done
-    fi
   - export CTEST_OUTPUT_ON_FAILURE=1
   - if [ "${COMPILER}" == gcc9 ]; then
       CC=gcc-9;
