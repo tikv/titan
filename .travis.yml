@@ -16,13 +16,10 @@ addons:
       - libzstd-dev
       - lcov
       - zlib1g
-  homebrew:
-    packages:
-      - gflags
-      - zstd
-      - lz4
-      - snappy
-      - xz
+
+stages:
+  - format
+  - test
 
 env:
   - BUILD_TYPE="Release"
@@ -32,6 +29,7 @@ env:
 
 # For GCC build, we also report code coverage to codecov.
 matrix:
+  fast_finish: true
   include:
     - os: linux
       compiler:
@@ -45,12 +43,24 @@ matrix:
       osx_image: xcode12.2
       env:
         - SANITIZER="ASAN"
-    - os: linux
+    - stage: format
+      os: linux
       compiler:
       env:
         - FORMATTER=ON
 
 install:
+  # Don't do package update because Travis homebrew aren't cached.
+  - if [ "${TRAVIS_OS_NAME}" == osx ]; then
+      to_install=( "gflags" "zstd" "lz4" "snappy" "xz" );
+      brew list > tmp;
+      for ins in ${to_install[*]}; do
+        grep -q "$ins" tmp;
+        if [ $? -ne 0 ]; then
+          brew install "$ins";
+        fi
+      done
+    fi
   - export CTEST_OUTPUT_ON_FAILURE=1
   - if [ "${COMPILER}" == gcc9 ]; then
       CC=gcc-9;
