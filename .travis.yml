@@ -4,7 +4,6 @@ language: cpp
 
 os: linux
 compiler: clang
-osx_image: xcode12.2
 
 addons:
   apt:
@@ -24,7 +23,6 @@ addons:
       - lz4
       - snappy
       - xz
-    update: true
 
 env:
   - BUILD_TYPE="Release"
@@ -34,13 +32,6 @@ env:
 
 # For GCC build, we also report code coverage to codecov.
 matrix:
-  exclude:
-    - os: osx
-      env: SANITIZER="TSAN"
-    - os: osx
-      env: SANITIZER="UBSAN"
-    - os: osx
-      env: BUILD_TYPE="Release"
   include:
     - os: linux
       compiler:
@@ -51,6 +42,7 @@ matrix:
       env:
         - SANITIZER="ASAN"
     - os: osx
+      osx_image: xcode12.2
       env:
         - SANITIZER="ASAN"
     - os: linux
