@@ -24,6 +24,7 @@ addons:
       - lz4
       - snappy
       - xz
+    update: true
 
 env:
   - BUILD_TYPE="Release"
