@@ -31,16 +31,16 @@ env:
 matrix:
   fast_finish: true
   include:
+    - os: osx
+      osx_image: xcode12.2
+      env:
+        - SANITIZER="ASAN"
     - os: linux
       compiler:
       env:
         - COMPILER=gcc9
     - os: linux
       arch: arm64
-      env:
-        - SANITIZER="ASAN"
-    - os: osx
-      osx_image: xcode12.2
       env:
         - SANITIZER="ASAN"
     - stage: format
@@ -53,7 +53,7 @@ install:
   # Don't do package update because Travis homebrew aren't cached.
   - if [ "${TRAVIS_OS_NAME}" == osx ]; then
       to_install=( "gflags" "zstd" "lz4" "snappy" "xz" );
-      brew list > tmp;
+      brew list --formula > tmp;
       for ins in ${to_install[*]}; do
         grep -q "$ins" tmp;
         if [ $? -ne 0 ]; then
