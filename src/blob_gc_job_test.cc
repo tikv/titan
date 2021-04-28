@@ -294,7 +294,8 @@ TEST_P(BlobGCJobTest, GCLimiter) {
     size_t RequestToken(size_t bytes, size_t alignment,
                         Env::IOPriority io_priority, Statistics* stats,
                         RateLimiter::OpType op_type) override {
-      if (IsRateLimited(op_type)) {
+      // Just the same condition with the rocksdb's RequestToken
+      if (io_priority < Env::IO_TOTAL && IsRateLimited(op_type)) {
         if (op_type == RateLimiter::OpType::kRead) {
           read = true;
         } else {
