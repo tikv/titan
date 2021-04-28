@@ -4,7 +4,6 @@ language: cpp
 
 os: linux
 compiler: clang
-osx_image: xcode12.2
 
 addons:
   apt:
@@ -18,6 +17,10 @@ addons:
       - lcov
       - zlib1g
 
+stages:
+  - format
+  - test
+
 env:
   - BUILD_TYPE="Release"
   - SANITIZER="ASAN"
@@ -26,14 +29,12 @@ env:
 
 # For GCC build, we also report code coverage to codecov.
 matrix:
-  exclude:
-    - os: osx
-      env: SANITIZER="TSAN"
-    - os: osx
-      env: SANITIZER="UBSAN"
-    - os: osx
-      env: BUILD_TYPE="Release"
+  fast_finish: true
   include:
+    - os: osx
+      osx_image: xcode12.2
+      env:
+        - SANITIZER="ASAN"
     - os: linux
       compiler:
       env:
@@ -42,19 +43,17 @@ matrix:
       arch: arm64
       env:
         - SANITIZER="ASAN"
-    - os: osx
-      env:
-        - SANITIZER="ASAN"
-    - os: linux
+    - stage: format
+      os: linux
       compiler:
       env:
         - FORMATTER=ON
 
 install:
-  # osx dependencies
+  # Don't do package update because Travis homebrew aren't cached.
   - if [ "${TRAVIS_OS_NAME}" == osx ]; then
       to_install=( "gflags" "zstd" "lz4" "snappy" "xz" );
-      brew list > tmp;
+      brew list --formula > tmp;
       for ins in ${to_install[*]}; do
         grep -q "$ins" tmp;
         if [ $? -ne 0 ]; then
