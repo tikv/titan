@@ -2,6 +2,7 @@
 
 #include <cinttypes>
 
+#include "db/log_writer.h"
 #include "file/file_util.h"
 #include "file/filename.h"
 #include "port/port.h"
@@ -128,9 +129,10 @@ Status TitanCheckpointImpl::CreateCheckpoint(const std::string& checkpoint_dir,
           db_options,
           [&](const std::string& src_dirname, const std::string& fname,
               FileType) {
-            ROCKS_LOG_INFO(db_options.info_log, "Hard Linking %s", fname.c_str());
+            ROCKS_LOG_INFO(db_options.info_log, "Hard Linking %s",
+                           fname.c_str());
             return db_->GetEnv()->LinkFile(src_dirname + fname,
-                                            full_private_path + fname);
+                                           full_private_path + fname);
           } /* link_file_cb */,
           [&](const std::string& src_dirname, const std::string& fname,
               uint64_t size_limit_bytes, FileType) {
@@ -141,8 +143,8 @@ Status TitanCheckpointImpl::CreateCheckpoint(const std::string& checkpoint_dir,
           } /* copy_file_cb */,
           [&](const std::string& fname, const std::string& contents, FileType) {
             ROCKS_LOG_INFO(db_options.info_log, "Creating %s", fname.c_str());
-            return CreateFile(db_->GetEnv(), full_private_path + fname, contents,
-                              db_options.use_fsync);
+            return CreateFile(db_->GetEnv(), full_private_path + fname,
+                              contents, db_options.use_fsync);
           } /* create_file_cb */,
           &sequence_number, log_size_for_flush, full_private_path);
     }
@@ -183,15 +185,15 @@ Status TitanCheckpointImpl::CreateCheckpoint(const std::string& checkpoint_dir,
 Status TitanCheckpointImpl::CreateCustomCheckpoint(
     const DBOptions& db_options,
     std::function<Status(const std::string& src_dirname,
-                          const std::string& src_fname, FileType type)>
-    link_file_cb,
+                         const std::string& src_fname, FileType type)>
+        link_file_cb,
     std::function<Status(const std::string& src_dirname,
-                          const std::string& src_fname,
-                          uint64_t size_limit_bytes, FileType type)>
-    copy_file_cb,
+                         const std::string& src_fname,
+                         uint64_t size_limit_bytes, FileType type)>
+        copy_file_cb,
     std::function<Status(const std::string& fname, const std::string& contents,
-                          FileType type)>
-    create_file_cb,
+                         FileType type)>
+        create_file_cb,
     uint64_t* sequence_number, uint64_t log_size_for_flush,
     const std::string full_private_path) {
   Status s;
@@ -266,8 +268,8 @@ Status TitanCheckpointImpl::CreateCustomCheckpoint(
     // Rules:
     // * If it's kBlobFile, then it's shared
     // * If it's kDescriptorFile, craft the manifest based on all blob file
-    // * If it's kCurrentFile, craft the current file manually to ensure 
-    //   it's consistent with the manifest number. This is necessary because 
+    // * If it's kCurrentFile, craft the current file manually to ensure
+    //   it's consistent with the manifest number. This is necessary because
     //   current file contents can change during checkpoint creation.
     // * Always copy if cross-device link.
     if (type == kBlobFile && same_fs) {

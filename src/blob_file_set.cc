@@ -329,7 +329,7 @@ void BlobFileSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
   obsolete_manifests_.clear();
 }
 
-void BlobFileSet::GetAllFiles(std::vector<std::string>* files, 
+void BlobFileSet::GetAllFiles(std::vector<std::string>* files,
                               std::vector<VersionEdit>* edits) {
   std::vector<std::string> all_blob_files;
 

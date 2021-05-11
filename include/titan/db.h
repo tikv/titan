@@ -126,7 +126,7 @@ class TitanDB : public StackableDB {
                                   std::vector<VersionEdit>* /*edits*/) {
     return Status::NotSupported("TitanDB doesn't support this operation");
   }
-                              
+
   using rocksdb::StackableDB::SingleDelete;
   Status SingleDelete(const WriteOptions& /*wopts*/,
                       ColumnFamilyHandle* /*column_family*/,

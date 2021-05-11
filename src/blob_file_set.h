@@ -83,7 +83,7 @@ class BlobFileSet {
                         SequenceNumber oldest_sequence);
 
   // REQUIRES: mutex is held
-  void GetAllFiles(std::vector<std::string>* files, 
+  void GetAllFiles(std::vector<std::string>* files,
                    std::vector<VersionEdit>* edits);
 
   // REQUIRES: mutex is held

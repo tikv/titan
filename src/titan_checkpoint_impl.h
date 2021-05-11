@@ -20,7 +20,7 @@ class TitanCheckpointImpl : public Checkpoint {
   // (3) Create MANIFEST file include all records about existing blob files.
   // (4) Craft CURRENT file manually based on MANIFEST file number.
   // This will include redundant blob files, but hopefully not a lot of them,
-  // and on restart Titan will recalculate GC stats and GC out those redundant 
+  // and on restart Titan will recalculate GC stats and GC out those redundant
   // blob files.
   using Checkpoint::CreateCheckpoint;
   virtual Status CreateCheckpoint(const std::string& checkpoint_dir,
@@ -31,15 +31,15 @@ class TitanCheckpointImpl : public Checkpoint {
   Status CreateCustomCheckpoint(
       const DBOptions& db_options,
       std::function<Status(const std::string& src_dirname,
-                            const std::string& fname, FileType type)>
-      link_file_cb,
+                           const std::string& fname, FileType type)>
+          link_file_cb,
       std::function<Status(const std::string& src_dirname,
-                            const std::string& fname, uint64_t size_limit_bytes,
-                            FileType type)>
-      copy_file_cb,
+                           const std::string& fname, uint64_t size_limit_bytes,
+                           FileType type)>
+          copy_file_cb,
       std::function<Status(const std::string& fname,
-                            const std::string& contents, FileType type)>
-      create_file_cb,
+                           const std::string& contents, FileType type)>
+          create_file_cb,
       uint64_t* sequence_number, uint64_t log_size_for_flush,
       const std::string full_private_path);
 
