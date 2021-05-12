@@ -813,8 +813,10 @@ Status TitanDBImpl::GetAllTitanFiles(std::vector<std::string>& files,
     return s;
   }
 
-  MutexLock l(&mutex_);
-  blob_file_set_->GetAllFiles(&files, edits);
+  {
+    MutexLock l(&mutex_);
+    blob_file_set_->GetAllFiles(&files, edits);
+  }
 
   return EnableFileDeletions(false);
 }
