@@ -162,8 +162,8 @@ Status TitanCheckpointImpl::CreateCheckpoint(const std::string& checkpoint_dir,
   }
   if (s.ok()) {
     std::unique_ptr<Directory> checkpoint_directory;
-    db_->GetEnv()->NewDirectory(checkpoint_dir, &checkpoint_directory);
-    if (checkpoint_directory != nullptr) {
+    s = db_->GetEnv()->NewDirectory(checkpoint_dir, &checkpoint_directory);
+    if (s.ok() && checkpoint_directory != nullptr) {
       s = checkpoint_directory->Fsync();
     }
   }
@@ -202,9 +202,6 @@ Status TitanCheckpointImpl::CreateCustomCheckpoint(
   bool same_fs = true;
 
   // Create base db checkpoint
-  s = db_->DisableFileDeletions();
-  const bool disabled_file_deletions = s.ok();
-
   auto base_db_checkpoint = new rocksdb::CheckpointImpl(db_);
   s = base_db_checkpoint->CreateCustomCheckpoint(
       db_options, link_file_cb, copy_file_cb, create_file_cb, sequence_number,
@@ -213,20 +210,11 @@ Status TitanCheckpointImpl::CreateCustomCheckpoint(
   base_db_checkpoint = nullptr;
 
   if (!s.ok()) {
-    if (disabled_file_deletions) {
-      Status ss = db_->EnableFileDeletions(false);
-      assert(ss.ok());
-    }
     return s;
   }
 
   // This will return files prefixed with "/titandb"
   s = db_->GetAllTitanFiles(titandb_files, &version_edits);
-
-  if (disabled_file_deletions) {
-    Status ss = db_->EnableFileDeletions(false);
-    assert(ss.ok());
-  }
 
   TEST_SYNC_POINT(
       "TitanCheckpointImpl::CreateCustomCheckpoint::AfterGetAllTitanFiles");

@@ -335,18 +335,22 @@ void BlobFileSet::GetAllFiles(std::vector<std::string>* files,
 
   edits->clear();
   edits->reserve(column_families_.size());
-  bool set_next_file_number = false;
+
+  // Saves global information
+  {
+    VersionEdit edit;
+    edit.SetNextFileNumber(next_file_number_.load());
+    std::string record;
+    edit.EncodeTo(&record);
+    edits->emplace_back(edit);
+  }
+
+  // Saves all blob files
   for (auto& cf : column_families_) {
     VersionEdit edit;
-    auto& blob_storage = cf.second;
-    // Get all blob files
-    blob_storage->GetAllFiles(&all_blob_files);
-    // Add all blob files to version_edit
     edit.SetColumnFamilyID(cf.first);
-    if (!set_next_file_number) {
-      edit.SetNextFileNumber(next_file_number_.load());
-      set_next_file_number = true;
-    }
+    auto& blob_storage = cf.second;
+    blob_storage->GetAllFiles(&all_blob_files);
     for (auto& file : blob_storage->files_) {
       edit.AddBlobFile(file.second);
     }
