@@ -287,7 +287,7 @@ Status BlobFileSet::DeleteBlobFilesInRanges(uint32_t cf_id,
     Status s = it->second->GetBlobFilesInRanges(ranges, n, include_end, &files);
     if (!s.ok()) return s;
     for (auto file_number : files) {
-      edit.DeleteBlobFile(file_number);
+      edit.DeleteBlobFile(file_number, obsolete_sequence);
     }
     s = LogAndApply(edit);
     return s;
