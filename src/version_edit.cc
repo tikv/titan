@@ -69,7 +69,7 @@ Status VersionEdit::DecodeFrom(Slice* src) {
         break;
       case kDeletedBlobFile:
         if (GetVarint64(src, &file_number)) {
-          DeleteBlobFile(file_number);
+          DeleteBlobFile(file_number, 0);
         } else {
           error = "deleted blob file";
         }
