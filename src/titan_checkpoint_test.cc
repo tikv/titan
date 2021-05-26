@@ -156,7 +156,8 @@ class CheckpointTest : public testing::Test {
     ASSERT_OK(DestroyTitanDB(dbname_, options));
   }
 
-  Status DestroyTitanDB(const std::string& dbname, const TitanOptions& options) {
+  Status DestroyTitanDB(const std::string& dbname,
+                        const TitanOptions& options) {
     // Clear and delete TitanDB directory first
     std::vector<std::string> filenames;
     std::string titandb_path;
@@ -166,7 +167,7 @@ class CheckpointTest : public testing::Test {
     } else {
       titandb_path = titan_options.dirname;
     }
-    
+
     // Ignore error in case directory does not exist
     env_->GetChildren(titandb_path, &filenames);
 
@@ -270,7 +271,8 @@ TEST_F(CheckpointTest, GetSnapshotLink) {
     // Take a snapshot
     Checkpoint* checkpoint;
     ASSERT_OK(Checkpoint::Create(db_, &checkpoint));
-    ASSERT_OK(checkpoint->CreateCheckpoint(snapshot_name_, "", log_size_for_flush));
+    ASSERT_OK(
+        checkpoint->CreateCheckpoint(snapshot_name_, "", log_size_for_flush));
     ASSERT_OK(Put(small_key, small_value_v2));
     ASSERT_EQ(small_value_v2, Get(small_key));
     ASSERT_OK(Put(large_key, large_value_v2));
@@ -334,7 +336,7 @@ TEST_F(CheckpointTest, SpecifyTitanCheckpointDirectory) {
 
   // Take a snapshot using a specific TitanDB directory
   Checkpoint* checkpoint;
-  std::string titandb_snapshot_dir = 
+  std::string titandb_snapshot_dir =
       test::PerThreadDBPath(env_, "snapshot-titandb");
   ASSERT_OK(Checkpoint::Create(db_, &checkpoint));
   ASSERT_OK(checkpoint->CreateCheckpoint(snapshot_name_, titandb_snapshot_dir));
@@ -565,10 +567,10 @@ TEST_F(CheckpointTest, CheckpointInvalidDirectoryName) {
     Checkpoint* checkpoint;
     ASSERT_OK(Checkpoint::Create(db_, &checkpoint));
     ASSERT_TRUE(
-      checkpoint->CreateCheckpoint(checkpoint_dir).IsInvalidArgument());
+        checkpoint->CreateCheckpoint(checkpoint_dir).IsInvalidArgument());
     if (!checkpoint_dir.empty()) {
-      ASSERT_TRUE(checkpoint->CreateCheckpoint(
-        snapshot_name_, checkpoint_dir).IsInvalidArgument());
+      ASSERT_TRUE(checkpoint->CreateCheckpoint(snapshot_name_, checkpoint_dir)
+                      .IsInvalidArgument());
     }
     delete checkpoint;
   }

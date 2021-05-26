@@ -21,9 +21,9 @@ Status Checkpoint::Create(TitanDB* db, Checkpoint** checkpoint_ptr) {
 }
 
 Status Checkpoint::CreateCheckpoint(
-            const std::string& /*base_checkpoint_dir*/,
-            const std::string& /*titan_checkpoint_dir = ""*/,
-            uint64_t /*log_size_for_flush = 0*/) {
+    const std::string& /*base_checkpoint_dir*/,
+    const std::string& /*titan_checkpoint_dir = ""*/,
+    uint64_t /*log_size_for_flush = 0*/) {
   return Status::NotSupported("TitanDB doesn't support this operation");
 }
 
@@ -86,9 +86,8 @@ Status TitanCheckpointImpl::CreateTitanManifest(
 
 // Builds an openable checkpoint of TitanDB
 Status TitanCheckpointImpl::CreateCheckpoint(
-              const std::string& base_checkpoint_dir,
-              const std::string& titan_checkpoint_dir,
-              uint64_t log_size_for_flush) {
+    const std::string& base_checkpoint_dir,
+    const std::string& titan_checkpoint_dir, uint64_t log_size_for_flush) {
   TitanDBOptions titandb_options = db_->GetTitanDBOptions();
   std::string full_private_path;
   std::string checkpoint_dir = base_checkpoint_dir + "/titandb";
@@ -104,11 +103,10 @@ Status TitanCheckpointImpl::CreateCheckpoint(
     return s;
   }
 
-  ROCKS_LOG_INFO(
-      titandb_options.info_log,
-      "Started the TitanDB checkpoint process -- creating checkpoint"
-      "in directory %s",
-      checkpoint_dir.c_str());
+  ROCKS_LOG_INFO(titandb_options.info_log,
+                 "Started the TitanDB checkpoint process -- creating checkpoint"
+                 "in directory %s",
+                 checkpoint_dir.c_str());
 
   size_t final_nonslash_idx = checkpoint_dir.find_last_not_of('/');
   if (final_nonslash_idx == std::string::npos) {
@@ -125,16 +123,18 @@ Status TitanCheckpointImpl::CreateCheckpoint(
   if (s.ok()) {
     // Create base DB checkpoint
     auto base_db_checkpoint = new rocksdb::CheckpointImpl(db_);
-    s = base_db_checkpoint->CreateCheckpoint(base_checkpoint_dir, log_size_for_flush);
+    s = base_db_checkpoint->CreateCheckpoint(base_checkpoint_dir,
+                                             log_size_for_flush);
     delete base_db_checkpoint;
     base_db_checkpoint = nullptr;
 
     if (s.ok()) {
       full_private_path =
           checkpoint_dir.substr(0, final_nonslash_idx + 1) + ".tmp";
-      ROCKS_LOG_INFO(titandb_options.info_log,
-                    "TitanDB checkpoint process -- using temporary directory %s",
-                    full_private_path.c_str());
+      ROCKS_LOG_INFO(
+          titandb_options.info_log,
+          "TitanDB checkpoint process -- using temporary directory %s",
+          full_private_path.c_str());
       CleanStagingDirectory(full_private_path, titandb_options.info_log.get());
       s = db_->GetEnv()->CreateDir(full_private_path);
     }
@@ -147,9 +147,9 @@ Status TitanCheckpointImpl::CreateCheckpoint(
         [&](const std::string& src_dirname, const std::string& fname,
             FileType) {
           ROCKS_LOG_INFO(titandb_options.info_log, "Hard Linking %s",
-                        fname.c_str());
+                         fname.c_str());
           return db_->GetEnv()->LinkFile(src_dirname + fname,
-                                        full_private_path + fname);
+                                         full_private_path + fname);
         } /* link_file_cb */,
         [&](const std::string& src_dirname, const std::string& fname,
             uint64_t size_limit_bytes, FileType) {
@@ -159,9 +159,10 @@ Status TitanCheckpointImpl::CreateCheckpoint(
                           titandb_options.use_fsync);
         } /* copy_file_cb */,
         [&](const std::string& fname, const std::string& contents, FileType) {
-          ROCKS_LOG_INFO(titandb_options.info_log, "Creating %s", fname.c_str());
-          return CreateFile(db_->GetEnv(), full_private_path + fname,
-                            contents, titandb_options.use_fsync);
+          ROCKS_LOG_INFO(titandb_options.info_log, "Creating %s",
+                         fname.c_str());
+          return CreateFile(db_->GetEnv(), full_private_path + fname, contents,
+                            titandb_options.use_fsync);
         } /* create_file_cb */,
         log_size_for_flush, full_private_path);
   }
@@ -186,7 +187,8 @@ Status TitanCheckpointImpl::CreateCheckpoint(
 
   if (s.ok()) {
     // Here we know that we succeeded and installed the new checkpoint
-    ROCKS_LOG_INFO(titandb_options.info_log, "TitanDB checkpoint DONE. All is good");
+    ROCKS_LOG_INFO(titandb_options.info_log,
+                   "TitanDB checkpoint DONE. All is good");
   } else {
     // Clean all the files we might have created
     ROCKS_LOG_INFO(titandb_options.info_log, "TitanDB checkpoint failed -- %s",
@@ -230,10 +232,10 @@ Status TitanCheckpointImpl::CreateCustomCheckpoint(
 
   // Copy/Hard link files
   std::string manifest_fname, current_fname;
-  for (size_t i = 0; s.ok() && i < titandb_files.size(); ++i) {
+  for (auto& live_file : titandb_files) {
     uint64_t number;
     FileType type;
-    bool ok = ParseFileName(titandb_files[i], &number, &type);
+    bool ok = ParseFileName(live_file, &number, &type);
 
     if (!ok) {
       s = Status::Corruption("Can't parse file name. This is very bad");
@@ -243,14 +245,14 @@ Status TitanCheckpointImpl::CreateCustomCheckpoint(
     // We should only get blob, manifest and current files here
     assert(type == kBlobFile || type == kDescriptorFile ||
            type == kCurrentFile);
-    assert(titandb_files[i].size() > 0 & titandb_files[i][0] == '/');
+    assert(live_file.size() > 0 && live_file[0] == '/');
     if (type == kCurrentFile) {
-      current_fname = titandb_files[i];
+      current_fname = live_file;
       continue;
     } else if (type == kDescriptorFile) {
-      manifest_fname = titandb_files[i];
+      manifest_fname = live_file;
     }
-    std::string src_fname = titandb_files[i];
+    std::string src_fname = live_file;
 
     // Rules:
     // * If it's kBlobFile, then it's shared

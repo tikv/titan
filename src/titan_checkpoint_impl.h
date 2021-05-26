@@ -22,10 +22,9 @@ class TitanCheckpointImpl : public Checkpoint {
   // and on restart Titan will recalculate GC stats and GC out those redundant
   // blob files.
   using Checkpoint::CreateCheckpoint;
-  virtual Status CreateCheckpoint(
-              const std::string& base_checkpoint_dir,
-              const std::string& titan_checkpoint_dir = "",
-              uint64_t log_size_for_flush = 0) override;
+  virtual Status CreateCheckpoint(const std::string& base_checkpoint_dir,
+                                  const std::string& titan_checkpoint_dir = "",
+                                  uint64_t log_size_for_flush = 0) override;
 
   // Checkpoint logic can be customized by providing callbacks for link, copy,
   // or create.
