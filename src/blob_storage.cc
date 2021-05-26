@@ -192,8 +192,8 @@ void BlobStorage::GetAllFiles(std::vector<std::string>* files) {
 
   for (auto& file : files_) {
     uint64_t file_number = file.first;
-    // relative to dbname, the form like: "/titandb/[0-9].blob"
-    files->emplace_back(BlobFileName("", "titandb", file_number));
+    // relative to dirname
+    files->emplace_back(BlobFileName("", file_number));
   }
 }
 

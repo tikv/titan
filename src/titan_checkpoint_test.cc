@@ -57,7 +57,7 @@ class CheckpointTest : public testing::Test {
     rocksdb::SyncPoint::GetInstance()->ClearAllCallBacks();
 
     Close();
-    Options options;
+    TitanOptions options;
     options.db_paths.emplace_back(dbname_, 0);
     options.db_paths.emplace_back(dbname_ + "_2", 0);
     options.db_paths.emplace_back(dbname_ + "_3", 0);
@@ -151,15 +151,22 @@ class CheckpointTest : public testing::Test {
     ASSERT_OK(TryReopen(options));
   }
 
-  void Destroy(const Options& options) {
+  void Destroy(const TitanOptions& options) {
     Close();
     ASSERT_OK(DestroyTitanDB(dbname_, options));
   }
 
-  Status DestroyTitanDB(const std::string& dbname, const Options& options) {
-    // Clear and delete titandb directory first
+  Status DestroyTitanDB(const std::string& dbname, const TitanOptions& options) {
+    // Clear and delete TitanDB directory first
     std::vector<std::string> filenames;
-    std::string titandb_path = dbname + "/titandb";
+    std::string titandb_path;
+    TitanOptions titan_options = options;
+    if (titan_options.dirname.empty()) {
+      titandb_path = dbname + "/titandb";
+    } else {
+      titandb_path = titan_options.dirname;
+    }
+    
     // Ignore error in case directory does not exist
     env_->GetChildren(titandb_path, &filenames);
 
@@ -170,7 +177,7 @@ class CheckpointTest : public testing::Test {
 
     env_->DeleteDir(titandb_path);
     // Destroy base db
-    return DestroyDB(dbname, options);
+    return DestroyDB(dbname, titan_options.operator rocksdb::Options());
   }
 
   Status TryReopen(const TitanOptions& options) {
@@ -238,12 +245,7 @@ class CheckpointTest : public testing::Test {
 
 TEST_F(CheckpointTest, GetSnapshotLink) {
   for (uint64_t log_size_for_flush : {0, 1000000}) {
-    TitanOptions options;
-    TitanDB* snapshotDB;
-    ReadOptions roptions;
-    std::string result;
-    Checkpoint* checkpoint;
-    options = CurrentOptions();
+    TitanOptions options = CurrentOptions();
     delete db_;
     db_ = nullptr;
     ASSERT_OK(DestroyTitanDB(dbname_, options));
@@ -264,9 +266,11 @@ TEST_F(CheckpointTest, GetSnapshotLink) {
     ASSERT_EQ(small_value_v1, Get(small_key));
     ASSERT_OK(Put(large_key, large_value_v1));
     ASSERT_EQ(large_value_v1, Get(large_key));
+
     // Take a snapshot
+    Checkpoint* checkpoint;
     ASSERT_OK(Checkpoint::Create(db_, &checkpoint));
-    ASSERT_OK(checkpoint->CreateCheckpoint(snapshot_name_, log_size_for_flush));
+    ASSERT_OK(checkpoint->CreateCheckpoint(snapshot_name_, "", log_size_for_flush));
     ASSERT_OK(Put(small_key, small_value_v2));
     ASSERT_EQ(small_value_v2, Get(small_key));
     ASSERT_OK(Put(large_key, large_value_v2));
@@ -275,6 +279,9 @@ TEST_F(CheckpointTest, GetSnapshotLink) {
     ASSERT_EQ(small_value_v2, Get(small_key));
     ASSERT_EQ(large_value_v2, Get(large_key));
     // Open snapshot and verify contents while DB is running
+    TitanDB* snapshotDB;
+    ReadOptions roptions;
+    std::string result;
     options.create_if_missing = false;
     ASSERT_OK(TitanDB::Open(options, snapshot_name_, &snapshotDB));
     ASSERT_OK(snapshotDB->Get(roptions, small_key, &result));
@@ -298,8 +305,77 @@ TEST_F(CheckpointTest, GetSnapshotLink) {
     ASSERT_OK(DestroyTitanDB(dbname_, options));
     delete checkpoint;
     // Restore DB name
-    dbname_ = test::PerThreadDBPath(env_, "db_test");
+    dbname_ = test::PerThreadDBPath(env_, "checkpoint_test");
   }
+}
+
+TEST_F(CheckpointTest, SpecifyTitanCheckpointDirectory) {
+  TitanOptions options = CurrentOptions();
+  delete db_;
+  db_ = nullptr;
+  ASSERT_OK(DestroyTitanDB(dbname_, options));
+
+  // Create a database with small value and large value
+  Status s;
+  options.create_if_missing = true;
+  ASSERT_OK(TitanDB::Open(options, dbname_, &db_));
+
+  std::string small_key = std::string("small");
+  std::string large_key = std::string("large");
+  std::string small_value_v1 = std::string("v1");
+  std::string small_value_v2 = std::string("v2");
+  std::string large_value_v1 = GenLargeValue(options.min_blob_size, '1');
+  std::string large_value_v2 = GenLargeValue(options.min_blob_size, '2');
+
+  ASSERT_OK(Put(small_key, small_value_v1));
+  ASSERT_EQ(small_value_v1, Get(small_key));
+  ASSERT_OK(Put(large_key, large_value_v1));
+  ASSERT_EQ(large_value_v1, Get(large_key));
+
+  // Take a snapshot using a specific TitanDB directory
+  Checkpoint* checkpoint;
+  std::string titandb_snapshot_dir = 
+      test::PerThreadDBPath(env_, "snapshot-titandb");
+  ASSERT_OK(Checkpoint::Create(db_, &checkpoint));
+  ASSERT_OK(checkpoint->CreateCheckpoint(snapshot_name_, titandb_snapshot_dir));
+  ASSERT_OK(Put(small_key, small_value_v2));
+  ASSERT_EQ(small_value_v2, Get(small_key));
+  ASSERT_OK(Put(large_key, large_value_v2));
+  ASSERT_EQ(large_value_v2, Get(large_key));
+  ASSERT_OK(Flush());
+  ASSERT_EQ(small_value_v2, Get(small_key));
+  ASSERT_EQ(large_value_v2, Get(large_key));
+  // Open snapshot and verify contents while DB is running
+  TitanDB* snapshotDB;
+  ReadOptions roptions;
+  std::string result;
+  options.create_if_missing = false;
+  // Must specify the dirname
+  options.dirname = titandb_snapshot_dir;
+  ASSERT_OK(TitanDB::Open(options, snapshot_name_, &snapshotDB));
+  ASSERT_OK(snapshotDB->Get(roptions, small_key, &result));
+  ASSERT_EQ(small_value_v1, result);
+  ASSERT_OK(snapshotDB->Get(roptions, large_key, &result));
+  ASSERT_EQ(large_value_v1, result);
+  delete snapshotDB;
+  snapshotDB = nullptr;
+  delete db_;
+  db_ = nullptr;
+  // Destroy original DB
+  options.dirname = "";
+  ASSERT_OK(DestroyTitanDB(dbname_, options));
+  // Open snapshot and verify contents
+  dbname_ = snapshot_name_;
+  options.dirname = titandb_snapshot_dir;
+  ASSERT_OK(TitanDB::Open(TitanOptions(options), dbname_, &db_));
+  ASSERT_EQ(small_value_v1, Get(small_key));
+  ASSERT_EQ(large_value_v1, Get(large_key));
+  delete db_;
+  db_ = nullptr;
+  ASSERT_OK(DestroyTitanDB(dbname_, options));
+  delete checkpoint;
+  // Restore DB name
+  dbname_ = test::PerThreadDBPath(env_, "checkpoint_test");
 }
 
 TEST_F(CheckpointTest, CheckpointCF) {
@@ -408,7 +484,7 @@ TEST_F(CheckpointTest, CheckpointCFNoFlush) {
   rocksdb::SyncPoint::GetInstance()->EnableProcessing();
   Checkpoint* checkpoint;
   ASSERT_OK(Checkpoint::Create(db_, &checkpoint));
-  ASSERT_OK(checkpoint->CreateCheckpoint(snapshot_name_, 1000000));
+  ASSERT_OK(checkpoint->CreateCheckpoint(snapshot_name_, "", 1000000));
   rocksdb::SyncPoint::GetInstance()->DisableProcessing();
 
   delete checkpoint;
@@ -488,7 +564,12 @@ TEST_F(CheckpointTest, CheckpointInvalidDirectoryName) {
   for (std::string checkpoint_dir : {"", "/", "////"}) {
     Checkpoint* checkpoint;
     ASSERT_OK(Checkpoint::Create(db_, &checkpoint));
-    ASSERT_TRUE(checkpoint->CreateCheckpoint("").IsInvalidArgument());
+    ASSERT_TRUE(
+      checkpoint->CreateCheckpoint(checkpoint_dir).IsInvalidArgument());
+    if (!checkpoint_dir.empty()) {
+      ASSERT_TRUE(checkpoint->CreateCheckpoint(
+        snapshot_name_, checkpoint_dir).IsInvalidArgument());
+    }
     delete checkpoint;
   }
 }

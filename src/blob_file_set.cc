@@ -365,8 +365,8 @@ void BlobFileSet::GetAllFiles(std::vector<std::string>* files,
   }
 
   // Append current MANIFEST and CURRENT file name
-  files->emplace_back(DescriptorFileName("/titandb", manifest_file_number_));
-  files->emplace_back(CurrentFileName("/titandb"));
+  files->emplace_back(DescriptorFileName("", manifest_file_number_));
+  files->emplace_back(CurrentFileName(""));
 }
 
 }  // namespace titandb
