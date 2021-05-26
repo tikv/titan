@@ -210,7 +210,8 @@ Status BlobGCJob::DoRunGC() {
         blob_file_builders_.emplace_back(std::make_pair(
             std::move(blob_file_handle), std::move(blob_file_builder)));
       }
-      s = blob_file_manager_->NewFile(&blob_file_handle);
+      s = blob_file_manager_->NewFile(&blob_file_handle,
+                                      Env::IOPriority::IO_LOW);
       if (!s.ok()) {
         break;
       }
