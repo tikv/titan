@@ -90,9 +90,9 @@ Status TitanCheckpointImpl::CreateCheckpoint(
     const std::string& titan_checkpoint_dir, uint64_t log_size_for_flush) {
   TitanDBOptions titandb_options = db_->GetTitanDBOptions();
   std::string full_private_path;
-  std::string checkpoint_dir = base_checkpoint_dir + "/titandb";
-  if (!titan_checkpoint_dir.empty()) {
-    checkpoint_dir = titan_checkpoint_dir;
+  std::string checkpoint_dir = titan_checkpoint_dir;
+  if (checkpoint_dir.empty()) {
+    checkpoint_dir = base_checkpoint_dir + "/titandb";
   }
   // Check TitanDB checkpoint directory
   Status s = db_->GetEnv()->FileExists(checkpoint_dir);
