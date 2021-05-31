@@ -153,13 +153,16 @@ Status BlobFileSet::OpenManifest(uint64_t file_number) {
     ImmutableDBOptions ioptions(db_options_);
     s = SyncTitanManifest(env_, stats_, &ioptions, manifest_->file());
   }
+  uint64_t old_manifest_file_number = manifest_file_number_;
   if (s.ok()) {
     // Makes "CURRENT" file that points to the new manifest file.
     s = SetCurrentFile(env_, dirname_, file_number, nullptr);
+    manifest_file_number_ = file_number;
   }
 
   if (!s.ok()) {
     manifest_.reset();
+    manifest_file_number_ = old_manifest_file_number;
     obsolete_manifests_.emplace_back(file_name);
   }
   return s;
@@ -324,6 +327,46 @@ void BlobFileSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
   obsolete_files->insert(obsolete_files->end(), obsolete_manifests_.begin(),
                          obsolete_manifests_.end());
   obsolete_manifests_.clear();
+}
+
+void BlobFileSet::GetAllFiles(std::vector<std::string>* files,
+                              std::vector<VersionEdit>* edits) {
+  std::vector<std::string> all_blob_files;
+
+  edits->clear();
+  edits->reserve(column_families_.size());
+
+  // Saves global information
+  {
+    VersionEdit edit;
+    edit.SetNextFileNumber(next_file_number_.load());
+    std::string record;
+    edit.EncodeTo(&record);
+    edits->emplace_back(edit);
+  }
+
+  // Saves all blob files
+  for (auto& cf : column_families_) {
+    VersionEdit edit;
+    edit.SetColumnFamilyID(cf.first);
+    auto& blob_storage = cf.second;
+    blob_storage->GetAllFiles(&all_blob_files);
+    for (auto& file : blob_storage->files_) {
+      edit.AddBlobFile(file.second);
+    }
+    edits->emplace_back(edit);
+  }
+
+  files->clear();
+  files->reserve(all_blob_files.size() + 2);
+
+  for (auto& live_file : all_blob_files) {
+    files->emplace_back(live_file);
+  }
+
+  // Append current MANIFEST and CURRENT file name
+  files->emplace_back(DescriptorFileName("", manifest_file_number_));
+  files->emplace_back(CurrentFileName(""));
 }
 
 }  // namespace titandb

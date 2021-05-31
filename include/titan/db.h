@@ -6,6 +6,8 @@
 namespace rocksdb {
 namespace titandb {
 
+class VersionEdit;
+
 struct TitanCFDescriptor {
   std::string name;
   TitanCFOptions options;
@@ -105,6 +107,23 @@ class TitanDB : public StackableDB {
   using StackableDB::Merge;
   Status Merge(const WriteOptions&, ColumnFamilyHandle*, const Slice& /*key*/,
                const Slice& /*value*/) override {
+    return Status::NotSupported("TitanDB doesn't support this operation");
+  }
+
+  using StackableDB::DisableFileDeletions;
+  Status DisableFileDeletions() override {
+    return Status::NotSupported("TitanDB doesn't support this operation");
+  }
+
+  using StackableDB::EnableFileDeletions;
+  Status EnableFileDeletions(bool /*force*/) override {
+    return Status::NotSupported("TitanDB doesn't support this operation");
+  }
+
+  // Get all files in /titandb directory after disable file deletions
+  // edits include all blob file records of every column family
+  virtual Status GetAllTitanFiles(std::vector<std::string>& /*files*/,
+                                  std::vector<VersionEdit>* /*edits*/) {
     return Status::NotSupported("TitanDB doesn't support this operation");
   }
 

@@ -20,6 +20,7 @@
 #include "titan_build_version.h"
 #include "titan_stats.h"
 #include "util/autovector.h"
+#include "util/mutexlock.h"
 #include "util/threadpool_imp.h"
 
 namespace rocksdb {
@@ -763,6 +764,64 @@ void TitanDBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
   // We can record here whether the oldest snapshot is released.
   // If not, we can just skip the next round of purging obsolete files.
   db_->ReleaseSnapshot(snapshot);
+}
+
+Status TitanDBImpl::DisableFileDeletions() {
+  // Disable base DB file deletions.
+  Status s = db_impl_->DisableFileDeletions();
+  if (!s.ok()) {
+    return s;
+  }
+
+  int count = 0;
+  {
+    // Hold delete_titandb_file_mutex_ to make sure no
+    // PurgeObsoleteFiles job is running.
+    MutexLock l(&delete_titandb_file_mutex_);
+    count = ++disable_titandb_file_deletions_;
+  }
+
+  ROCKS_LOG_INFO(db_options_.info_log,
+                 "Disalbed blob file deletions. count: %d", count);
+  return Status::OK();
+}
+
+Status TitanDBImpl::EnableFileDeletions(bool force) {
+  // Enable base DB file deletions.
+  Status s = db_impl_->EnableFileDeletions(force);
+  if (!s.ok()) {
+    return s;
+  }
+
+  int count = 0;
+  {
+    MutexLock l(&delete_titandb_file_mutex_);
+    if (force) {
+      disable_titandb_file_deletions_ = 0;
+    } else if (disable_titandb_file_deletions_ > 0) {
+      count = --disable_titandb_file_deletions_;
+    }
+    assert(count >= 0);
+  }
+
+  ROCKS_LOG_INFO(db_options_.info_log, "Enabled blob file deletions. count: %d",
+                 count);
+  return Status::OK();
+}
+
+Status TitanDBImpl::GetAllTitanFiles(std::vector<std::string>& files,
+                                     std::vector<VersionEdit>* edits) {
+  Status s = DisableFileDeletions();
+  if (!s.ok()) {
+    return s;
+  }
+
+  {
+    MutexLock l(&mutex_);
+    blob_file_set_->GetAllFiles(&files, edits);
+  }
+
+  return EnableFileDeletions(false);
 }
 
 Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,

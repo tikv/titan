@@ -83,6 +83,10 @@ class BlobFileSet {
                         SequenceNumber oldest_sequence);
 
   // REQUIRES: mutex is held
+  void GetAllFiles(std::vector<std::string>* files,
+                   std::vector<VersionEdit>* edits);
+
+  // REQUIRES: mutex is held
   bool IsColumnFamilyObsolete(uint32_t cf_id) {
     return obsolete_columns_.count(cf_id) > 0;
   }
@@ -118,6 +122,7 @@ class BlobFileSet {
   std::unordered_map<uint32_t, std::shared_ptr<BlobStorage>> column_families_;
   std::unique_ptr<log::Writer> manifest_;
   std::atomic<uint64_t> next_file_number_{1};
+  uint64_t manifest_file_number_;
 };
 
 }  // namespace titandb
