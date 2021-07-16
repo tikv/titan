@@ -1,5 +1,4 @@
 #include "test_util/testharness.h"
-
 #include "titan/db.h"
 
 namespace rocksdb {

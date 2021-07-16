@@ -1,8 +1,7 @@
 #pragma once
 
-#include "rocksdb/merge_operator.h"
-
 #include "blob_file_set.h"
+#include "rocksdb/merge_operator.h"
 
 namespace rocksdb {
 namespace titandb {

@@ -12,7 +12,6 @@
 #include "db/db_iter.h"
 #include "logging/logging.h"
 #include "rocksdb/env.h"
-
 #include "titan_stats.h"
 
 namespace rocksdb {

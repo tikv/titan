@@ -1,13 +1,13 @@
 #include "titan_stats.h"
-#include "titan/db.h"
-
-#include "blob_file_set.h"
-#include "blob_storage.h"
-#include "monitoring/statistics_impl.h"
 
 #include <functional>
 #include <map>
 #include <string>
+
+#include "blob_file_set.h"
+#include "blob_storage.h"
+#include "monitoring/statistics_impl.h"
+#include "titan/db.h"
 
 namespace rocksdb {
 namespace titandb {

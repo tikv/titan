@@ -2,10 +2,9 @@
 
 #include "options/db_options.h"
 #include "rocksdb/cache.h"
+#include "titan_stats.h"
 #include "util/compression.h"
 #include "util/file_reader_writer.h"
-
-#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {

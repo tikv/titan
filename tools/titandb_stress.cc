@@ -32,6 +32,7 @@ int main() {
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -73,11 +74,9 @@ int main() {
 #include "test_util/sync_point.h"
 #endif  // !(defined NDEBUG) || !defined(OS_WIN)
 #include "test_util/testutil.h"
-
-#include "utilities/merge_operators.h"
-
 #include "titan/db.h"
 #include "titan_build_version.h"
+#include "utilities/merge_operators.h"
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::RegisterFlagValidator;

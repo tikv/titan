@@ -1,6 +1,6 @@
-#include "test_util/testharness.h"
-
 #include "blob_index_merge_operator.h"
+
+#include "test_util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {

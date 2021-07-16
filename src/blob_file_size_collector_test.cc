@@ -1,6 +1,6 @@
-#include "test_util/testharness.h"
-
 #include "blob_file_size_collector.h"
+
+#include "test_util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {

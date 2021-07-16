@@ -1,9 +1,9 @@
 #pragma once
 
+#include <memory>
+
 #include "rocksdb/env.h"
 #include "test_util/fault_injection_test_env.h"
-
-#include <memory>
 
 namespace rocksdb {
 namespace titandb {
