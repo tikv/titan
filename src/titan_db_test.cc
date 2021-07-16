@@ -1987,7 +1987,7 @@ TEST_F(TitanDBTest, Config) {
 }
 
 #if defined(__linux) && !defined(TRAVIS)
-TEST_F(TitanDBTest, NoSpaceLeft) {
+TEST_F(TitanDBTest, DISABLED_NoSpaceLeft) {
   options_.disable_background_gc = false;
   system(("mkdir -p " + dbname_).c_str());
   system(("sudo mount -t tmpfs -o size=1m tmpfs " + dbname_).c_str());
