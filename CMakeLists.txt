@@ -84,11 +84,14 @@ set(COMMON_LIBS
 
 if(WITH_ASAN OR WITH_TSAN)
   find_package(Threads)
-  set(COMMON_LIBS ${COMMON_LIBS} ${CMAKE_THREAD_LIBS_INIT})
+  if(CMAKE_USE_PTHREADS_INIT)
+    link_libraries(pthread)
+  endif()
 endif()
 
 message("COMMON_LIBS " ${COMMON_LIBS})
 message("THREAD " ${CMAKE_THREAD_LIBS_INIT})
+message("PTHREAD " ${CMAKE_USE_PTHREADS_INIT})
 message("cmake " ${CMAKE_VERSION})
 
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
