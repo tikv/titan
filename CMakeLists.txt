@@ -78,6 +78,15 @@ if (CODE_COVERAGE)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
 endif()
 
+set(COMMON_LIBS
+  titan
+  rocksdb)
+
+if(WITH_ASAN OR WITH_TSAN)
+  find_package(Threads)
+  set(COMMON_LIBS ${COMMON_LIBS} ${CMAKE_THREAD_LIBS_INIT})
+endif()
+
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
   add_subdirectory(${ROCKSDB_DIR} rocksdb EXCLUDE_FROM_ALL)
   # -latomic is needed when building titandb_stress using clang.
@@ -109,8 +118,7 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         compaction_filter_test
         version_test)
   set(TEST_LIBS
-        titan
-        rocksdb
+        ${COMMON_LIBS}
         testutillib
         gtest)
 
@@ -122,9 +130,7 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
 endif()
 
 if (WITH_TITAN_TOOLS)
-  set(TOOLS_LIBS
-        titan
-        rocksdb)
+  set(TOOLS_LIBS ${COMMON_LIBS})
 
   if (NOT TRAVIS)
     find_package(gflags REQUIRED)

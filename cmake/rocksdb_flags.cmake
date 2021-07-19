@@ -185,7 +185,6 @@ if(DISABLE_STALL_NOTIF)
   add_definitions(-DROCKSDB_DISABLE_STALL_NOTIFICATION)
 endif()
 
-
 if(DEFINED USE_RTTI)
   if(USE_RTTI)
     message(STATUS "Enabling RTTI")
