@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "blob_file_set.h"
+#include "titan_logging.h"
 #include "util/string_util.h"
 #include "version_edit.h"
 
@@ -144,13 +145,13 @@ class EditCollector {
         auto blob = storage->FindFile(number).lock();
         if (blob) {
           if (blob->is_obsolete()) {
-            ROCKS_LOG_ERROR(storage->db_options().info_log,
+            TITAN_LOG_ERROR(storage->db_options().info_log,
                             "blob file %" PRIu64 " has been deleted before\n",
                             number);
             return Status::Corruption("Blob file " + ToString(number) +
                                       " has been deleted before");
           } else {
-            ROCKS_LOG_ERROR(storage->db_options().info_log,
+            TITAN_LOG_ERROR(storage->db_options().info_log,
                             "blob file %" PRIu64 " has been added before\n",
                             number);
             return Status::Corruption("Blob file " + ToString(number) +
@@ -166,13 +167,13 @@ class EditCollector {
         }
         auto blob = storage->FindFile(number).lock();
         if (!blob) {
-          ROCKS_LOG_ERROR(storage->db_options().info_log,
+          TITAN_LOG_ERROR(storage->db_options().info_log,
                           "blob file %" PRIu64 " doesn't exist before\n",
                           number);
           return Status::Corruption("Blob file " + ToString(number) +
                                     " doesn't exist before");
         } else if (blob->is_obsolete()) {
-          ROCKS_LOG_ERROR(storage->db_options().info_log,
+          TITAN_LOG_ERROR(storage->db_options().info_log,
                           "blob file %" PRIu64 " has been deleted already\n",
                           number);
           return Status::Corruption("Blob file " + ToString(number) +

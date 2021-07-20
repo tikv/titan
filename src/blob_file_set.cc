@@ -3,6 +3,7 @@
 #include <inttypes.h>
 
 #include "edit_collector.h"
+#include "titan_logging.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -83,7 +84,7 @@ Status BlobFileSet::Recover() {
     s = collector.GetNextFileNumber(&next_file_number);
     if (!s.ok()) return s;
     next_file_number_.store(next_file_number);
-    ROCKS_LOG_INFO(db_options_.info_log,
+    TITAN_LOG_INFO(db_options_.info_log,
                    "Next blob file number is %" PRIu64 ".", next_file_number);
   }
 
@@ -105,7 +106,7 @@ Status BlobFileSet::Recover() {
         files_str.append("(obsolete)");
       }
     }
-    ROCKS_LOG_INFO(db_options_.info_log,
+    TITAN_LOG_INFO(db_options_.info_log,
                    "Blob files for CF %" PRIu32 " found: %s", bs.first,
                    files_str.c_str());
     // delete obsoleted files at reopen
@@ -125,7 +126,7 @@ Status BlobFileSet::Recover() {
     if (file_type != FileType::kBlobFile &&
         file_type != FileType::kDescriptorFile)
       continue;
-    ROCKS_LOG_INFO(db_options_.info_log,
+    TITAN_LOG_INFO(db_options_.info_log,
                    "Titan recovery delete obsolete file %s.", f.c_str());
     env_->DeleteFile(dirname_ + "/" + f);
   }
@@ -244,7 +245,7 @@ Status BlobFileSet::DropColumnFamilies(
       edit.SetColumnFamilyID(it->first);
       for (auto& file : it->second->files_) {
         if (!file.second->is_obsolete()) {
-          ROCKS_LOG_INFO(db_options_.info_log,
+          TITAN_LOG_INFO(db_options_.info_log,
                          "Titan add obsolete file [%" PRIu64 "]",
                          file.second->file_number());
           edit.DeleteBlobFile(file.first, obsolete_sequence);
@@ -253,7 +254,7 @@ Status BlobFileSet::DropColumnFamilies(
       s = LogAndApply(edit);
       if (!s.ok()) return s;
     } else {
-      ROCKS_LOG_ERROR(db_options_.info_log, "column %u not found for drop\n",
+      TITAN_LOG_ERROR(db_options_.info_log, "column %u not found for drop\n",
                       cf_id);
       return Status::NotFound("invalid column family");
     }
@@ -272,7 +273,7 @@ Status BlobFileSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
     }
     return Status::OK();
   }
-  ROCKS_LOG_ERROR(db_options_.info_log, "column %u not found for destroy\n",
+  TITAN_LOG_ERROR(db_options_.info_log, "column %u not found for destroy\n",
                   cf_id);
   return Status::NotFound("invalid column family");
 }
@@ -295,7 +296,7 @@ Status BlobFileSet::DeleteBlobFilesInRanges(uint32_t cf_id,
     s = LogAndApply(edit);
     return s;
   }
-  ROCKS_LOG_ERROR(db_options_.info_log,
+  TITAN_LOG_ERROR(db_options_.info_log,
                   "column %u not found for delete blob files in ranges\n",
                   cf_id);
   return Status::NotFound("invalid column family");
