@@ -6,8 +6,8 @@
 #include <unordered_map>
 
 #include "blob_file_set.h"
-#include "util/string_util.h"
 #include "titan_logging.h"
+#include "util/string_util.h"
 #include "version_edit.h"
 
 namespace rocksdb {

@@ -8,7 +8,6 @@
 
 #include "options/options_helper.h"
 #include "rocksdb/convenience.h"
-
 #include "titan_logging.h"
 
 namespace rocksdb {

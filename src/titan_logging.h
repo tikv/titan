@@ -19,45 +19,51 @@
 // Helper macros that include information about file name and line number
 #define TITAN_LOG_STRINGIFY(x) #x
 #define TITAN_LOG_TOSTRING(x) TITAN_LOG_STRINGIFY(x)
-#define TITAN_LOG_PREPEND_FILE_LINE(FMT) ("[%s:" TITAN_LOG_TOSTRING(__LINE__) "] " FMT)
+#define TITAN_LOG_PREPEND_FILE_LINE(FMT) \
+  ("[%s:" TITAN_LOG_TOSTRING(__LINE__) "] " FMT)
 
-inline const char* TitanLogShorterFileName(const char* file)
-{
+inline const char* TitanLogShorterFileName(const char* file) {
   // 15 is the length of "titan_logging.h".
   // If the name of this file changed, please change this number, too.
   return file + (sizeof(__FILE__) > 15 ? sizeof(__FILE__) - 15 : 0);
 }
 
 // Don't inclide file/line info in HEADER level
-#define TITAN_LOG_HEADER(LGR, FMT, ...)                                          \
+#define TITAN_LOG_HEADER(LGR, FMT, ...) \
   rocksdb::Log(InfoLogLevel::HEADER_LEVEL, LGR, FMT, ##__VA_ARGS__)
 
-#define TITAN_LOG_DEBUG(LGR, FMT, ...)                                           \
-  rocksdb::Log(InfoLogLevel::DEBUG_LEVEL, LGR, TITAN_LOG_PREPEND_FILE_LINE(FMT), \
+#define TITAN_LOG_DEBUG(LGR, FMT, ...)           \
+  rocksdb::Log(InfoLogLevel::DEBUG_LEVEL, LGR,   \
+               TITAN_LOG_PREPEND_FILE_LINE(FMT), \
                TitanLogShorterFileName(__FILE__), ##__VA_ARGS__)
 
-#define TITAN_LOG_INFO(LGR, FMT, ...)                                            \
-  rocksdb::Log(InfoLogLevel::INFO_LEVEL, LGR, TITAN_LOG_PREPEND_FILE_LINE(FMT),  \
+#define TITAN_LOG_INFO(LGR, FMT, ...)            \
+  rocksdb::Log(InfoLogLevel::INFO_LEVEL, LGR,    \
+               TITAN_LOG_PREPEND_FILE_LINE(FMT), \
                TitanLogShorterFileName(__FILE__), ##__VA_ARGS__)
 
-#define TITAN_LOG_WARN(LGR, FMT, ...)                                            \
-  rocksdb::Log(InfoLogLevel::WARN_LEVEL, LGR, TITAN_LOG_PREPEND_FILE_LINE(FMT),  \
+#define TITAN_LOG_WARN(LGR, FMT, ...)            \
+  rocksdb::Log(InfoLogLevel::WARN_LEVEL, LGR,    \
+               TITAN_LOG_PREPEND_FILE_LINE(FMT), \
                TitanLogShorterFileName(__FILE__), ##__VA_ARGS__)
 
-#define TITAN_LOG_ERROR(LGR, FMT, ...)                                           \
-  rocksdb::Log(InfoLogLevel::ERROR_LEVEL, LGR, TITAN_LOG_PREPEND_FILE_LINE(FMT), \
+#define TITAN_LOG_ERROR(LGR, FMT, ...)           \
+  rocksdb::Log(InfoLogLevel::ERROR_LEVEL, LGR,   \
+               TITAN_LOG_PREPEND_FILE_LINE(FMT), \
                TitanLogShorterFileName(__FILE__), ##__VA_ARGS__)
 
-#define TITAN_LOG_FATAL(LGR, FMT, ...)                                           \
-  rocksdb::Log(InfoLogLevel::FATAL_LEVEL, LGR, TITAN_LOG_PREPEND_FILE_LINE(FMT), \
+#define TITAN_LOG_FATAL(LGR, FMT, ...)           \
+  rocksdb::Log(InfoLogLevel::FATAL_LEVEL, LGR,   \
+               TITAN_LOG_PREPEND_FILE_LINE(FMT), \
                TitanLogShorterFileName(__FILE__), ##__VA_ARGS__)
 
-#define TITAN_LOG_BUFFER(LOG_BUF, FMT, ...)                                      \
-  rocksdb::LogToBuffer(LOG_BUF, TITAN_LOG_PREPEND_FILE_LINE(FMT),                \
+#define TITAN_LOG_BUFFER(LOG_BUF, FMT, ...)                       \
+  rocksdb::LogToBuffer(LOG_BUF, TITAN_LOG_PREPEND_FILE_LINE(FMT), \
                        TitanLogShorterFileName(__FILE__), ##__VA_ARGS__)
 
-#define TITAN_LOG_BUFFER_MAX_SZ(LOG_BUF, MAX_LOG_SIZE, FMT, ...)                 \
-  rocksdb::LogToBuffer(LOG_BUF, MAX_LOG_SIZE, TITAN_LOG_PREPEND_FILE_LINE(FMT),  \
+#define TITAN_LOG_BUFFER_MAX_SZ(LOG_BUF, MAX_LOG_SIZE, FMT, ...) \
+  rocksdb::LogToBuffer(LOG_BUF, MAX_LOG_SIZE,                    \
+                       TITAN_LOG_PREPEND_FILE_LINE(FMT),         \
                        TitanLogShorterFileName(__FILE__), ##__VA_ARGS__)
 
 #define TITAN_LOG_DETAILS(LGR, FMT, ...) \

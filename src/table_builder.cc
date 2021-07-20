@@ -7,7 +7,6 @@
 #include <inttypes.h>
 
 #include "monitoring/statistics.h"
-
 #include "titan_logging.h"
 
 namespace rocksdb {

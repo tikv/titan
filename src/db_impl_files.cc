@@ -1,5 +1,4 @@
 #include "db_impl.h"
-
 #include "titan_logging.h"
 
 namespace rocksdb {

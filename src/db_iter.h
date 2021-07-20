@@ -11,7 +11,6 @@
 
 #include "db/db_iter.h"
 #include "rocksdb/env.h"
-
 #include "titan_logging.h"
 #include "titan_stats.h"
 
@@ -175,7 +174,7 @@ class TitanDBIterator : public Iterator {
             info_log_,
             "Titan iterator: failed to create prefetcher for blob file %" PRIu64
             ": ",
-            index.file_number/*, status_.ToString().c_str()*/);
+            index.file_number /*, status_.ToString().c_str()*/);
         return;
       }
       it = files_.emplace(index.file_number, std::move(prefetcher)).first;
