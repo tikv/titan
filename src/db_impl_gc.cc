@@ -1,10 +1,12 @@
+#include "db_impl.h"
+#include "test_util/sync_point.h"
+#include "util.h"
+
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc_job.h"
 #include "blob_gc_picker.h"
-#include "db_impl.h"
-#include "test_util/sync_point.h"
-#include "util.h"
+#include "titan_logging.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -173,7 +175,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     blob_storage = blob_file_set_->GetBlobStorage(column_family_id).lock();
   } else {
     TEST_SYNC_POINT_CALLBACK("TitanDBImpl::BackgroundGC:CFDropped", nullptr);
-    ROCKS_LOG_BUFFER(log_buffer, "GC skip dropped colum family [%s].",
+    TITAN_LOG_BUFFER(log_buffer, "GC skip dropped colum family [%s].",
                      cf_info_[column_family_id].name.c_str());
   }
   if (blob_storage != nullptr) {
@@ -197,7 +199,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
   if (UNLIKELY(!blob_gc)) {
     RecordTick(statistics(stats_.get()), TITAN_GC_NO_NEED, 1);
     // Nothing to do
-    ROCKS_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
+    TITAN_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
     StopWatch gc_sw(env_, statistics(stats_.get()), TITAN_GC_MICROS);
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_,
@@ -234,7 +236,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
   } else {
     SetBGError(s);
     RecordTick(statistics(stats_.get()), TITAN_GC_FAILURE, 1);
-    ROCKS_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
+    TITAN_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
                    s.ToString().c_str());
   }
 

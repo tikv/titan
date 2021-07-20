@@ -1,5 +1,7 @@
 #include "db_impl.h"
 
+#include "titan_logging.h"
+
 namespace rocksdb {
 namespace titandb {
 
@@ -26,12 +28,12 @@ Status TitanDBImpl::PurgeObsoleteFilesImpl() {
       candidate_files.end());
 
   for (const auto& candidate_file : candidate_files) {
-    ROCKS_LOG_INFO(db_options_.info_log, "Titan deleting obsolete file [%s]",
+    TITAN_LOG_INFO(db_options_.info_log, "Titan deleting obsolete file [%s]",
                    candidate_file.c_str());
     Status delete_status = env_->DeleteFile(candidate_file);
     if (!s.ok()) {
       // Move on despite error deleting the file.
-      ROCKS_LOG_ERROR(db_options_.info_log,
+      TITAN_LOG_ERROR(db_options_.info_log,
                       "Titan deleting file [%s] failed, status:%s",
                       candidate_file.c_str(), s.ToString().c_str());
       s = delete_status;

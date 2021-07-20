@@ -1,6 +1,7 @@
 #include "blob_storage.h"
 
 #include "blob_file_set.h"
+#include "titan_logging.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -59,7 +60,7 @@ Status BlobStorage::GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
       assert(it->second->smallest_key().empty() ||
              (!begin || cmp->Compare(it->second->smallest_key(), *begin) >= 0));
     }
-    ROCKS_LOG_INFO(
+    TITAN_LOG_INFO(
         db_options_.info_log,
         "Get %" PRIuPTR " blob files [%s] in the range [%s, %s%c",
         files->size(), tmp.c_str(), begin ? begin->ToString(true).c_str() : " ",
@@ -172,7 +173,7 @@ void BlobStorage::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
       // remove obsolete files
       bool __attribute__((__unused__)) removed = RemoveFile(file_number);
       assert(removed);
-      ROCKS_LOG_INFO(db_options_.info_log,
+      TITAN_LOG_INFO(db_options_.info_log,
                      "Obsolete blob file %" PRIu64 " (obsolete at %" PRIu64
                      ") not visible to oldest snapshot %" PRIu64 ", delete it.",
                      file_number, obsolete_sequence, oldest_sequence);

@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "blob_file_size_collector.h"
+#include "titan_logging.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -133,7 +134,7 @@ Status BlobGCJob::Run() {
     }
     tmp.append(std::to_string(f->file_number()));
   }
-  ROCKS_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s]",
+  TITAN_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s]",
                    blob_gc_->column_family_handle()->GetName().c_str(),
                    tmp.c_str());
   return DoRunGC();
@@ -215,7 +216,7 @@ Status BlobGCJob::DoRunGC() {
       if (!s.ok()) {
         break;
       }
-      ROCKS_LOG_INFO(db_options_.info_log,
+      TITAN_LOG_INFO(db_options_.info_log,
                      "Titan new GC output file %" PRIu64 ".",
                      blob_file_handle->GetNumber());
       blob_file_builder = std::unique_ptr<BlobFileBuilder>(
@@ -379,13 +380,13 @@ Status BlobGCJob::Finish() {
       TEST_SYNC_POINT("BlobGCJob::Finish::BeforeRewriteValidKeyToLSM");
       s = RewriteValidKeyToLSM();
       if (!s.ok()) {
-        ROCKS_LOG_ERROR(db_options_.info_log,
+        TITAN_LOG_ERROR(db_options_.info_log,
                         "[%s] GC job failed to rewrite keys to LSM: %s",
                         blob_gc_->column_family_handle()->GetName().c_str(),
                         s.ToString().c_str());
       }
     } else {
-      ROCKS_LOG_ERROR(db_options_.info_log,
+      TITAN_LOG_ERROR(db_options_.info_log,
                       "[%s] GC job failed to install output blob files: %s",
                       blob_gc_->column_family_handle()->GetName().c_str(),
                       s.ToString().c_str());
@@ -434,7 +435,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     files.emplace_back(std::make_pair(file, std::move(builder.first)));
   }
   if (s.ok()) {
-    ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
+    TITAN_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
                      blob_gc_->column_family_handle()->GetName().c_str(),
                      tmp.c_str());
     s = blob_file_manager_->BatchFinishFiles(
@@ -454,7 +455,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       to_delete_files.append(std::to_string(builder.first->GetNumber()));
       handles.emplace_back(std::move(builder.first));
     }
-    ROCKS_LOG_BUFFER(log_buffer_,
+    TITAN_LOG_BUFFER(log_buffer_,
                      "[%s] InstallOutputBlobFiles failed. Delete GC output "
                      "files: %s",
                      blob_gc_->column_family_handle()->GetName().c_str(),
@@ -464,7 +465,7 @@ Status BlobGCJob::InstallOutputBlobFiles() {
     // LSM by mistake.
     Status status = blob_file_manager_->BatchDeleteFiles(handles);
     if (!status.ok()) {
-      ROCKS_LOG_WARN(db_options_.info_log,
+      TITAN_LOG_WARN(db_options_.info_log,
                      "Delete GC output files[%s] failed: %s",
                      to_delete_files.c_str(), status.ToString().c_str());
     }
@@ -555,7 +556,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
     if (blob_storage) {
       auto file = blob_storage->FindFile(blob_file.first).lock();
       if (!file) {
-        ROCKS_LOG_ERROR(db_options_.info_log,
+        TITAN_LOG_ERROR(db_options_.info_log,
                         "Blob File %" PRIu64 " not found when GC.",
                         blob_file.first);
         continue;
@@ -566,7 +567,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
 
       blob_storage->ComputeGCScore();
     } else {
-      ROCKS_LOG_ERROR(db_options_.info_log,
+      TITAN_LOG_ERROR(db_options_.info_log,
                       "Column family id:%" PRIu32 " not Found when GC.", cf_id);
     }
   }
@@ -587,7 +588,7 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   VersionEdit edit;
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
   for (const auto& file : blob_gc_->inputs()) {
-    ROCKS_LOG_INFO(db_options_.info_log,
+    TITAN_LOG_INFO(db_options_.info_log,
                    "Titan add obsolete file [%" PRIu64 "] range [%s, %s]",
                    file->file_number(),
                    Slice(file->smallest_key()).ToString(true).c_str(),
