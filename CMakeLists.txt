@@ -89,11 +89,6 @@ if(WITH_ASAN OR WITH_TSAN)
   endif()
 endif()
 
-message("COMMON_LIBS " ${COMMON_LIBS})
-message("THREAD " ${CMAKE_THREAD_LIBS_INIT})
-message("PTHREAD " ${CMAKE_USE_PTHREADS_INIT})
-message("cmake " ${CMAKE_VERSION})
-
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
   add_subdirectory(${ROCKSDB_DIR} rocksdb EXCLUDE_FROM_ALL)
   # -latomic is needed when building titandb_stress using clang.
