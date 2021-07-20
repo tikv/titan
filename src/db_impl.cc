@@ -18,6 +18,7 @@
 #include "port/port.h"
 #include "table_factory.h"
 #include "titan_build_version.h"
+#include "titan_logging.h"
 #include "titan_stats.h"
 #include "util/autovector.h"
 #include "util/threadpool_imp.h"
@@ -70,7 +71,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
       }
       if (!s.ok()) return s;
 
-      ROCKS_LOG_INFO(db_->db_options_.info_log,
+      TITAN_LOG_INFO(db_->db_options_.info_log,
                      "Titan adding blob file [%" PRIu64 "] range [%s, %s]",
                      file.first->file_number(),
                      Slice(file.first->smallest_key()).ToString(true).c_str(),
@@ -195,7 +196,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
       for (ColumnFamilyHandle* cfh : *handles) {
         Status destroy_handle_status = db_->DestroyColumnFamilyHandle(cfh);
         if (!destroy_handle_status.ok()) {
-          ROCKS_LOG_ERROR(db_options_.info_log,
+          TITAN_LOG_ERROR(db_options_.info_log,
                           "Failed to destroy CF handle after open failure: %s",
                           destroy_handle_status.ToString().c_str());
         }
@@ -205,7 +206,7 @@ Status TitanDBImpl::Open(const std::vector<TitanCFDescriptor>& descs,
     if (db_ != nullptr) {
       Status close_status = db_->Close();
       if (!close_status.ok()) {
-        ROCKS_LOG_ERROR(db_options_.info_log,
+        TITAN_LOG_ERROR(db_options_.info_log,
                         "Failed to close base DB after open failure: %s",
                         close_status.ToString().c_str());
       }
@@ -329,12 +330,12 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   }
   StartBackgroundTasks();
   // Dump options.
-  ROCKS_LOG_INFO(db_options_.info_log, "Titan DB open.");
-  ROCKS_LOG_HEADER(db_options_.info_log, "Titan git sha: %s",
+  TITAN_LOG_INFO(db_options_.info_log, "Titan DB open.");
+  TITAN_LOG_HEADER(db_options_.info_log, "Titan git sha: %s",
                    titan_build_git_sha);
   db_options_.Dump(db_options_.info_log.get());
   for (auto& desc : descs) {
-    ROCKS_LOG_HEADER(db_options_.info_log,
+    TITAN_LOG_HEADER(db_options_.info_log,
                      "Column family [%s], options:", desc.name.c_str());
     desc.options.Dump(db_options_.info_log.get());
   }
@@ -445,7 +446,7 @@ Status TitanDBImpl::CreateColumnFamilies(
   }
   if (s.ok()) {
     for (auto& desc : descs) {
-      ROCKS_LOG_INFO(db_options_.info_log, "Created column family [%s].",
+      TITAN_LOG_INFO(db_options_.info_log, "Created column family [%s].",
                      desc.name.c_str());
       desc.options.Dump(db_options_.info_log.get());
     }
@@ -454,7 +455,7 @@ Status TitanDBImpl::CreateColumnFamilies(
     for (auto& desc : descs) {
       column_families_str += "[" + desc.name + "]";
     }
-    ROCKS_LOG_ERROR(db_options_.info_log,
+    TITAN_LOG_ERROR(db_options_.info_log,
                     "Failed to create column families %s: %s",
                     column_families_str.c_str(), s.ToString().c_str());
   }
@@ -494,10 +495,10 @@ Status TitanDBImpl::DropColumnFamilies(
     }
   }
   if (s.ok()) {
-    ROCKS_LOG_INFO(db_options_.info_log, "Dropped column families: %s",
+    TITAN_LOG_INFO(db_options_.info_log, "Dropped column families: %s",
                    column_families_str.c_str());
   } else {
-    ROCKS_LOG_ERROR(db_options_.info_log,
+    TITAN_LOG_ERROR(db_options_.info_log,
                     "Failed to drop column families %s: %s",
                     column_families_str.c_str(), s.ToString().c_str());
   }
@@ -524,10 +525,10 @@ Status TitanDBImpl::DestroyColumnFamilyHandle(
     }
   }
   if (s.ok()) {
-    ROCKS_LOG_INFO(db_options_.info_log, "Destroyed column family handle [%s].",
+    TITAN_LOG_INFO(db_options_.info_log, "Destroyed column family handle [%s].",
                    cf_name.c_str());
   } else {
-    ROCKS_LOG_ERROR(db_options_.info_log,
+    TITAN_LOG_ERROR(db_options_.info_log,
                     "Failed to destroy column family handle [%s]: %s",
                     cf_name.c_str(), s.ToString().c_str());
   }
@@ -648,13 +649,13 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
     RecordTick(statistics(stats_.get()), TITAN_BLOB_FILE_BYTES_READ,
                index.blob_handle.size);
   } else {
-    ROCKS_LOG_ERROR(db_options_.info_log,
+    TITAN_LOG_ERROR(db_options_.info_log,
                     "Column family id:%" PRIu32 " not Found.", handle->GetID());
     return Status::NotFound(
         "Column family id: " + std::to_string(handle->GetID()) + " not Found.");
   }
   if (s.IsCorruption()) {
-    ROCKS_LOG_ERROR(db_options_.info_log,
+    TITAN_LOG_ERROR(db_options_.info_log,
                     "Key:%s Snapshot:%" PRIu64 " GetBlobFile err:%s\n",
                     key.ToString(true).c_str(),
                     options.snapshot->GetSequenceNumber(),
@@ -722,7 +723,7 @@ Iterator* TitanDBImpl::NewIteratorImpl(
   mutex_.Unlock();
 
   if (!storage) {
-    ROCKS_LOG_ERROR(db_options_.info_log,
+    TITAN_LOG_ERROR(db_options_.info_log,
                     "Column family id:%" PRIu32 " not Found.", handle->GetID());
     return nullptr;
   }
@@ -845,7 +846,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
         prop.second, false /*to_add*/, &blob_file_size_diff);
     if (!gc_stats_status.ok()) {
       // TODO: Should treat it as background error and make DB read-only.
-      ROCKS_LOG_ERROR(db_options_.info_log,
+      TITAN_LOG_ERROR(db_options_.info_log,
                       "failed to extract GC stats, file: %s, error: %s",
                       prop.first.c_str(), gc_stats_status.ToString().c_str());
       assert(false);
@@ -865,7 +866,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   auto bs = blob_file_set_->GetBlobStorage(cf_id).lock();
   if (!bs) {
     // TODO: Should treat it as background error and make DB read-only.
-    ROCKS_LOG_ERROR(db_options_.info_log,
+    TITAN_LOG_ERROR(db_options_.info_log,
                     "Column family id:%" PRIu32 " not Found.", cf_id);
     return Status::NotFound("Column family id: " + std::to_string(cf_id) +
                             " not Found.");
@@ -885,7 +886,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
       auto before = file->GetDiscardableRatioLevel();
       bool ok = file->UpdateLiveDataSize(delta);
       if (!ok) {
-        ROCKS_LOG_WARN(db_options_.info_log,
+        TITAN_LOG_WARN(db_options_.info_log,
                        "During DeleteFilesInRanges: blob file %" PRIu64
                        " live size below zero.",
                        file_number);
@@ -978,7 +979,7 @@ Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
   if (cf_info_.count(cf_id) > 0) {
     options.table_factory = cf_info_.at(cf_id).base_table_factory;
   } else {
-    ROCKS_LOG_ERROR(
+    TITAN_LOG_ERROR(
         db_options_.info_log,
         "Failed to get original table factory for column family %s.",
         column_family->GetName().c_str());
@@ -1007,7 +1008,7 @@ Status TitanDBImpl::SetOptions(
                                        blob_run_mode_string);
       } else {
         blob_run_mode = pm->second;
-        ROCKS_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
+        TITAN_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
                        column_family->GetName().c_str(),
                        blob_run_mode_string.c_str());
       }
@@ -1125,7 +1126,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
       flush_job_info.table_properties, true /*to_add*/, &blob_file_size_diff);
   if (!s.ok()) {
     // TODO: Should treat it as background error and make DB read-only.
-    ROCKS_LOG_ERROR(db_options_.info_log,
+    TITAN_LOG_ERROR(db_options_.info_log,
                     "OnFlushCompleted[%d]: failed to extract GC stats: %s",
                     flush_job_info.job_id, s.ToString().c_str());
     assert(false);
@@ -1137,7 +1138,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
         blob_file_set_->GetBlobStorage(flush_job_info.cf_id).lock();
     if (!blob_storage) {
       // TODO: Should treat it as background error and make DB read-only.
-      ROCKS_LOG_ERROR(db_options_.info_log,
+      TITAN_LOG_ERROR(db_options_.info_log,
                       "OnFlushCompleted[%d]: Column family id: %" PRIu32
                       " Not Found.",
                       flush_job_info.job_id, flush_job_info.cf_id);
@@ -1154,7 +1155,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
       }
       if (file->file_state() != BlobFileMeta::FileState::kPendingLSM) {
         // This file may be output of a GC job.
-        ROCKS_LOG_INFO(db_options_.info_log,
+        TITAN_LOG_INFO(db_options_.info_log,
                        "OnFlushCompleted[%d]: ignore GC output file %" PRIu64
                        ".",
                        flush_job_info.job_id, file->file_number());
@@ -1162,7 +1163,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
       }
       if (delta < 0) {
         // Cannot happen..
-        ROCKS_LOG_WARN(db_options_.info_log,
+        TITAN_LOG_WARN(db_options_.info_log,
                        "OnFlushCompleted[%d]: New blob file %" PRIu64
                        " live size being negative",
                        flush_job_info.job_id, file_number);
@@ -1186,7 +1187,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
       AddStats(stats_.get(), flush_job_info.cf_id,
                file->GetDiscardableRatioLevel(), 1);
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushCompleted);
-      ROCKS_LOG_INFO(db_options_.info_log,
+      TITAN_LOG_INFO(db_options_.info_log,
                      "OnFlushCompleted[%d]: output blob file %" PRIu64
                      ","
                      " live data size %" PRIu64 ".",
@@ -1215,7 +1216,7 @@ void TitanDBImpl::OnCompactionCompleted(
     for (const auto& file_name : files) {
       auto prop_iter = prop_collection.find(file_name);
       if (prop_iter == prop_collection.end()) {
-        ROCKS_LOG_WARN(
+        TITAN_LOG_WARN(
             db_options_.info_log,
             "OnCompactionCompleted[%d]: No table properties for file %s.",
             compaction_job_info.job_id, file_name.c_str());
@@ -1225,7 +1226,7 @@ void TitanDBImpl::OnCompactionCompleted(
           prop_iter->second, to_add, &blob_file_size_diff);
       if (!gc_stats_status.ok()) {
         // TODO: Should treat it as background error and make DB read-only.
-        ROCKS_LOG_ERROR(
+        TITAN_LOG_ERROR(
             db_options_.info_log,
             "OnCompactionCompleted[%d]: failed to extract GC stats from table "
             "property: compaction file: %s, error: %s",
@@ -1243,7 +1244,7 @@ void TitanDBImpl::OnCompactionCompleted(
     auto bs = blob_file_set_->GetBlobStorage(compaction_job_info.cf_id).lock();
     if (!bs) {
       // TODO: Should treat it as background error and make DB read-only.
-      ROCKS_LOG_ERROR(db_options_.info_log,
+      TITAN_LOG_ERROR(db_options_.info_log,
                       "OnCompactionCompleted[%d] Column family id:%" PRIu32
                       " not Found.",
                       compaction_job_info.job_id, compaction_job_info.cf_id);
@@ -1281,14 +1282,14 @@ void TitanDBImpl::OnCompactionCompleted(
           bool ok = file->UpdateLiveDataSize(static_cast<uint64_t>(-delta));
           if (!ok) {
             // Cannot happen
-            ROCKS_LOG_WARN(
+            TITAN_LOG_WARN(
                 db_options_.info_log,
                 "OnCompactionCompleted[%d]: pendingLSM Blob file %" PRIu64
                 " live size below zero.",
                 compaction_job_info.job_id, file_number);
             assert(false);
           }
-          ROCKS_LOG_INFO(db_options_.info_log,
+          TITAN_LOG_INFO(db_options_.info_log,
                          "OnCompactionCompleted[%d]: Get blob file %" PRIu64
                          " live size being negative, maybe due to "
                          "OnFlushCompleted() is called yet",
@@ -1307,7 +1308,7 @@ void TitanDBImpl::OnCompactionCompleted(
                  file->GetDiscardableRatioLevel(), 1);
         file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
         to_merge_candidates.push_back(file);
-        ROCKS_LOG_INFO(
+        TITAN_LOG_INFO(
             db_options_.info_log,
             "OnCompactionCompleted[%d]: compaction output blob file %" PRIu64
             ", live data size %" PRIu64 ".",
@@ -1317,7 +1318,7 @@ void TitanDBImpl::OnCompactionCompleted(
                  file->file_state() == BlobFileMeta::FileState::kToMerge) {
         if (delta > 0) {
           assert(false);
-          ROCKS_LOG_WARN(db_options_.info_log,
+          TITAN_LOG_WARN(db_options_.info_log,
                          "OnCompactionCompleted[%d]: Blob file %" PRIu64
                          " live size increase after compaction.",
                          compaction_job_info.job_id, file_number);
@@ -1326,7 +1327,7 @@ void TitanDBImpl::OnCompactionCompleted(
         SubStats(stats_.get(), compaction_job_info.cf_id, before, 1);
         bool ok = file->UpdateLiveDataSize(delta);
         if (!ok) {
-          ROCKS_LOG_WARN(db_options_.info_log,
+          TITAN_LOG_WARN(db_options_.info_log,
                          "OnCompactionCompleted[%d]: Blob file %" PRIu64
                          " live size below zero.",
                          compaction_job_info.job_id, file_number);
@@ -1402,7 +1403,7 @@ void TitanDBImpl::DumpStats() {
     for (auto& cf : cf_info_) {
       TitanInternalStats* internal_stats = stats_->internal_stats(cf.first);
       if (internal_stats == nullptr) {
-        ROCKS_LOG_WARN(db_options_.info_log,
+        TITAN_LOG_WARN(db_options_.info_log,
                        "Column family [%s] missing internal stats.",
                        cf.second.name.c_str());
         continue;
