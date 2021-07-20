@@ -6,6 +6,8 @@
 
 #include <inttypes.h>
 
+#include "titan_logging.h"
+
 namespace rocksdb {
 namespace titandb {
 
@@ -34,7 +36,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     if (!CheckBlobFile(blob_file.get())) {
       // Skip this file id this file is being GCed
       // or this file had been GCed
-      ROCKS_LOG_INFO(db_options_.info_log, "Blob file %" PRIu64 " no need gc",
+      TITAN_LOG_INFO(db_options_.info_log, "Blob file %" PRIu64 " no need gc",
                      blob_file->file_number());
       continue;
     }
@@ -53,7 +55,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       if (next_gc_size > cf_options_.min_gc_batch_size) {
         maybe_continue_next_time = true;
         RecordTick(statistics(stats_), TITAN_GC_REMAIN, 1);
-        ROCKS_LOG_INFO(db_options_.info_log,
+        TITAN_LOG_INFO(db_options_.info_log,
                        "remain more than %" PRIu64
                        " bytes to be gc and trigger after this gc",
                        next_gc_size);
@@ -61,7 +63,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       }
     }
   }
-  ROCKS_LOG_DEBUG(db_options_.info_log,
+  TITAN_LOG_DEBUG(db_options_.info_log,
                   "got batch size %" PRIu64 ", estimate output %" PRIu64
                   " bytes",
                   batch_size, estimate_output_size);

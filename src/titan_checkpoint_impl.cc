@@ -8,6 +8,7 @@
 #include "port/port.h"
 #include "rocksdb/transaction_log.h"
 #include "test_util/sync_point.h"
+#include "titan_logging.h"
 #include "util.h"
 #include "utilities/checkpoint/checkpoint_impl.h"
 #include "version_edit.h"
@@ -34,7 +35,7 @@ void TitanCheckpointImpl::CleanStagingDirectory(
   if (s.IsNotFound()) {
     return;
   }
-  ROCKS_LOG_INFO(info_log, "File exists %s -- %s", full_private_path.c_str(),
+  TITAN_LOG_INFO(info_log, "File exists %s -- %s", full_private_path.c_str(),
                  s.ToString().c_str());
   s = db_->GetEnv()->GetChildren(full_private_path, &subchildren);
   if (s.ok()) {
@@ -42,18 +43,18 @@ void TitanCheckpointImpl::CleanStagingDirectory(
       std::string subchild_path = full_private_path + "/" + subchild;
       if (subchild == "titandb") {
         CleanStagingDirectory(subchild_path, info_log);
-        ROCKS_LOG_INFO(info_log, "Clean titandb directory %s",
+        TITAN_LOG_INFO(info_log, "Clean titandb directory %s",
                        subchild_path.c_str());
       } else {
         s = db_->GetEnv()->DeleteFile(subchild_path);
-        ROCKS_LOG_INFO(info_log, "Delete file %s -- %s", subchild_path.c_str(),
+        TITAN_LOG_INFO(info_log, "Delete file %s -- %s", subchild_path.c_str(),
                        s.ToString().c_str());
       }
     }
   }
   // Finally delete the private dir
   s = db_->GetEnv()->DeleteDir(full_private_path);
-  ROCKS_LOG_INFO(info_log, "Delete dir %s -- %s", full_private_path.c_str(),
+  TITAN_LOG_INFO(info_log, "Delete dir %s -- %s", full_private_path.c_str(),
                  s.ToString().c_str());
 }
 
@@ -103,7 +104,7 @@ Status TitanCheckpointImpl::CreateCheckpoint(
     return s;
   }
 
-  ROCKS_LOG_INFO(titandb_options.info_log,
+  TITAN_LOG_INFO(titandb_options.info_log,
                  "Started the TitanDB checkpoint process -- creating checkpoint"
                  "in directory %s",
                  checkpoint_dir.c_str());
@@ -131,7 +132,7 @@ Status TitanCheckpointImpl::CreateCheckpoint(
     if (s.ok()) {
       full_private_path =
           checkpoint_dir.substr(0, final_nonslash_idx + 1) + ".tmp";
-      ROCKS_LOG_INFO(
+      TITAN_LOG_INFO(
           titandb_options.info_log,
           "TitanDB checkpoint process -- using temporary directory %s",
           full_private_path.c_str());
@@ -146,20 +147,20 @@ Status TitanCheckpointImpl::CreateCheckpoint(
         titandb_options,
         [&](const std::string& src_dirname, const std::string& fname,
             FileType) {
-          ROCKS_LOG_INFO(titandb_options.info_log, "Hard Linking %s",
+          TITAN_LOG_INFO(titandb_options.info_log, "Hard Linking %s",
                          fname.c_str());
           return db_->GetEnv()->LinkFile(src_dirname + fname,
                                          full_private_path + fname);
         } /* link_file_cb */,
         [&](const std::string& src_dirname, const std::string& fname,
             uint64_t size_limit_bytes, FileType) {
-          ROCKS_LOG_INFO(titandb_options.info_log, "Copying %s", fname.c_str());
+          TITAN_LOG_INFO(titandb_options.info_log, "Copying %s", fname.c_str());
           return CopyFile(db_->GetEnv(), src_dirname + fname,
                           full_private_path + fname, size_limit_bytes,
                           titandb_options.use_fsync);
         } /* copy_file_cb */,
         [&](const std::string& fname, const std::string& contents, FileType) {
-          ROCKS_LOG_INFO(titandb_options.info_log, "Creating %s",
+          TITAN_LOG_INFO(titandb_options.info_log, "Creating %s",
                          fname.c_str());
           return CreateFile(db_->GetEnv(), full_private_path + fname, contents,
                             titandb_options.use_fsync);
@@ -187,11 +188,11 @@ Status TitanCheckpointImpl::CreateCheckpoint(
 
   if (s.ok()) {
     // Here we know that we succeeded and installed the new checkpoint
-    ROCKS_LOG_INFO(titandb_options.info_log,
+    TITAN_LOG_INFO(titandb_options.info_log,
                    "TitanDB checkpoint DONE. All is good");
   } else {
     // Clean all the files we might have created
-    ROCKS_LOG_INFO(titandb_options.info_log, "TitanDB checkpoint failed -- %s",
+    TITAN_LOG_INFO(titandb_options.info_log, "TitanDB checkpoint failed -- %s",
                    s.ToString().c_str());
     CleanStagingDirectory(full_private_path, titandb_options.info_log.get());
   }
