@@ -798,7 +798,7 @@ TEST_F(TitanDBTest, VersionEditError) {
 }
 
 #ifndef NDEBUG
-TEST_F(TitanDBTest, DISABLED_BlobFileIOError) {
+TEST_F(TitanDBTest, BlobFileIOError) {
   std::unique_ptr<TitanFaultInjectionTestEnv> mock_env(
       new TitanFaultInjectionTestEnv(env_));
   options_.env = mock_env.get();

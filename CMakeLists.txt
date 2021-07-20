@@ -27,8 +27,7 @@ if (NOT DEFINED ROCKSDB_DIR)
   message(FATAL_ERROR "ROCKSDB_DIR is not defined.")
 endif()
 
-set(CMAKE_MODULE_PATH "${ROCKSDB_DIR}/cmake/modules/")
-# list(APPEND CMAKE_MODULE_PATH "${ROCKSDB_DIR}/cmake/modules/")
+get_filename_component(CMAKE_MODULE_PATH "${ROCKSDB_DIR}/cmake/modules/" ABSOLUTE)
 include(cmake/rocksdb_flags.cmake)
 
 include_directories(${ROCKSDB_DIR})
