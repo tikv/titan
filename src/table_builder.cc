@@ -7,6 +7,7 @@
 #include <inttypes.h>
 
 #include "monitoring/statistics.h"
+#include "titan_logging.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -109,7 +110,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
         if (ok()) return;
       } else {
         ++error_read_cnt_;
-        ROCKS_LOG_DEBUG(db_options_.info_log,
+        TITAN_LOG_DEBUG(db_options_.info_log,
                         "Read file %" PRIu64 " error during level merge: %s",
                         index.file_number, get_status.ToString().c_str());
       }
@@ -148,7 +149,7 @@ void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
   if (!blob_builder_) {
     status_ = blob_manager_->NewFile(&blob_handle_);
     if (!ok()) return;
-    ROCKS_LOG_INFO(db_options_.info_log,
+    TITAN_LOG_INFO(db_options_.info_log,
                    "Titan table builder created new blob file %" PRIu64 ".",
                    blob_handle_->GetNumber());
     blob_builder_.reset(
@@ -225,7 +226,7 @@ void TitanTableBuilder::FinishBlobFile() {
     AddToBaseTable(contexts);
 
     if (s.ok() && ok()) {
-      ROCKS_LOG_INFO(db_options_.info_log,
+      TITAN_LOG_INFO(db_options_.info_log,
                      "Titan table builder finish output file %" PRIu64 ".",
                      blob_handle_->GetNumber());
       std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
@@ -236,7 +237,7 @@ void TitanTableBuilder::FinishBlobFile() {
       finished_blobs_.push_back({file, std::move(blob_handle_)});
       blob_builder_.reset();
     } else {
-      ROCKS_LOG_WARN(
+      TITAN_LOG_WARN(
           db_options_.info_log,
           "Titan table builder finish failed. Delete output file %" PRIu64 ".",
           blob_handle_->GetNumber());
@@ -264,13 +265,13 @@ Status TitanTableBuilder::Finish() {
   base_builder_->Finish();
   status_ = blob_manager_->BatchFinishFiles(cf_id_, finished_blobs_);
   if (!status_.ok()) {
-    ROCKS_LOG_ERROR(db_options_.info_log,
+    TITAN_LOG_ERROR(db_options_.info_log,
                     "Titan table builder failed on finish: %s",
                     status_.ToString().c_str());
   }
   UpdateInternalOpStats();
   if (error_read_cnt_ > 0) {
-    ROCKS_LOG_ERROR(db_options_.info_log,
+    TITAN_LOG_ERROR(db_options_.info_log,
                     "Read file error %" PRIu64 " times during level merge",
                     error_read_cnt_);
   }
@@ -280,7 +281,7 @@ Status TitanTableBuilder::Finish() {
 void TitanTableBuilder::Abandon() {
   base_builder_->Abandon();
   if (blob_builder_) {
-    ROCKS_LOG_INFO(db_options_.info_log,
+    TITAN_LOG_INFO(db_options_.info_log,
                    "Titan table builder abandoned. Delete output file %" PRIu64
                    ".",
                    blob_handle_->GetNumber());

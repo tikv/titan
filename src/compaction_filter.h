@@ -5,6 +5,7 @@
 
 #include "db_impl.h"
 #include "rocksdb/compaction_filter.h"
+#include "titan_logging.h"
 #include "util/mutexlock.h"
 
 namespace rocksdb {
@@ -48,7 +49,7 @@ class TitanCompactionFilter final : public CompactionFilter {
     Slice original_value(value.data());
     Status s = blob_index.DecodeFrom(&original_value);
     if (!s.ok()) {
-      ROCKS_LOG_ERROR(db_->db_options_.info_log,
+      TITAN_LOG_ERROR(db_->db_options_.info_log,
                       "[%s] Unable to decode blob index", cf_name_.c_str());
       // TODO(yiwu): Better to fail the compaction as well, but current
       // compaction filter API doesn't support it.
