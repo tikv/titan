@@ -69,7 +69,7 @@ Status VersionEdit::DecodeFrom(Slice* src) {
         break;
       case kDeletedBlobFile:
         if (GetVarint64(src, &file_number)) {
-          DeleteBlobFile(file_number);
+          DeleteBlobFile(file_number, 0);
         } else {
           error = "deleted blob file";
         }
@@ -105,6 +105,26 @@ bool operator==(const VersionEdit& lhs, const VersionEdit& rhs) {
           lhs.next_file_number_ == rhs.next_file_number_ &&
           lhs.column_family_id_ == rhs.column_family_id_ &&
           lhs.deleted_files_ == rhs.deleted_files_);
+}
+
+void VersionEdit::Dump(bool with_keys) const {
+  fprintf(stdout, "column_family_id: %" PRIu32 "\n", column_family_id_);
+  if (has_next_file_number_) {
+    fprintf(stdout, "next_file_number: %" PRIu64 "\n", next_file_number_);
+  }
+  if (!added_files_.empty()) {
+    fprintf(stdout, "add files:\n");
+    for (auto& file : added_files_) {
+      file->Dump(with_keys);
+    }
+  }
+  if (!deleted_files_.empty()) {
+    fprintf(stdout, "delete files:\n");
+    for (auto& file : deleted_files_) {
+      fprintf(stdout, "file %" PRIu64 ", seq %" PRIu64 "\n", file.first,
+              file.second);
+    }
+  }
 }
 
 }  // namespace titandb

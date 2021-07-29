@@ -32,8 +32,7 @@ class VersionEdit {
     added_files_.push_back(file);
   }
 
-  void DeleteBlobFile(uint64_t file_number,
-                      SequenceNumber obsolete_sequence = 0) {
+  void DeleteBlobFile(uint64_t file_number, SequenceNumber obsolete_sequence) {
     deleted_files_.emplace_back(std::make_pair(file_number, obsolete_sequence));
   }
 
@@ -41,6 +40,8 @@ class VersionEdit {
   Status DecodeFrom(Slice* src);
 
   friend bool operator==(const VersionEdit& lhs, const VersionEdit& rhs);
+
+  void Dump(bool with_keys) const;
 
  private:
   friend class BlobFileSet;

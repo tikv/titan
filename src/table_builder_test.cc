@@ -1,14 +1,14 @@
 #include "table/table_builder.h"
-#include "file/filename.h"
-#include "table/table_reader.h"
-#include "test_util/testharness.h"
 
 #include "blob_file_manager.h"
 #include "blob_file_reader.h"
 #include "blob_file_set.h"
 #include "db_impl.h"
+#include "file/filename.h"
+#include "table/table_reader.h"
 #include "table_builder.h"
 #include "table_factory.h"
+#include "test_util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -24,7 +24,8 @@ class FileManager : public BlobFileManager {
         number_(kTestFileNumber),
         blob_file_set_(blob_file_set) {}
 
-  Status NewFile(std::unique_ptr<BlobFileHandle>* handle) override {
+  Status NewFile(std::unique_ptr<BlobFileHandle>* handle,
+                 Env::IOPriority pri = Env::IOPriority::IO_TOTAL) override {
     auto number = number_.fetch_add(1);
     auto name = BlobFileName(db_options_.dirname, number);
     std::unique_ptr<WritableFileWriter> file;
@@ -32,6 +33,7 @@ class FileManager : public BlobFileManager {
       std::unique_ptr<WritableFile> f;
       Status s = env_->NewWritableFile(name, &f, env_options_);
       if (!s.ok()) return s;
+      f->SetIOPriority(pri);
       file.reset(new WritableFileWriter(std::move(f), name, env_options_));
     }
     handle->reset(new FileHandle(number, name, std::move(file)));
@@ -245,6 +247,13 @@ class TableBuilderTest : public testing::Test {
                        std::unique_ptr<TableBuilder>* result,
                        int target_level = 0) {
     CompressionOptions compression_opts;
+    NewTableBuilder(file, result, compression_opts, target_level);
+  }
+
+  void NewTableBuilder(WritableFileWriter* file,
+                       std::unique_ptr<TableBuilder>* result,
+                       CompressionOptions compression_opts,
+                       int target_level = 0) {
     TableBuilderOptions options(cf_ioptions_, cf_moptions_,
                                 cf_ioptions_.internal_comparator, &collectors_,
                                 kNoCompression, 0 /*sample_for_compression*/,
@@ -357,6 +366,180 @@ TEST_F(TableBuilderTest, Basic) {
     }
     iter->Next();
   }
+}
+
+TEST_F(TableBuilderTest, DictCompress) {
+#if ZSTD_VERSION_NUMBER >= 10103
+  CompressionOptions compression_opts;
+  compression_opts.enabled = true;
+  compression_opts.max_dict_bytes = 4000;
+  cf_options_.blob_file_compression_options = compression_opts;
+  cf_options_.blob_file_compression = kZSTD;
+
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
+      blob_file_set_.get(), nullptr));
+
+  std::unique_ptr<WritableFileWriter> base_file;
+  NewBaseFileWriter(&base_file);
+  std::unique_ptr<TableBuilder> table_builder;
+  NewTableBuilder(base_file.get(), &table_builder);
+
+  // Build a base table and a blob file.
+  const int n = 100;
+  for (char i = 0; i < n; i++) {
+    std::string key(1, i);
+    InternalKey ikey(key, 1, kTypeValue);
+    std::string value;
+    value = std::string(kMinBlobSize, i);
+    table_builder->Add(ikey.Encode(), value);
+  }
+  ASSERT_OK(table_builder->Finish());
+  ASSERT_OK(base_file->Sync(true));
+  ASSERT_OK(base_file->Close());
+  BlobFileExists(true);
+
+  std::unique_ptr<TableReader> base_reader;
+  NewTableReader(base_name_, &base_reader);
+  std::unique_ptr<BlobFileReader> blob_reader;
+  NewBlobFileReader(&blob_reader);
+
+  ReadOptions ro;
+  std::unique_ptr<InternalIterator> iter;
+  iter.reset(base_reader->NewIterator(ro, nullptr /*prefix_extractor*/,
+                                      nullptr /*arena*/, false /*skip_filters*/,
+                                      TableReaderCaller::kUncategorized));
+  iter->SeekToFirst();
+  for (char i = 0; i < n; i++) {
+    ASSERT_TRUE(iter->Valid());
+    std::string key(1, i);
+    ParsedInternalKey ikey;
+    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    ASSERT_EQ(ikey.user_key, key);
+    ASSERT_EQ(ikey.type, kTypeBlobIndex);
+    BlobIndex index;
+    ASSERT_OK(DecodeInto(iter->value(), &index));
+    ASSERT_EQ(index.file_number, kTestFileNumber);
+    BlobRecord record;
+    PinnableSlice buffer;
+    ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
+    ASSERT_EQ(record.key, key);
+    ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
+    iter->Next();
+  }
+  ASSERT_TRUE(!iter->Valid());
+#endif
+}
+
+TEST_F(TableBuilderTest, DictCompressOptions) {
+#if ZSTD_VERSION_NUMBER >= 10103
+  CompressionOptions compression_opts;
+  compression_opts.window_bits = -14;
+  compression_opts.level = 32767;
+  compression_opts.strategy = 0;
+  compression_opts.max_dict_bytes = 4000;
+  compression_opts.zstd_max_train_bytes = 0;
+
+  compression_opts.enabled = true;
+  compression_opts.max_dict_bytes = 4000;
+  cf_options_.blob_file_compression_options = compression_opts;
+  cf_options_.blob_file_compression = kZSTD;
+
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
+      blob_file_set_.get(), nullptr));
+
+  std::unique_ptr<WritableFileWriter> base_file;
+  NewBaseFileWriter(&base_file);
+  std::unique_ptr<TableBuilder> table_builder;
+  NewTableBuilder(base_file.get(), &table_builder);
+
+  // Build a base table and a blob file.
+  const int n = 100;
+  for (char i = 0; i < n; i++) {
+    std::string key(1, i);
+    InternalKey ikey(key, 1, kTypeValue);
+    std::string value;
+    if (i % 2 == 0) {
+      value = std::string(1, i);
+    } else {
+      value = std::string(kMinBlobSize, i);
+    }
+    table_builder->Add(ikey.Encode(), value);
+  }
+  ASSERT_EQ(n / 2, table_builder->NumEntries());
+  ASSERT_OK(table_builder->Finish());
+#endif
+}
+
+TEST_F(TableBuilderTest, DictCompressDisorder) {
+#if ZSTD_VERSION_NUMBER >= 10103
+  CompressionOptions compression_opts;
+  compression_opts.enabled = true;
+  compression_opts.max_dict_bytes = 4000;
+  cf_options_.blob_file_compression_options = compression_opts;
+  cf_options_.blob_file_compression = kZSTD;
+
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
+      blob_file_set_.get(), nullptr));
+
+  std::unique_ptr<WritableFileWriter> base_file;
+  NewBaseFileWriter(&base_file);
+  std::unique_ptr<TableBuilder> table_builder;
+  NewTableBuilder(base_file.get(), &table_builder);
+
+  // Build a base table and a blob file.
+  const int n = 100;
+  for (char i = 0; i < n; i++) {
+    std::string key(1, i);
+    InternalKey ikey(key, 1, kTypeValue);
+    std::string value;
+    if (i % 2 == 0) {
+      value = std::string(1, i);
+    } else {
+      value = std::string(kMinBlobSize, i);
+    }
+    table_builder->Add(ikey.Encode(), value);
+  }
+  ASSERT_OK(table_builder->Finish());
+  ASSERT_OK(base_file->Sync(true));
+  ASSERT_OK(base_file->Close());
+  std::unique_ptr<TableReader> base_reader;
+  NewTableReader(base_name_, &base_reader);
+  std::unique_ptr<BlobFileReader> blob_reader;
+  NewBlobFileReader(&blob_reader);
+
+  ReadOptions ro;
+  std::unique_ptr<InternalIterator> iter;
+  iter.reset(base_reader->NewIterator(ro, nullptr /*prefix_extractor*/,
+                                      nullptr /*arena*/, false /*skip_filters*/,
+                                      TableReaderCaller::kUncategorized));
+  iter->SeekToFirst();
+  for (char i = 0; i < n; i++) {
+    ASSERT_TRUE(iter->Valid());
+    std::string key(1, i);
+    ParsedInternalKey ikey;
+    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    // check order
+    ASSERT_EQ(ikey.user_key, key);
+    if (i % 2 == 0) {
+      ASSERT_EQ(ikey.type, kTypeValue);
+      ASSERT_EQ(iter->value(), std::string(1, i));
+    } else {
+      ASSERT_EQ(ikey.type, kTypeBlobIndex);
+      BlobIndex index;
+      ASSERT_OK(DecodeInto(iter->value(), &index));
+      ASSERT_EQ(index.file_number, kTestFileNumber);
+      BlobRecord record;
+      PinnableSlice buffer;
+      ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
+      ASSERT_EQ(record.key, key);
+      ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
+    }
+    iter->Next();
+  }
+#endif
 }
 
 TEST_F(TableBuilderTest, NoBlob) {
@@ -566,6 +749,126 @@ TEST_F(TableBuilderTest, LevelMerge) {
   }
 
   env_->DeleteFile(second_base_name);
+}
+
+// Write blob index, to test key order is correct with dictionary compression
+TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
+#if ZSTD_VERSION_NUMBER >= 10103
+  cf_options_.level_merge = true;
+  table_factory_.reset(new TitanTableFactory(
+      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
+      blob_file_set_.get(), nullptr));
+
+  std::unique_ptr<WritableFileWriter> base_file;
+  NewBaseFileWriter(&base_file);
+  std::unique_ptr<TableBuilder> table_builder;
+  NewTableBuilder(base_file.get(), &table_builder);
+
+  // Generate level 0 sst with blob file
+  int n = 100;
+  for (unsigned char i = 0; i < n; i++) {
+    if (i % 2 == 0) {
+      // key: 0, 2, 4, 6 ..98
+      std::string key(1, i);
+      InternalKey ikey(key, 1, kTypeValue);
+      std::string value(kMinBlobSize, i);
+      table_builder->Add(ikey.Encode(), value);
+    } else {
+      // key: 1, 3, 5, ..99
+      std::string key(1, i);
+      InternalKey ikey(key, 1, kTypeValue);
+      std::string value = std::string(1, i);
+      table_builder->Add(ikey.Encode(), value);
+    }
+  }
+  ASSERT_OK(table_builder->Finish());
+  ASSERT_OK(base_file->Sync(true));
+  ASSERT_OK(base_file->Close());
+
+  std::unique_ptr<TableReader> base_reader;
+  NewTableReader(base_name_, &base_reader);
+  ReadOptions ro;
+  std::unique_ptr<InternalIterator> first_iter;
+  first_iter.reset(base_reader->NewIterator(
+      ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
+      false /*skip_filters*/, TableReaderCaller::kUncategorized));
+
+  // Base file of last level sst
+  std::string second_base_name = base_name_ + "second";
+  NewFileWriter(second_base_name, &base_file);
+
+  CompressionOptions compression_opts;
+  compression_opts.enabled = true;
+  compression_opts.max_dict_bytes = 4000;
+  cf_options_.blob_file_compression_options = compression_opts;
+  cf_options_.blob_file_compression = kZSTD;
+
+  NewTableBuilder(base_file.get(), &table_builder, compression_opts,
+                  cf_options_.num_levels - 1);
+
+  first_iter->SeekToFirst();
+  // compact data from level0 to level1
+  for (unsigned char i = 0; i < n; i++) {
+    ASSERT_TRUE(first_iter->Valid());
+    table_builder->Add(first_iter->key(), first_iter->value());
+    first_iter->Next();
+  }
+  ASSERT_OK(table_builder->Finish());
+  ASSERT_OK(base_file->Sync(true));
+  ASSERT_OK(base_file->Close());
+
+  std::unique_ptr<TableReader> second_base_reader;
+  NewTableReader(second_base_name, &second_base_reader);
+  std::unique_ptr<InternalIterator> second_iter;
+  second_iter.reset(second_base_reader->NewIterator(
+      ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
+      false /*skip_filters*/, TableReaderCaller::kUncategorized));
+
+  std::unique_ptr<BlobFileReader> blob_reader;
+  NewBlobFileReader(&blob_reader);
+
+  first_iter->SeekToFirst();
+  second_iter->SeekToFirst();
+  // check orders of keys
+  for (unsigned char i = 0; i < n; i++) {
+    ASSERT_TRUE(second_iter->Valid());
+
+    ASSERT_TRUE(first_iter->Valid());
+
+    // Compare sst key
+    ParsedInternalKey first_ikey, second_ikey;
+    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &first_ikey));
+    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &second_ikey));
+    ASSERT_EQ(first_ikey.type, second_ikey.type);
+    ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
+
+    if (i % 2 == 0) {
+      // key: 0, 2, 4, 6 ..98
+      ASSERT_EQ(second_ikey.type, kTypeBlobIndex);
+      std::string key(1, i);
+
+      BlobIndex index;
+      ASSERT_OK(DecodeInto(second_iter->value(), &index));
+      BlobRecord record;
+      PinnableSlice buffer;
+      ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
+      ASSERT_EQ(record.key, key);
+      ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
+    } else {
+      // key: 1, 3, 5, ..99
+      std::string key(1, i);
+      std::string value = std::string(1, i);
+
+      ASSERT_EQ(second_ikey.type, kTypeValue);
+      ASSERT_EQ(second_iter->value(), value);
+    }
+
+    first_iter->Next();
+    second_iter->Next();
+  }
+
+  env_->DeleteFile(second_base_name);
+#endif
 }
 
 }  // namespace titandb

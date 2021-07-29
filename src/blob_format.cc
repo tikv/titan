@@ -36,12 +36,15 @@ bool operator==(const BlobRecord& lhs, const BlobRecord& rhs) {
 
 void BlobEncoder::EncodeRecord(const BlobRecord& record) {
   record_buffer_.clear();
-  compressed_buffer_.clear();
-
-  CompressionType compression;
   record.EncodeTo(&record_buffer_);
-  record_ = Compress(compression_info_, record_buffer_, &compressed_buffer_,
-                     &compression);
+  EncodeSlice(record_buffer_);
+}
+
+void BlobEncoder::EncodeSlice(const Slice& record) {
+  compressed_buffer_.clear();
+  CompressionType compression;
+  record_ =
+      Compress(*compression_info_, record, &compressed_buffer_, &compression);
 
   assert(record_.size() < std::numeric_limits<uint32_t>::max());
   EncodeFixed32(header_ + 4, static_cast<uint32_t>(record_.size()));
@@ -62,8 +65,8 @@ Status BlobDecoder::DecodeHeader(Slice* src) {
   if (!GetFixed32(src, &record_size_) || !GetChar(src, &compression)) {
     return Status::Corruption("BlobHeader");
   }
-  compression_ = static_cast<CompressionType>(compression);
 
+  compression_ = static_cast<CompressionType>(compression);
   return Status::OK();
 }
 
@@ -82,7 +85,7 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
     return DecodeInto(input, record);
   }
   UncompressionContext ctx(compression_);
-  UncompressionInfo info(ctx, uncompression_dict_, compression_);
+  UncompressionInfo info(ctx, *uncompression_dict_, compression_);
   Status s = Uncompress(info, input, buffer);
   if (!s.ok()) {
     return s;
@@ -295,6 +298,17 @@ TitanInternalStats::StatsType BlobFileMeta::GetDiscardableRatioLevel() const {
     type = TitanInternalStats::NUM_DISCARDABLE_RATIO_LE100;
   }
   return type;
+}
+
+void BlobFileMeta::Dump(bool with_keys) const {
+  fprintf(stdout, "file %" PRIu64 ", size %" PRIu64 ", level %" PRIu32,
+          file_number_, file_size_, file_level_);
+  if (with_keys) {
+    fprintf(stdout, ", smallest key: %s, largest key: %s",
+            Slice(smallest_key_).ToString(true /*hex*/).c_str(),
+            Slice(largest_key_).ToString(true /*hex*/).c_str());
+  }
+  fprintf(stdout, "\n");
 }
 
 void BlobFileHeader::EncodeTo(std::string* dst) const {

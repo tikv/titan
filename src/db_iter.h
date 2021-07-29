@@ -10,9 +10,8 @@
 #include <unordered_map>
 
 #include "db/db_iter.h"
-#include "logging/logging.h"
 #include "rocksdb/env.h"
-
+#include "titan_logging.h"
 #include "titan_stats.h"
 
 namespace rocksdb {
@@ -116,6 +115,10 @@ class TitanDBIterator : public Iterator {
     return record_.value;
   }
 
+  bool seqno(SequenceNumber* number) const override {
+    return iter_->seqno(number);
+  }
+
  private:
   bool ShouldGetBlobValue() {
     if (!iter_->Valid() || !iter_->IsBlob() || options_.key_only) {
@@ -131,7 +134,7 @@ class TitanDBIterator : public Iterator {
     BlobIndex index;
     status_ = DecodeInto(iter_->value(), &index);
     if (!status_.ok()) {
-      ROCKS_LOG_ERROR(info_log_,
+      TITAN_LOG_ERROR(info_log_,
                       "Titan iterator: failed to decode blob index %s: %s",
                       iter_->value().ToString(true /*hex*/).c_str(),
                       status_.ToString().c_str());
@@ -149,7 +152,7 @@ class TitanDBIterator : public Iterator {
       } else {
         status_ = DecodeInto(iter_->value(), &index);
         if (!status_.ok()) {
-          ROCKS_LOG_ERROR(info_log_,
+          TITAN_LOG_ERROR(info_log_,
                           "Titan iterator: failed to decode blob index %s: %s",
                           iter_->value().ToString(true /*hex*/).c_str(),
                           status_.ToString().c_str());
@@ -166,7 +169,7 @@ class TitanDBIterator : public Iterator {
       std::unique_ptr<BlobFilePrefetcher> prefetcher;
       status_ = storage_->NewPrefetcher(index.file_number, &prefetcher);
       if (!status_.ok()) {
-        ROCKS_LOG_ERROR(
+        TITAN_LOG_ERROR(
             info_log_,
             "Titan iterator: failed to create prefetcher for blob file %" PRIu64
             ": %s",
@@ -179,7 +182,7 @@ class TitanDBIterator : public Iterator {
     buffer_.Reset();
     status_ = it->second->Get(options_, index.blob_handle, &record_, &buffer_);
     if (!status_.ok()) {
-      ROCKS_LOG_ERROR(
+      TITAN_LOG_ERROR(
           info_log_,
           "Titan iterator: failed to read blob value from file %" PRIu64
           ", offset %" PRIu64 ", size %" PRIu64 ": %s\n",

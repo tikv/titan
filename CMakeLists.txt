@@ -27,7 +27,7 @@ if (NOT DEFINED ROCKSDB_DIR)
   message(FATAL_ERROR "ROCKSDB_DIR is not defined.")
 endif()
 
-list(APPEND CMAKE_MODULE_PATH "${ROCKSDB_DIR}/cmake/modules/")
+get_filename_component(CMAKE_MODULE_PATH "${ROCKSDB_DIR}/cmake/modules/" ABSOLUTE)
 include(cmake/rocksdb_flags.cmake)
 
 include_directories(${ROCKSDB_DIR})
@@ -68,9 +68,24 @@ add_library(titan_build_version OBJECT ${TITAN_BUILD_VERSION_CC})
 target_include_directories(titan_build_version PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/util)
 
+if (TRAVIS)
+  add_definitions(-DTRAVIS)
+endif()
+
 if (CODE_COVERAGE)
   target_compile_options(titan PRIVATE "--coverage")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+endif()
+
+set(COMMON_LIBS
+  titan
+  rocksdb)
+
+if(WITH_ASAN OR WITH_TSAN)
+  find_package(Threads)
+  if(CMAKE_USE_PTHREADS_INIT)
+    link_libraries(pthread)
+  endif()
 endif()
 
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
@@ -98,13 +113,13 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         table_builder_test
         thread_safety_test
         titan_db_test
+        titan_checkpoint_test
         titan_options_test
         util_test
         compaction_filter_test
         version_test)
   set(TEST_LIBS
-        titan
-        rocksdb
+        ${COMMON_LIBS}
         testutillib
         gtest)
 
@@ -116,9 +131,7 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
 endif()
 
 if (WITH_TITAN_TOOLS)
-  set(TOOLS_LIBS
-        titan
-        rocksdb)
+  set(TOOLS_LIBS ${COMMON_LIBS})
 
   if (NOT TRAVIS)
     find_package(gflags REQUIRED)
@@ -139,6 +152,10 @@ if (WITH_TITAN_TOOLS)
   add_executable(titandb_bench tools/db_bench.cc tools/db_bench_tool.cc)
   target_include_directories(titandb_bench PRIVATE ${gflags_INCLUDE_DIR})
   target_link_libraries(titandb_bench ${TOOLS_LIBS})
+
+  add_executable(titan_manifest_dump tools/manifest_dump.cc)
+  target_include_directories(titan_manifest_dump PRIVATE ${gflags_INCLUDE_DIR})
+  target_link_libraries(titan_manifest_dump ${TOOLS_LIBS})
 endif()
 
 # Installation - copy lib/ and include/

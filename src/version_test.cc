@@ -134,8 +134,8 @@ TEST_F(VersionTest, VersionEdit) {
   auto file2 = std::make_shared<BlobFileMeta>(5, 6, 0, 0, "", "");
   input.AddBlobFile(file1);
   input.AddBlobFile(file2);
-  input.DeleteBlobFile(7);
-  input.DeleteBlobFile(8);
+  input.DeleteBlobFile(7, 0);
+  input.DeleteBlobFile(8, 0);
   CheckCodec(input);
 }
 
@@ -153,7 +153,7 @@ VersionEdit DeleteBlobFilesEdit(uint32_t cf_id, uint64_t start, uint64_t end) {
   VersionEdit edit;
   edit.SetColumnFamilyID(cf_id);
   for (auto i = start; i < end; i++) {
-    edit.DeleteBlobFile(i);
+    edit.DeleteBlobFile(i, 0);
   }
   return edit;
 }
@@ -367,7 +367,7 @@ TEST_F(VersionTest, BlobFileMetaV1ToV2) {
   VersionEdit edit;
   edit.SetColumnFamilyID(1);
   edit.AddBlobFile(std::make_shared<BlobFileMeta>(1, 1, 0, 0, "", ""));
-  edit.DeleteBlobFile(1);
+  edit.DeleteBlobFile(1, 0);
   edit.AddBlobFile(std::make_shared<BlobFileMeta>(2, 2, 0, 0, "", ""));
   std::string str;
   LegacyEncode(edit, &str);

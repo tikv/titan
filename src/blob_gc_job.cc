@@ -1,13 +1,14 @@
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
+#include "blob_gc_job.h"
+
 #include <inttypes.h>
 
 #include <memory>
 
-#include "blob_gc_job.h"
-
 #include "blob_file_size_collector.h"
+#include "titan_logging.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -133,7 +134,7 @@ Status BlobGCJob::Run() {
     }
     tmp.append(std::to_string(f->file_number()));
   }
-  ROCKS_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s]",
+  TITAN_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s]",
                    blob_gc_->column_family_handle()->GetName().c_str(),
                    tmp.c_str());
   return DoRunGC();
@@ -157,8 +158,6 @@ Status BlobGCJob::DoRunGC() {
   // is_blob_index flag to GetImpl.
   std::unique_ptr<BlobFileHandle> blob_file_handle;
   std::unique_ptr<BlobFileBuilder> blob_file_builder;
-
-  auto* cfh = blob_gc_->column_family_handle();
 
   //  uint64_t drop_entry_num = 0;
   //  uint64_t drop_entry_size = 0;
@@ -212,11 +211,12 @@ Status BlobGCJob::DoRunGC() {
         blob_file_builders_.emplace_back(std::make_pair(
             std::move(blob_file_handle), std::move(blob_file_builder)));
       }
-      s = blob_file_manager_->NewFile(&blob_file_handle);
+      s = blob_file_manager_->NewFile(&blob_file_handle,
+                                      Env::IOPriority::IO_LOW);
       if (!s.ok()) {
         break;
       }
-      ROCKS_LOG_INFO(db_options_.info_log,
+      TITAN_LOG_INFO(db_options_.info_log,
                      "Titan new GC output file %" PRIu64 ".",
                      blob_file_handle->GetNumber());
       blob_file_builder = std::unique_ptr<BlobFileBuilder>(
@@ -234,32 +234,20 @@ Status BlobGCJob::DoRunGC() {
     // blob index's size is counted in `RewriteValidKeyToLSM`
     metrics_.gc_bytes_written += blob_record.size();
 
-    MergeBlobIndex new_blob_index;
-    new_blob_index.file_number = blob_file_handle->GetNumber();
-    new_blob_index.source_file_number = blob_index.file_number;
-    new_blob_index.source_file_offset = blob_index.blob_handle.offset;
-    blob_file_builder->Add(blob_record, &new_blob_index.blob_handle);
-    std::string index_entry;
+    // BlobRecordContext require key to be an internal key. We encode key to
+    // internal key in spite we only need the user key.
+    std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
+        new BlobFileBuilder::BlobRecordContext);
+    InternalKey ikey(blob_record.key, 1, kTypeValue);
+    ctx->key = ikey.Encode().ToString();
+    ctx->original_blob_index = blob_index;
+    ctx->new_blob_index.file_number = blob_file_handle->GetNumber();
 
-    if (!gc_merge_rewrite_) {
-      new_blob_index.EncodeToBase(&index_entry);
-      // Store WriteBatch for rewriting new Key-Index pairs to LSM
-      GarbageCollectionWriteCallback callback(cfh, blob_record.key.ToString(),
-                                              std::move(blob_index));
-      callback.value = index_entry;
-      rewrite_batches_.emplace_back(
-          std::make_pair(WriteBatch(), std::move(callback)));
-      auto& wb = rewrite_batches_.back().first;
-      s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), blob_record.key,
-                                           index_entry);
-    } else {
-      new_blob_index.EncodeTo(&index_entry);
-      rewrite_batches_without_callback_.emplace_back(
-          std::make_pair(WriteBatch(), blob_index.blob_handle.size));
-      auto& wb = rewrite_batches_without_callback_.back().first;
-      s = WriteBatchInternal::Merge(&wb, cfh->GetID(), blob_record.key,
-                                    index_entry);
-    }
+    BlobFileBuilder::OutContexts contexts;
+    blob_file_builder->Add(blob_record, std::move(ctx), &contexts);
+
+    BatchWriteNewIndices(contexts, &s);
+
     if (!s.ok()) {
       break;
     }
@@ -279,6 +267,48 @@ Status BlobGCJob::DoRunGC() {
   }
 
   return s;
+}
+
+void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
+                                     Status* s) {
+  auto* cfh = blob_gc_->column_family_handle();
+  for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
+       contexts) {
+    MergeBlobIndex merge_blob_index;
+    merge_blob_index.file_number = ctx->new_blob_index.file_number;
+    merge_blob_index.source_file_number = ctx->original_blob_index.file_number;
+    merge_blob_index.source_file_offset =
+        ctx->original_blob_index.blob_handle.offset;
+    merge_blob_index.blob_handle = ctx->new_blob_index.blob_handle;
+
+    std::string index_entry;
+    BlobIndex original_index = ctx->original_blob_index;
+    ParsedInternalKey ikey;
+    if (!ParseInternalKey(ctx->key, &ikey)) {
+      *s = Status::Corruption(Slice());
+      return;
+    }
+    if (!gc_merge_rewrite_) {
+      merge_blob_index.EncodeToBase(&index_entry);
+      // Store WriteBatch for rewriting new Key-Index pairs to LSM
+      GarbageCollectionWriteCallback callback(cfh, ikey.user_key.ToString(),
+                                              std::move(original_index));
+      callback.value = index_entry;
+      rewrite_batches_.emplace_back(
+          std::make_pair(WriteBatch(), std::move(callback)));
+      auto& wb = rewrite_batches_.back().first;
+      *s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), ikey.user_key,
+                                            index_entry);
+    } else {
+      merge_blob_index.EncodeTo(&index_entry);
+      rewrite_batches_without_callback_.emplace_back(
+          std::make_pair(WriteBatch(), original_index.blob_handle.size));
+      auto& wb = rewrite_batches_without_callback_.back().first;
+      *s = WriteBatchInternal::Merge(&wb, cfh->GetID(), ikey.user_key,
+                                     index_entry);
+    }
+    if (!s->ok()) break;
+  }
 }
 
 Status BlobGCJob::BuildIterator(
@@ -350,13 +380,13 @@ Status BlobGCJob::Finish() {
       TEST_SYNC_POINT("BlobGCJob::Finish::BeforeRewriteValidKeyToLSM");
       s = RewriteValidKeyToLSM();
       if (!s.ok()) {
-        ROCKS_LOG_ERROR(db_options_.info_log,
+        TITAN_LOG_ERROR(db_options_.info_log,
                         "[%s] GC job failed to rewrite keys to LSM: %s",
                         blob_gc_->column_family_handle()->GetName().c_str(),
                         s.ToString().c_str());
       }
     } else {
-      ROCKS_LOG_ERROR(db_options_.info_log,
+      TITAN_LOG_ERROR(db_options_.info_log,
                       "[%s] GC job failed to install output blob files: %s",
                       blob_gc_->column_family_handle()->GetName().c_str(),
                       s.ToString().c_str());
@@ -378,34 +408,34 @@ Status BlobGCJob::Finish() {
 
 Status BlobGCJob::InstallOutputBlobFiles() {
   Status s;
+  std::vector<
+      std::pair<std::shared_ptr<BlobFileMeta>, std::unique_ptr<BlobFileHandle>>>
+      files;
+  std::string tmp;
   for (auto& builder : blob_file_builders_) {
-    s = builder.second->Finish();
+    BlobFileBuilder::OutContexts contexts;
+    s = builder.second->Finish(&contexts);
+    BatchWriteNewIndices(contexts, &s);
     if (!s.ok()) {
       break;
     }
     metrics_.gc_num_new_files++;
+
+    auto file = std::make_shared<BlobFileMeta>(
+        builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(), 0,
+        0, builder.second->GetSmallestKey(), builder.second->GetLargestKey());
+    file->set_live_data_size(builder.second->live_data_size());
+    file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
+    RecordInHistogram(statistics(stats_), TITAN_GC_OUTPUT_FILE_SIZE,
+                      file->file_size());
+    if (!tmp.empty()) {
+      tmp.append(" ");
+    }
+    tmp.append(std::to_string(file->file_number()));
+    files.emplace_back(std::make_pair(file, std::move(builder.first)));
   }
   if (s.ok()) {
-    std::vector<std::pair<std::shared_ptr<BlobFileMeta>,
-                          std::unique_ptr<BlobFileHandle>>>
-        files;
-    std::string tmp;
-    for (auto& builder : blob_file_builders_) {
-      auto file = std::make_shared<BlobFileMeta>(
-          builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(),
-          0, 0, builder.second->GetSmallestKey(),
-          builder.second->GetLargestKey());
-      file->set_live_data_size(builder.second->live_data_size());
-      file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
-      RecordInHistogram(statistics(stats_), TITAN_GC_OUTPUT_FILE_SIZE,
-                        file->file_size());
-      if (!tmp.empty()) {
-        tmp.append(" ");
-      }
-      tmp.append(std::to_string(file->file_number()));
-      files.emplace_back(std::make_pair(file, std::move(builder.first)));
-    }
-    ROCKS_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
+    TITAN_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
                      blob_gc_->column_family_handle()->GetName().c_str(),
                      tmp.c_str());
     s = blob_file_manager_->BatchFinishFiles(
@@ -425,21 +455,22 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       to_delete_files.append(std::to_string(builder.first->GetNumber()));
       handles.emplace_back(std::move(builder.first));
     }
-    ROCKS_LOG_BUFFER(log_buffer_,
+    TITAN_LOG_BUFFER(log_buffer_,
                      "[%s] InstallOutputBlobFiles failed. Delete GC output "
                      "files: %s",
                      blob_gc_->column_family_handle()->GetName().c_str(),
                      to_delete_files.c_str());
-    // Do not set status `s` here, cause it may override the non-okay-status of
-    // `s` so that in the outer funcation it will rewrite blob indexes to LSM by
-    // mistake.
+    // Do not set status `s` here, cause it may override the non-okay-status
+    // of `s` so that in the outer funcation it will rewrite blob indexes to
+    // LSM by mistake.
     Status status = blob_file_manager_->BatchDeleteFiles(handles);
     if (!status.ok()) {
-      ROCKS_LOG_WARN(db_options_.info_log,
+      TITAN_LOG_WARN(db_options_.info_log,
                      "Delete GC output files[%s] failed: %s",
                      to_delete_files.c_str(), status.ToString().c_str());
     }
   }
+
   return s;
 }
 
@@ -525,7 +556,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
     if (blob_storage) {
       auto file = blob_storage->FindFile(blob_file.first).lock();
       if (!file) {
-        ROCKS_LOG_ERROR(db_options_.info_log,
+        TITAN_LOG_ERROR(db_options_.info_log,
                         "Blob File %" PRIu64 " not found when GC.",
                         blob_file.first);
         continue;
@@ -536,7 +567,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
 
       blob_storage->ComputeGCScore();
     } else {
-      ROCKS_LOG_ERROR(db_options_.info_log,
+      TITAN_LOG_ERROR(db_options_.info_log,
                       "Column family id:%" PRIu32 " not Found when GC.", cf_id);
     }
   }
@@ -557,7 +588,7 @@ Status BlobGCJob::DeleteInputBlobFiles() {
   VersionEdit edit;
   edit.SetColumnFamilyID(blob_gc_->column_family_handle()->GetID());
   for (const auto& file : blob_gc_->inputs()) {
-    ROCKS_LOG_INFO(db_options_.info_log,
+    TITAN_LOG_INFO(db_options_.info_log,
                    "Titan add obsolete file [%" PRIu64 "] range [%s, %s]",
                    file->file_number(),
                    Slice(file->smallest_key()).ToString(true).c_str(),

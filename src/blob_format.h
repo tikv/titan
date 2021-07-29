@@ -61,15 +61,32 @@ struct BlobRecord {
 
 class BlobEncoder {
  public:
-  BlobEncoder(CompressionType compression,
-              const CompressionDict& compression_dict)
-      : compression_ctx_(compression),
-        compression_info_(compression_opt_, compression_ctx_, compression_dict,
-                          compression, 0 /*sample_for_compression*/) {}
+  BlobEncoder(CompressionType compression, CompressionOptions compression_opt,
+              const CompressionDict* compression_dict)
+      : compression_opt_(compression_opt),
+        compression_ctx_(compression),
+        compression_dict_(compression_dict),
+        compression_info_(new CompressionInfo(
+            compression_opt_, compression_ctx_, *compression_dict_, compression,
+            0 /*sample_for_compression*/)) {}
   BlobEncoder(CompressionType compression)
-      : BlobEncoder(compression, CompressionDict::GetEmptyDict()) {}
+      : BlobEncoder(compression, CompressionOptions(),
+                    &CompressionDict::GetEmptyDict()) {}
+  BlobEncoder(CompressionType compression,
+              const CompressionDict* compression_dict)
+      : BlobEncoder(compression, CompressionOptions(), compression_dict) {}
+  BlobEncoder(CompressionType compression, CompressionOptions compression_opt)
+      : BlobEncoder(compression, compression_opt,
+                    &CompressionDict::GetEmptyDict()) {}
 
   void EncodeRecord(const BlobRecord& record);
+  void EncodeSlice(const Slice& record);
+  void SetCompressionDict(const CompressionDict* compression_dict) {
+    compression_dict_ = compression_dict;
+    compression_info_.reset(new CompressionInfo(
+        compression_opt_, compression_ctx_, *compression_dict_,
+        compression_info_->type(), compression_info_->SampleForCompression()));
+  }
 
   Slice GetHeader() const { return Slice(header_, sizeof(header_)); }
   Slice GetRecord() const { return record_; }
@@ -83,17 +100,25 @@ class BlobEncoder {
   std::string compressed_buffer_;
   CompressionOptions compression_opt_;
   CompressionContext compression_ctx_;
-  CompressionInfo compression_info_;
+  const CompressionDict* compression_dict_;
+  std::unique_ptr<CompressionInfo> compression_info_;
 };
 
 class BlobDecoder {
  public:
-  BlobDecoder(const UncompressionDict& uncompression_dict)
-      : uncompression_dict_(uncompression_dict) {}
-  BlobDecoder() : BlobDecoder(UncompressionDict::GetEmptyDict()) {}
+  BlobDecoder(const UncompressionDict* uncompression_dict,
+              CompressionType compression = kNoCompression)
+      : compression_(compression), uncompression_dict_(uncompression_dict) {}
+
+  BlobDecoder()
+      : BlobDecoder(&UncompressionDict::GetEmptyDict(), kNoCompression) {}
 
   Status DecodeHeader(Slice* src);
   Status DecodeRecord(Slice* src, BlobRecord* record, OwnedSlice* buffer);
+
+  void SetUncompressionDict(const UncompressionDict* uncompression_dict) {
+    uncompression_dict_ = uncompression_dict;
+  }
 
   size_t GetRecordSize() const { return record_size_; }
 
@@ -102,7 +127,7 @@ class BlobDecoder {
   uint32_t header_crc_{0};
   uint32_t record_size_{0};
   CompressionType compression_{kNoCompression};
-  const UncompressionDict& uncompression_dict_;
+  const UncompressionDict* uncompression_dict_;
 };
 
 // Format of blob handle (not fixed size):
@@ -263,6 +288,7 @@ class BlobFileMeta {
                 (file_size_ - kBlobMaxHeaderSize - kBlobFooterSize));
   }
   TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
+  void Dump(bool with_keys) const;
 
  private:
   // Persistent field
@@ -352,10 +378,6 @@ struct BlobFileFooter {
   static const uint64_t kEncodedLength{kBlobFooterSize};
 
   BlockHandle meta_index_handle{BlockHandle::NullBlockHandle()};
-
-  // Points to a uncompression dictionary (which is also pointed to by the meta
-  // index) when `kHasUncompressionDictionary` is set in the header.
-  BlockHandle uncompression_dict_handle{BlockHandle::NullBlockHandle()};
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);

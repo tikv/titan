@@ -1,12 +1,14 @@
 #pragma once
 
+#include <inttypes.h>
+
+#include <algorithm>
 #include <unordered_map>
 
 #include "blob_file_set.h"
+#include "titan_logging.h"
 #include "util/string_util.h"
 #include "version_edit.h"
-
-#include <inttypes.h>
 
 namespace rocksdb {
 namespace titandb {
@@ -104,6 +106,17 @@ class EditCollector {
     return Status::Corruption("No next file number in manifest file");
   }
 
+  void Dump(bool with_keys) const {
+    if (has_next_file_number_) {
+      fprintf(stdout, "next_file_number: %" PRIu64 "\n", next_file_number_);
+      for (auto& cf : column_families_) {
+        fprintf(stdout, "column family: %" PRIu32 "\n", cf.first);
+        cf.second.Dump(with_keys);
+        fprintf(stdout, "\n");
+      }
+    }
+  }
+
  private:
   class CFEditCollector {
    public:
@@ -132,13 +145,13 @@ class EditCollector {
         auto blob = storage->FindFile(number).lock();
         if (blob) {
           if (blob->is_obsolete()) {
-            ROCKS_LOG_ERROR(storage->db_options().info_log,
+            TITAN_LOG_ERROR(storage->db_options().info_log,
                             "blob file %" PRIu64 " has been deleted before\n",
                             number);
             return Status::Corruption("Blob file " + ToString(number) +
                                       " has been deleted before");
           } else {
-            ROCKS_LOG_ERROR(storage->db_options().info_log,
+            TITAN_LOG_ERROR(storage->db_options().info_log,
                             "blob file %" PRIu64 " has been added before\n",
                             number);
             return Status::Corruption("Blob file " + ToString(number) +
@@ -154,13 +167,13 @@ class EditCollector {
         }
         auto blob = storage->FindFile(number).lock();
         if (!blob) {
-          ROCKS_LOG_ERROR(storage->db_options().info_log,
+          TITAN_LOG_ERROR(storage->db_options().info_log,
                           "blob file %" PRIu64 " doesn't exist before\n",
                           number);
           return Status::Corruption("Blob file " + ToString(number) +
                                     " doesn't exist before");
         } else if (blob->is_obsolete()) {
-          ROCKS_LOG_ERROR(storage->db_options().info_log,
+          TITAN_LOG_ERROR(storage->db_options().info_log,
                           "blob file %" PRIu64 " has been deleted already\n",
                           number);
           return Status::Corruption("Blob file " + ToString(number) +
@@ -194,6 +207,31 @@ class EditCollector {
 
       storage->ComputeGCScore();
       return Status::OK();
+    }
+
+    void Dump(bool with_keys) const {
+      std::vector<uint64_t> files;
+      files.reserve(added_files_.size());
+      for (auto& file : added_files_) {
+        files.push_back(file.first);
+      }
+      std::sort(files.begin(), files.end());
+      for (uint64_t file : files) {
+        if (deleted_files_.count(file) == 0) {
+          added_files_.at(file)->Dump(with_keys);
+        }
+      }
+      bool has_additional_deletion = false;
+      for (auto& file : deleted_files_) {
+        if (added_files_.count(file.first) == 0) {
+          if (!has_additional_deletion) {
+            fprintf(stdout, "additional deletion:\n");
+            has_additional_deletion = true;
+          }
+          fprintf(stdout, "file %" PRIu64 ", seq %" PRIu64 "\n", file.first,
+                  file.second);
+        }
+      }
     }
 
    private:
