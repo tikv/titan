@@ -125,7 +125,7 @@ Status BlobFileReader::ReadHeader(std::unique_ptr<RandomAccessFileReader>& file,
       file->Read(0, BlobFileHeader::kMaxEncodedLength, &buffer, buffer.get());
   if (!s.ok()) return s;
 
-  s = DecodeInto(buffer, header);
+  s = DecodeInto(buffer, header, true /*ignore_extra_bytes*/);
 
   return s;
 }

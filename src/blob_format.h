@@ -352,6 +352,14 @@ struct BlobFileHeader {
   uint32_t version = kVersion2;
   uint32_t flags = 0;
 
+  static Status ValidateVersion(uint32_t ver) {
+    if (ver != BlobFileHeader::kVersion1 && ver != BlobFileHeader::kVersion2) {
+      return Status::InvalidArgument("unrecognized blob file version " +
+                                     ToString(ver));
+    }
+    return Status::OK();
+  }
+
   uint64_t size() const {
     return version == BlobFileHeader::kVersion1
                ? BlobFileHeader::kMinEncodedLength
@@ -387,11 +395,12 @@ struct BlobFileFooter {
 
 // A convenient template to decode a const slice.
 template <typename T>
-Status DecodeInto(const Slice& src, T* target) {
-  auto tmp = src;
-  auto s = target->DecodeFrom(&tmp);
-  if (s.ok() && !tmp.empty()) {
-    s = Status::Corruption(Slice());
+Status DecodeInto(const Slice& src, T* target,
+                  bool ignore_extra_bytes = false) {
+  Slice tmp = src;
+  Status s = target->DecodeFrom(&tmp);
+  if (!ignore_extra_bytes && s.ok() && !tmp.empty()) {
+    s = Status::Corruption("redundant bytes when decoding blob file");
   }
   return s;
 }

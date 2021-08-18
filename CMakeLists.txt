@@ -156,6 +156,10 @@ if (WITH_TITAN_TOOLS)
   add_executable(titan_manifest_dump tools/manifest_dump.cc)
   target_include_directories(titan_manifest_dump PRIVATE ${gflags_INCLUDE_DIR})
   target_link_libraries(titan_manifest_dump ${TOOLS_LIBS})
+  
+  add_executable(titan_blob_file_dump tools/blob_file_dump.cc)
+  target_include_directories(titan_blob_file_dump PRIVATE ${gflags_INCLUDE_DIR})
+  target_link_libraries(titan_blob_file_dump ${TOOLS_LIBS})
 endif()
 
 # Installation - copy lib/ and include/
