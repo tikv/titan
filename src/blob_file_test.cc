@@ -50,7 +50,8 @@ class BlobFileTest : public testing::Test {
     return s;
   }
 
-  void TestBlobFilePrefetcher(TitanOptions options) {
+  void TestBlobFilePrefetcher(TitanOptions options,
+                              uint32_t blob_file_version = 0) {
     options.dirname = dirname_;
     TitanDBOptions db_options(options);
     TitanCFOptions cf_options(options);
@@ -66,8 +67,15 @@ class BlobFileTest : public testing::Test {
       file.reset(
           new WritableFileWriter(std::move(f), file_name_, env_options_));
     }
-    std::unique_ptr<BlobFileBuilder> builder(
-        new BlobFileBuilder(db_options, cf_options, file.get()));
+    std::unique_ptr<BlobFileBuilder> builder;
+    if (blob_file_version == 0) {
+      // Default blob file version
+      builder.reset(new BlobFileBuilder(db_options, cf_options, file.get()));
+    } else {
+      // Test with specific blob file version
+      builder.reset(new BlobFileBuilder(db_options, cf_options, file.get(),
+                                        blob_file_version));
+    }
 
     for (int i = 0; i < n; i++) {
       auto key = GenKey(i);
@@ -115,7 +123,8 @@ class BlobFileTest : public testing::Test {
     }
   }
 
-  void TestBlobFileReader(TitanOptions options) {
+  void TestBlobFileReader(TitanOptions options,
+                          uint32_t blob_file_version = 0) {
     options.dirname = dirname_;
     TitanDBOptions db_options(options);
     TitanCFOptions cf_options(options);
@@ -131,8 +140,16 @@ class BlobFileTest : public testing::Test {
       file.reset(
           new WritableFileWriter(std::move(f), file_name_, env_options_));
     }
-    std::unique_ptr<BlobFileBuilder> builder(
-        new BlobFileBuilder(db_options, cf_options, file.get()));
+
+    std::unique_ptr<BlobFileBuilder> builder;
+    if (blob_file_version == 0) {
+      // Default blob file version
+      builder.reset(new BlobFileBuilder(db_options, cf_options, file.get()));
+    } else {
+      // Test with specific blob file version
+      builder.reset(new BlobFileBuilder(db_options, cf_options, file.get(),
+                                        blob_file_version));
+    }
 
     for (int i = 0; i < n; i++) {
       auto key = GenKey(i);
@@ -197,6 +214,7 @@ class BlobFileTest : public testing::Test {
 TEST_F(BlobFileTest, BlobFileReader) {
   TitanOptions options;
   TestBlobFileReader(options);
+  TestBlobFileReader(options, BlobFileHeader::kVersion1);
   options.blob_file_compression = kLZ4Compression;
   TestBlobFileReader(options);
 }
@@ -204,6 +222,7 @@ TEST_F(BlobFileTest, BlobFileReader) {
 TEST_F(BlobFileTest, BlobFilePrefetcher) {
   TitanOptions options;
   TestBlobFilePrefetcher(options);
+  TestBlobFilePrefetcher(options, BlobFileHeader::kVersion1);
   options.blob_cache = NewLRUCache(1 << 20);
   TestBlobFilePrefetcher(options);
   options.blob_file_compression = kLZ4Compression;
