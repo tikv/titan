@@ -5,26 +5,38 @@ namespace titandb {
 
 BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
                                  const TitanCFOptions& cf_options,
-                                 WritableFileWriter* file)
+                                 WritableFileWriter* file,
+                                 uint32_t blob_file_version)
     : builder_state_(cf_options.blob_file_compression_options.max_dict_bytes > 0
                          ? BuilderState::kBuffered
                          : BuilderState::kUnbuffered),
       cf_options_(cf_options),
       file_(file),
+      blob_file_version_(blob_file_version),
       encoder_(cf_options.blob_file_compression,
                cf_options.blob_file_compression_options) {
-#if ZSTD_VERSION_NUMBER < 10103
-  if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
-    status_ = Status::NotSupported("ZSTD version too old.");
+  status_ = BlobFileHeader::ValidateVersion(blob_file_version_);
+  if (!status_.ok()) {
     return;
   }
+  if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
+    if (blob_file_version_ != BlobFileHeader::kVersion2) {
+      status_ = Status::NotSupported(
+          "dictionary comparession is not supported by blob file version 1");
+    }
+#if ZSTD_VERSION_NUMBER < 10103
+    status_ = Status::NotSupported("ZSTD version too old.");
+    return;
 #endif
+  }
   WriteHeader();
 }
 
 void BlobFileBuilder::WriteHeader() {
   BlobFileHeader header;
+  header.version = blob_file_version_;
   if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
+    assert(blob_file_version_ == BlobFileHeader::kVersion2);
     header.flags |= BlobFileHeader::kHasUncompressionDictionary;
   }
   std::string buffer;
@@ -174,6 +186,7 @@ Status BlobFileBuilder::Finish(OutContexts* out_ctx) {
   BlobFileFooter footer;
   // if has compression dictionary, encode it into meta blocks
   if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
+    assert(blob_file_version_ == BlobFileHeader::kVersion2);
     BlockHandle meta_index_handle;
     MetaIndexBuilder meta_index_builder;
     WriteCompressionDictBlock(&meta_index_builder);
