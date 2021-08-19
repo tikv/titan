@@ -22,7 +22,7 @@ namespace titandb {
 int blob_file_dump() {
   Env* env = Env::Default();
   Status s;
-    
+
   std::string file_name = FLAGS_path;
   uint64_t file_size = 0;
   s = env->GetFileSize(file_name, &file_size);
@@ -35,7 +35,7 @@ int blob_file_dump() {
   file.reset(new RandomAccessFileReader(std::move(f), file_name));
 
   std::unique_ptr<BlobFileIterator> iter(new BlobFileIterator(
-      std::move(file), 1/*fake file number*/, file_size, TitanCFOptions()));
+      std::move(file), 1 /*fake file number*/, file_size, TitanCFOptions()));
 
   iter->SeekToFirst();
   while (iter->Valid()) {
