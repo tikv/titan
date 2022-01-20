@@ -3,15 +3,14 @@
 namespace rocksdb {
 namespace titandb {
 
-BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
-                                 const TitanCFOptions& cf_options,
-                                 WritableFileWriter* file,
+BlobFileBuilder::BlobFileBuilder(const TitanDBOptions &db_options,
+                                 const TitanCFOptions &cf_options,
+                                 WritableFileWriter *file,
                                  uint32_t blob_file_version)
     : builder_state_(cf_options.blob_file_compression_options.max_dict_bytes > 0
                          ? BuilderState::kBuffered
                          : BuilderState::kUnbuffered),
-      cf_options_(cf_options),
-      file_(file),
+      cf_options_(cf_options), file_(file),
       blob_file_version_(blob_file_version),
       encoder_(cf_options.blob_file_compression,
                cf_options.blob_file_compression_options) {
