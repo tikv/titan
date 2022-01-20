@@ -589,6 +589,7 @@ void TitanDBImpl::AsyncWrite(const WriteOptions &options, WriteBatch *updates,
 Status TitanDBImpl::Delete(const rocksdb::WriteOptions& options,
                            rocksdb::ColumnFamilyHandle* column_family,
                            const rocksdb::Slice& key) {
+  return HasBGError() ? GetBGError() : db_->Delete(options, column_family, key);
 }
 
 Status TitanDBImpl::IngestExternalFile(
