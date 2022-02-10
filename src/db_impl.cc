@@ -573,19 +573,6 @@ Status TitanDBImpl::Write(const rocksdb::WriteOptions& options,
   return HasBGError() ? GetBGError() : db_->Write(options, updates);
 }
 
-void TitanDBImpl::AsyncWrite(const WriteOptions &options, WriteBatch *updates,
-                             CommitRequest *request) {
-
-  if (HasBGError()) {
-    if (request != nullptr) {
-      request->ctx->SetStatus(GetBGError());
-      request->ctx->Notify();
-    }
-  } else {
-    db_->AsyncWrite(options, updates, request);
-  }
-}
-
 Status TitanDBImpl::Delete(const rocksdb::WriteOptions& options,
                            rocksdb::ColumnFamilyHandle* column_family,
                            const rocksdb::Slice& key) {

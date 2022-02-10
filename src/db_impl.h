@@ -1,7 +1,6 @@
 #pragma once
 
 #include "db/db_impl/db_impl.h"
-#include "rocksdb/async_write.h"
 #include "rocksdb/statistics.h"
 #include "rocksdb/threadpool.h"
 #include "util/repeatable_thread.h"
@@ -65,10 +64,6 @@ class TitanDBImpl : public TitanDB {
 
   using TitanDB::Write;
   Status Write(const WriteOptions& options, WriteBatch* updates) override;
-
-  using TitanDB::AsyncWrite;
-  virtual void AsyncWrite(const WriteOptions &options, WriteBatch *updates,
-                          CommitRequest *request) override;
 
   using TitanDB::Delete;
   Status Delete(const WriteOptions& options, ColumnFamilyHandle* column_family,
