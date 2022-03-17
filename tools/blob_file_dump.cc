@@ -10,17 +10,17 @@ using GFLAGS_NAMESPACE::SetUsageMessage;
 DEFINE_string(path, "", "Path of blob file.");
 DEFINE_bool(dump, false, "");
 
-#define handle_error(s, location)                                              \
-  if (!s.ok()) {                                                               \
-    fprintf(stderr, "error when %s: %s\n", location, s.ToString().c_str());    \
-    return 1;                                                                  \
+#define handle_error(s, location)                                           \
+  if (!s.ok()) {                                                            \
+    fprintf(stderr, "error when %s: %s\n", location, s.ToString().c_str()); \
+    return 1;                                                               \
   }
 
 namespace rocksdb {
 namespace titandb {
 
 int blob_file_dump() {
-  Env *env = Env::Default();
+  Env* env = Env::Default();
   Status s;
 
   std::string file_name = FLAGS_path;
@@ -50,10 +50,10 @@ int blob_file_dump() {
   return 0;
 }
 
-} // namespace titandb
-} // namespace rocksdb
+}  // namespace titandb
+}  // namespace rocksdb
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   SetUsageMessage(std::string("\nUSAGE\n") + std::string(argv[0]) +
                   " [OPTIONS]...");
   ParseCommandLineFlags(&argc, &argv, true);
