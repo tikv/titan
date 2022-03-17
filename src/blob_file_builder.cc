@@ -5,7 +5,7 @@ namespace titandb {
 
 BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
                                  const TitanCFOptions& cf_options,
-                                 WritableFileWriter *file,
+                                 WritableFileWriter* file,
                                  uint32_t blob_file_version)
     : builder_state_(cf_options.blob_file_compression_options.max_dict_bytes > 0
                          ? BuilderState::kBuffered
