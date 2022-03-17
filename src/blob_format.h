@@ -395,7 +395,7 @@ struct BlobFileFooter {
 
 // A convenient template to decode a const slice.
 template <typename T>
-Status DecodeInto(const Slice &src, T *target,
+Status DecodeInto(const Slice& src, T* target,
                   bool ignore_extra_bytes = false) {
   Slice tmp = src;
   Status s = target->DecodeFrom(&tmp);
