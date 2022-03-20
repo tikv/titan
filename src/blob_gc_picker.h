@@ -2,14 +2,15 @@
 
 #include <memory>
 
+#include "db/column_family.h"
+#include "db/write_callback.h"
+#include "file/filename.h"
+#include "rocksdb/status.h"
+
 #include "blob_file_manager.h"
 #include "blob_format.h"
 #include "blob_gc.h"
 #include "blob_storage.h"
-#include "db/column_family.h"
-#include "db/write_callback.h"
-#include "rocksdb/status.h"
-#include "util/filename.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -28,7 +29,7 @@ class BlobGCPicker {
 
 class BasicBlobGCPicker final : public BlobGCPicker {
  public:
-  BasicBlobGCPicker(TitanDBOptions, TitanCFOptions);
+  BasicBlobGCPicker(TitanDBOptions, TitanCFOptions, TitanStats*);
   ~BasicBlobGCPicker();
 
   std::unique_ptr<BlobGC> PickBlobGC(BlobStorage* blob_storage) override;
@@ -36,6 +37,7 @@ class BasicBlobGCPicker final : public BlobGCPicker {
  private:
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
+  TitanStats* stats_;
 
   // Check if blob_file needs to gc, return true means we need pick this
   // file for gc

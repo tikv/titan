@@ -1,27 +1,33 @@
 #pragma once
 
+#include <atomic>
+
 #include "blob_file_manager.h"
+#include "blob_file_set.h"
 #include "rocksdb/table.h"
 #include "titan/options.h"
 #include "titan_stats.h"
-#include "version_set.h"
 
 namespace rocksdb {
 namespace titandb {
 
+class TitanDBImpl;
+
 class TitanTableFactory : public TableFactory {
  public:
   TitanTableFactory(const TitanDBOptions& db_options,
-                    const TitanCFOptions& cf_options,
+                    const TitanCFOptions& cf_options, TitanDBImpl* db_impl,
                     std::shared_ptr<BlobFileManager> blob_manager,
-                    port::Mutex* db_mutex, VersionSet* vset, TitanStats* stats)
+                    port::Mutex* db_mutex, BlobFileSet* blob_file_set,
+                    TitanStats* stats)
       : db_options_(db_options),
-        immutable_cf_options_(cf_options),
-        mutable_cf_options_(cf_options),
+        cf_options_(cf_options),
+        blob_run_mode_(cf_options.blob_run_mode),
         base_factory_(cf_options.table_factory),
+        db_impl_(db_impl),
         blob_manager_(blob_manager),
         db_mutex_(db_mutex),
-        vset_(vset),
+        blob_file_set_(blob_file_set),
         stats_(stats) {}
 
   const char* Name() const override { return "TitanTable"; }
@@ -52,25 +58,21 @@ class TitanTableFactory : public TableFactory {
 
   void* GetOptions() override { return base_factory_->GetOptions(); }
 
-  void SetBlobRunMode(TitanBlobRunMode mode) {
-    MutexLock l(&mutex_);
-    mutable_cf_options_.blob_run_mode = mode;
-  }
+  void SetBlobRunMode(TitanBlobRunMode mode) { blob_run_mode_.store(mode); }
 
   bool IsDeleteRangeSupported() const override {
     return base_factory_->IsDeleteRangeSupported();
   }
 
  private:
-  mutable port::Mutex mutex_;
-
-  TitanDBOptions db_options_;
-  ImmutableTitanCFOptions immutable_cf_options_;
-  MutableTitanCFOptions mutable_cf_options_;
+  const TitanDBOptions db_options_;
+  const TitanCFOptions cf_options_;
+  std::atomic<TitanBlobRunMode> blob_run_mode_;
   std::shared_ptr<TableFactory> base_factory_;
+  TitanDBImpl* db_impl_;
   std::shared_ptr<BlobFileManager> blob_manager_;
   port::Mutex* db_mutex_;
-  VersionSet* vset_;
+  BlobFileSet* blob_file_set_;
   TitanStats* stats_;
 };
 

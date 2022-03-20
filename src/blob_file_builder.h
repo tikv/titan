@@ -1,7 +1,10 @@
 #pragma once
 
 #include "blob_format.h"
+#include "table/meta_blocks.h"
 #include "titan/options.h"
+#include "util/autovector.h"
+#include "util/compression.h"
 #include "util/file_reader_writer.h"
 
 namespace rocksdb {
@@ -30,38 +33,114 @@ namespace titandb {
 // meta index block with block handles pointed to the meta blocks. The
 // meta block and the meta index block are formatted the same as the
 // BlockBasedTable.
-
 class BlobFileBuilder {
  public:
+  // States of the builder.
+  //
+  // - `kBuffered`: This is the initial state where zero or more data blocks are
+  //   accumulated uncompressed in-memory. From this state, call
+  //   `EnterUnbuffered()` to finalize the compression dictionary if enabled,
+  //   compress/write out any buffered blocks, and proceed to the `kUnbuffered`
+  //   state.
+  //
+  // - `kUnbuffered`: This is the state when compression dictionary is finalized
+  //   either because it wasn't enabled in the first place or it's been created
+  //   from sampling previously buffered data. In this state, blocks are simply
+  //   compressed/written out as they fill up. From this state, call `Finish()`
+  //   to complete the file (write meta-blocks, etc.), or `Abandon()` to delete
+  //   the partially created file.
+  enum class BuilderState {
+    kBuffered,
+    kUnbuffered,
+  };
+
+  struct BlobRecordContext {
+    std::string key;  // original internal key
+    BlobIndex original_blob_index;
+    BlobIndex new_blob_index;
+    bool has_value = false;
+    std::string value;
+  };
+  typedef autovector<std::unique_ptr<BlobRecordContext>> OutContexts;
+
   // Constructs a builder that will store the contents of the file it
   // is building in "*file". Does not close the file. It is up to the
   // caller to sync and close the file after calling Finish().
   BlobFileBuilder(const TitanDBOptions& db_options,
-                  const TitanCFOptions& cf_options, WritableFileWriter* file);
+                  const TitanCFOptions& cf_options, WritableFileWriter* file,
+                  uint32_t blob_file_version = BlobFileHeader::kVersion2);
 
-  // Adds the record to the file and points the handle to it.
-  void Add(const BlobRecord& record, BlobHandle* handle);
+  // Tries to add the record to the file
+  // Notice:
+  // 1. The `out_ctx` might be empty when builder is in `kBuffered` state.
+  // 2. Caller should set `ctx.new_blob_index.file_number` before pass it in,
+  //    the file builder will only change the `blob_handle` of it
+  void Add(const BlobRecord& record, std::unique_ptr<BlobRecordContext> ctx,
+           OutContexts* out_ctx);
+
+  // AddSmall is used to prevent the disorder issue, small KV pairs and blob
+  // index block may be passed in here
+  void AddSmall(std::unique_ptr<BlobRecordContext> ctx);
+
+  // Returns builder state
+  BuilderState GetBuilderState() { return builder_state_; }
 
   // Returns non-ok iff some error has been detected.
   Status status() const { return status_; }
 
-  // Finishes building the table.
+  // Finishes building the table, and return status.
+  // This method will return modify output contexts when it is called in
+  // `kBuffered` state.
   // REQUIRES: Finish(), Abandon() have not been called.
-  Status Finish();
+  Status Finish(OutContexts* out_ctx);
 
   // Abandons building the table. If the caller is not going to call
   // Finish(), it must call Abandon() before destroying this builder.
   // REQUIRES: Finish(), Abandon() have not been called.
   void Abandon();
 
+  // Number of calls to Add() so far.
+  uint64_t NumEntries();
+  // Number of sample records
+  uint64_t NumSampleEntries() { return sample_records_.size(); }
+
+  const std::string& GetSmallestKey() { return smallest_key_; }
+  const std::string& GetLargestKey() { return largest_key_; }
+
+  uint64_t live_data_size() const { return live_data_size_; }
+
  private:
+  BuilderState builder_state_;
+
   bool ok() const { return status().ok(); }
+  // Enter unbuffered state, only be called after collecting enough samples
+  // for compression dictionary. It will modify `out_ctx` of the buffered
+  // records
+  void EnterUnbuffered(OutContexts* out_ctx);
+  void WriteHeader();
+  void WriteRawBlock(const Slice& block, BlockHandle* handle);
+  void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder);
+  void FlushSampleRecords(OutContexts* out_ctx);
+  void WriteEncoderData(BlobHandle* handle);
 
   TitanCFOptions cf_options_;
   WritableFileWriter* file_;
+  const uint32_t blob_file_version_;
 
   Status status_;
   BlobEncoder encoder_;
+
+  // following 3 may be refactored in to Rep
+  std::vector<std::string> sample_records_;
+  uint64_t sample_str_len_ = 0;
+  std::unique_ptr<CompressionDict> compression_dict_;
+
+  OutContexts cached_contexts_;
+
+  uint64_t num_entries_ = 0;
+  std::string smallest_key_;
+  std::string largest_key_;
+  uint64_t live_data_size_ = 0;
 };
 
 }  // namespace titandb

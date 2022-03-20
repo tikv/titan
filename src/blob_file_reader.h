@@ -38,6 +38,8 @@ class BlobFileReader {
 
   Status ReadRecord(const BlobHandle& handle, BlobRecord* record,
                     OwnedSlice* buffer);
+  static Status ReadHeader(std::unique_ptr<RandomAccessFileReader>& file,
+                           BlobFileHeader* header);
 
   TitanCFOptions options_;
   std::unique_ptr<RandomAccessFileReader> file_;
@@ -47,6 +49,8 @@ class BlobFileReader {
 
   // Information read from the file.
   BlobFileFooter footer_;
+
+  std::unique_ptr<UncompressionDict> uncompression_dict_ = nullptr;
 
   TitanStats* stats_;
 };
@@ -67,6 +71,13 @@ class BlobFilePrefetcher : public Cleanable {
   uint64_t readahead_size_{0};
   uint64_t readahead_limit_{0};
 };
+
+// Init uncompression dictionary
+// called by BlobFileReader and BlobFileIterator when blob file has
+// uncompression dictionary
+Status InitUncompressionDict(
+    const BlobFileFooter& footer, RandomAccessFileReader* file,
+    std::unique_ptr<UncompressionDict>* uncompression_dict);
 
 }  // namespace titandb
 }  // namespace rocksdb

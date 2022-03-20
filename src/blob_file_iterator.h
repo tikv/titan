@@ -14,6 +14,7 @@
 namespace rocksdb {
 namespace titandb {
 
+// Used by GC job for iterate through blob file.
 class BlobFileIterator {
  public:
   const uint64_t kMinReadaheadSize = 4 << 10;
@@ -31,6 +32,7 @@ class BlobFileIterator {
   Slice key() const;
   Slice value() const;
   Status status() const { return status_; }
+  uint64_t header_size() const { return header_size_; }
 
   void IterateForPrev(uint64_t);
 
@@ -56,13 +58,16 @@ class BlobFileIterator {
   Status status_;
   bool valid_{false};
 
+  std::unique_ptr<UncompressionDict> uncompression_dict_;
   BlobDecoder decoder_;
+
   uint64_t iterate_offset_{0};
   std::vector<char> buffer_;
   OwnedSlice uncompressed_;
   BlobRecord cur_blob_record_;
   uint64_t cur_record_offset_;
   uint64_t cur_record_size_;
+  uint64_t header_size_;
 
   uint64_t readahead_begin_offset_{0};
   uint64_t readahead_end_offset_{0};
@@ -75,7 +80,7 @@ class BlobFileIterator {
 class BlobFileMergeIterator {
  public:
   explicit BlobFileMergeIterator(
-      std::vector<std::unique_ptr<BlobFileIterator>>&&);
+      std::vector<std::unique_ptr<BlobFileIterator>>&&, const Comparator*);
 
   ~BlobFileMergeIterator() = default;
 
@@ -93,19 +98,28 @@ class BlobFileMergeIterator {
   BlobIndex GetBlobIndex() { return current_->GetBlobIndex(); }
 
  private:
-  class IternalComparator {
+  class BlobFileIterComparator {
    public:
+    // The default constructor is not supposed to be used.
+    // It is only to make std::priority_queue can compile.
+    BlobFileIterComparator() : comparator_(nullptr){};
+    explicit BlobFileIterComparator(const Comparator* comparator)
+        : comparator_(comparator){};
     // Smaller value get Higher priority
     bool operator()(const BlobFileIterator* iter1,
                     const BlobFileIterator* iter2) {
-      return BytewiseComparator()->Compare(iter1->key(), iter2->key()) > 0;
+      assert(comparator_ != nullptr);
+      return comparator_->Compare(iter1->key(), iter2->key()) > 0;
     }
+
+   private:
+    const Comparator* comparator_;
   };
 
   Status status_;
   std::vector<std::unique_ptr<BlobFileIterator>> blob_file_iterators_;
   std::priority_queue<BlobFileIterator*, std::vector<BlobFileIterator*>,
-                      IternalComparator>
+                      BlobFileIterComparator>
       min_heap_;
   BlobFileIterator* current_ = nullptr;
 };

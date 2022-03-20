@@ -46,14 +46,23 @@ Status BlobFileSizeCollector::AddUserKey(const Slice& /* key */,
                                          const Slice& value, EntryType type,
                                          SequenceNumber /* seq */,
                                          uint64_t /* file_size */) {
-  if (type != kEntryBlobIndex) {
+  if (type != kEntryBlobIndex && type != kEntryMerge) {
     return Status::OK();
   }
 
-  BlobIndex index;
-  auto s = index.DecodeFrom(const_cast<Slice*>(&value));
+  Status s;
+  MergeBlobIndex index;
+
+  if (type == kEntryMerge) {
+    s = index.DecodeFrom(const_cast<Slice*>(&value));
+  } else {
+    s = index.DecodeFromBase(const_cast<Slice*>(&value));
+  }
   if (!s.ok()) {
     return s;
+  }
+  if (BlobIndex::IsDeletionMarker(index)) {
+    return Status::OK();
   }
 
   auto iter = blob_files_size_.find(index.file_number);
@@ -72,10 +81,9 @@ Status BlobFileSizeCollector::Finish(UserCollectedProperties* properties) {
   }
 
   std::string res;
-  if (!Encode(blob_files_size_, &res) || res.empty()) {
-    fprintf(stderr, "blob file size collector encode failed\n");
-    abort();
-  }
+  bool ok __attribute__((__unused__)) = Encode(blob_files_size_, &res);
+  assert(ok);
+  assert(!res.empty());
   properties->emplace(std::make_pair(kPropertiesName, res));
   return Status::OK();
 }

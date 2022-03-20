@@ -1,11 +1,11 @@
 #pragma once
 
-#include "db_impl.h"
 #include "rocksdb/listener.h"
 
 namespace rocksdb {
-
 namespace titandb {
+
+class TitanDBImpl;
 
 class BaseDbListener final : public EventListener {
  public:
@@ -22,5 +22,4 @@ class BaseDbListener final : public EventListener {
 };
 
 }  // namespace titandb
-
 }  // namespace rocksdb

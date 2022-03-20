@@ -1,15 +1,22 @@
 #include "db_impl.h"
+#include "titan_logging.h"
 
 namespace rocksdb {
 namespace titandb {
 
-void TitanDBImpl::PurgeObsoleteFiles() {
+Status TitanDBImpl::PurgeObsoleteFilesImpl() {
   Status s;
+
+  MutexLock delete_file_lock(&delete_titandb_file_mutex_);
+  if (disable_titandb_file_deletions_ > 0) {
+    return s;
+  }
+
   std::vector<std::string> candidate_files;
   auto oldest_sequence = GetOldestSnapshotSequence();
   {
     MutexLock l(&mutex_);
-    vset_->GetObsoleteFiles(&candidate_files, oldest_sequence);
+    blob_file_set_->GetObsoleteFiles(&candidate_files, oldest_sequence);
   }
 
   // dedup state.inputs so we don't try to delete the same
@@ -20,15 +27,27 @@ void TitanDBImpl::PurgeObsoleteFiles() {
       candidate_files.end());
 
   for (const auto& candidate_file : candidate_files) {
-    ROCKS_LOG_INFO(db_options_.info_log, "Titan deleting obsolete file [%s]",
+    TITAN_LOG_INFO(db_options_.info_log, "Titan deleting obsolete file [%s]",
                    candidate_file.c_str());
-    s = env_->DeleteFile(candidate_file);
+    Status delete_status = env_->DeleteFile(candidate_file);
     if (!s.ok()) {
-      fprintf(stderr, "Titan deleting file [%s] failed, status:%s",
-              candidate_file.c_str(), s.ToString().c_str());
-      abort();
+      // Move on despite error deleting the file.
+      TITAN_LOG_ERROR(db_options_.info_log,
+                      "Titan deleting file [%s] failed, status:%s",
+                      candidate_file.c_str(), s.ToString().c_str());
+      s = delete_status;
     }
   }
+  return s;
+}
+
+void TitanDBImpl::PurgeObsoleteFiles() {
+  Status s __attribute__((__unused__)) = PurgeObsoleteFilesImpl();
+  assert(s.ok());
+}
+
+Status TitanDBImpl::TEST_PurgeObsoleteFiles() {
+  return PurgeObsoleteFilesImpl();
 }
 
 }  // namespace titandb

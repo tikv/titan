@@ -5,8 +5,19 @@
 #include "blob_format.h"
 #include "rocksdb/slice.h"
 
+#include <inttypes.h>
+
 namespace rocksdb {
 namespace titandb {
+
+enum Tag {
+  kNextFileNumber = 1,
+  kColumnFamilyID = 10,
+  kAddedBlobFile = 11,
+  kDeletedBlobFile = 12,  // Deprecated, leave here for backward compatibility
+  kAddedBlobFileV2 = 13,  // Comparing to kAddedBlobFile, it newly includes
+                          // smallest_key and largest_key of blob file
+};
 
 class VersionEdit {
  public:
@@ -21,8 +32,7 @@ class VersionEdit {
     added_files_.push_back(file);
   }
 
-  void DeleteBlobFile(uint64_t file_number,
-                      SequenceNumber obsolete_sequence = 0) {
+  void DeleteBlobFile(uint64_t file_number, SequenceNumber obsolete_sequence) {
     deleted_files_.emplace_back(std::make_pair(file_number, obsolete_sequence));
   }
 
@@ -31,8 +41,12 @@ class VersionEdit {
 
   friend bool operator==(const VersionEdit& lhs, const VersionEdit& rhs);
 
+  void Dump(bool with_keys) const;
+
  private:
-  friend class VersionSet;
+  friend class BlobFileSet;
+  friend class VersionTest;
+  friend class EditCollector;
 
   bool has_next_file_number_{false};
   uint64_t next_file_number_{0};

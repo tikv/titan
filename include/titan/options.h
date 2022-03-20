@@ -1,9 +1,9 @@
 #pragma once
 
-#include "rocksdb/options.h"
-
 #include <map>
 #include <unordered_map>
+
+#include "rocksdb/options.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -25,8 +25,22 @@ struct TitanDBOptions : public DBOptions {
   // Default: 1
   int32_t max_background_gc{1};
 
+  // How often to schedule delete obsolete blob files periods.
+  // If set zero, obsolete blob files won't be deleted.
+  //
+  // Default: 10
+  uint32_t purge_obsolete_files_period_sec{10};  // 10s
+
+  // If non-zero, dump titan internal stats to info log every
+  // titan_stats_dump_period_sec.
+  //
+  // Default: 600 (10 min)
+  uint32_t titan_stats_dump_period_sec{600};
+
   TitanDBOptions() = default;
   explicit TitanDBOptions(const DBOptions& options) : DBOptions(options) {}
+
+  void Dump(Logger* logger) const;
 
   TitanDBOptions& operator=(const DBOptions& options) {
     *static_cast<DBOptions*>(this) = options;
@@ -70,6 +84,12 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: kNoCompression
   CompressionType blob_file_compression{kNoCompression};
 
+  // The compression options. The `blob_file_compression.enabled` option is
+  // ignored, we only use `blob_file_compression` above to determine wether the
+  // blob file is compressed. We use this options mainly to configure the
+  // compression dictionary.
+  CompressionOptions blob_file_compression_options;
+
   // The desirable blob file size. This is not a hard limit but a wish.
   //
   // Default: 256MB
@@ -93,12 +113,12 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // The ratio of how much discardable size of a blob file can be GC.
   //
   // Default: 0.5
-  float blob_file_discardable_ratio{0.5};
+  double blob_file_discardable_ratio{0.5};
 
   // The ratio of how much size of a blob file need to be sample before GC.
   //
   // Default: 0.1
-  float sample_file_size_ratio{0.1};
+  double sample_file_size_ratio{0.1};
 
   // The blob file size less than this option will be mark GC.
   //
@@ -110,18 +130,64 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: kNormal
   TitanBlobRunMode blob_run_mode{TitanBlobRunMode::kNormal};
 
+  // If set true, values in blob file will be merged to a new blob file while
+  // their corresponding keys are compacted to last two level in LSM-Tree.
+  //
+  // With this feature enabled, Titan could get better scan performance, and
+  // better write performance during GC, but will suffer around 1.1 space
+  // amplification and 3 more write amplification if no GC needed (eg. uniformly
+  // distributed keys) under default rocksdb setting.
+  //
+  // Requirement: level_compaction_dynamic_level_base = true
+  // Default: false
+  bool level_merge{false};
+
+  // With level merge enabled, we expect there are no more than 10 sorted runs
+  // of blob files in both of last two levels. But since last level blob files
+  // won't be merged again, sorted runs in last level will increase infinitely.
+  //
+  // With this feature enabled, Titan will check sorted runs of compaction range
+  // after each last level compaction and mark related blob files if there are
+  // too many. These marked blob files will be merged to a new sorted run in
+  // next compaction.
+  //
+  // Default: false
+  bool range_merge{false};
+
+  // Max sorted runs to trigger range merge. Decrease this value will increase
+  // write amplification but get better short range scan performance.
+  //
+  // Default: 20
+  int max_sorted_runs{20};
+
+  // If set true, Titan will rewrite valid blob index from GC output as merge
+  // operands back to data store.
+  //
+  // With this feature enabled, Titan background GC won't block online write,
+  // trade-off being read performance slightly reduced compared to normal
+  // rewrite mode.
+  //
+  // Default: false
+  bool gc_merge_rewrite{false};
+
+  // If set true, Titan will pass empty value in user compaction filter,
+  // improves compaction performance by avoid fetching value from blob files.
+  //
+  // Default: false
+  bool skip_value_in_compaction_filter{false};
+
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}
-  explicit TitanCFOptions(const ImmutableTitanCFOptions&,
-                          const MutableTitanCFOptions&);
+  TitanCFOptions(const ColumnFamilyOptions&, const ImmutableTitanCFOptions&,
+                 const MutableTitanCFOptions&);
 
   TitanCFOptions& operator=(const ColumnFamilyOptions& options) {
     *dynamic_cast<ColumnFamilyOptions*>(this) = options;
     return *this;
   }
 
-  std::string ToString() const;
+  void Dump(Logger* logger) const;
 };
 
 struct ImmutableTitanCFOptions {
@@ -136,7 +202,9 @@ struct ImmutableTitanCFOptions {
         min_gc_batch_size(opts.min_gc_batch_size),
         blob_file_discardable_ratio(opts.blob_file_discardable_ratio),
         sample_file_size_ratio(opts.sample_file_size_ratio),
-        merge_small_file_threshold(opts.merge_small_file_threshold) {}
+        merge_small_file_threshold(opts.merge_small_file_threshold),
+        level_merge(opts.level_merge),
+        skip_value_in_compaction_filter(opts.skip_value_in_compaction_filter) {}
 
   uint64_t min_blob_size;
 
@@ -150,20 +218,26 @@ struct ImmutableTitanCFOptions {
 
   uint64_t min_gc_batch_size;
 
-  float blob_file_discardable_ratio;
+  double blob_file_discardable_ratio;
 
-  float sample_file_size_ratio;
+  double sample_file_size_ratio;
 
   uint64_t merge_small_file_threshold;
+
+  bool level_merge;
+
+  bool skip_value_in_compaction_filter;
 };
 
 struct MutableTitanCFOptions {
   MutableTitanCFOptions() : MutableTitanCFOptions(TitanCFOptions()) {}
 
   explicit MutableTitanCFOptions(const TitanCFOptions& opts)
-      : blob_run_mode(opts.blob_run_mode) {}
+      : blob_run_mode(opts.blob_run_mode),
+        gc_merge_rewrite(opts.gc_merge_rewrite) {}
 
   TitanBlobRunMode blob_run_mode;
+  bool gc_merge_rewrite;
 };
 
 struct TitanOptions : public TitanDBOptions, public TitanCFOptions {
@@ -172,17 +246,36 @@ struct TitanOptions : public TitanDBOptions, public TitanCFOptions {
       : TitanDBOptions(options), TitanCFOptions(options) {}
 
   TitanOptions& operator=(const Options& options) {
-    *dynamic_cast<TitanDBOptions*>(this) = options;
-    *dynamic_cast<TitanCFOptions*>(this) = options;
+    *static_cast<TitanDBOptions*>(this) = options;
+    *static_cast<TitanCFOptions*>(this) = options;
     return *this;
   }
 
   operator Options() {
     Options options;
-    *dynamic_cast<DBOptions*>(&options) = *dynamic_cast<DBOptions*>(this);
-    *dynamic_cast<ColumnFamilyOptions*>(&options) =
-        *dynamic_cast<ColumnFamilyOptions*>(this);
+    *static_cast<DBOptions*>(&options) = *static_cast<DBOptions*>(this);
+    *static_cast<ColumnFamilyOptions*>(&options) =
+        *static_cast<ColumnFamilyOptions*>(this);
     return options;
+  }
+};
+
+struct TitanReadOptions : public ReadOptions {
+  // If true, it will just return keys without indexing value from blob files.
+  // It is mainly used for the scan-delete operation after DeleteFilesInRange.
+  // Cause DeleteFilesInRange may expose old blob index keys, returning key only
+  // avoids referring to missing blob files.
+  //
+  // Default: false
+  bool key_only{false};
+
+  TitanReadOptions() = default;
+  explicit TitanReadOptions(const ReadOptions& options)
+      : ReadOptions(options) {}
+
+  TitanReadOptions& operator=(const ReadOptions& options) {
+    *static_cast<ReadOptions*>(this) = options;
+    return *this;
   }
 };
 

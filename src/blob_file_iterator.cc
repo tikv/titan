@@ -1,5 +1,6 @@
 #include "blob_file_iterator.h"
 
+#include "blob_file_reader.h"
 #include "util.h"
 #include "util/crc32c.h"
 
@@ -18,25 +19,55 @@ BlobFileIterator::~BlobFileIterator() {}
 
 bool BlobFileIterator::Init() {
   Slice slice;
-  char header_buf[BlobFileHeader::kEncodedLength];
-  status_ = file_->Read(0, BlobFileHeader::kEncodedLength, &slice, header_buf);
+  char header_buf[BlobFileHeader::kMaxEncodedLength];
+  // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
+  // is only used for GC, we always set for_compaction to true.
+  status_ = file_->Read(0, BlobFileHeader::kMaxEncodedLength, &slice,
+                        header_buf, true /*for_compaction*/);
   if (!status_.ok()) {
     return false;
   }
   BlobFileHeader blob_file_header;
-  status_ = blob_file_header.DecodeFrom(&slice);
+  status_ = DecodeInto(slice, &blob_file_header, true /*ignore_extra_bytes*/);
   if (!status_.ok()) {
     return false;
   }
+
+  header_size_ = blob_file_header.size();
+
   char footer_buf[BlobFileFooter::kEncodedLength];
+  // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
+  // is only used for GC, we always set for_compaction to true.
   status_ = file_->Read(file_size_ - BlobFileFooter::kEncodedLength,
-                        BlobFileFooter::kEncodedLength, &slice, footer_buf);
+                        BlobFileFooter::kEncodedLength, &slice, footer_buf,
+                        true /*for_compaction*/);
   if (!status_.ok()) return false;
   BlobFileFooter blob_file_footer;
   status_ = blob_file_footer.DecodeFrom(&slice);
-  end_of_blob_record_ = file_size_ - BlobFileFooter::kEncodedLength -
-                        blob_file_footer.meta_index_handle.size();
-  assert(end_of_blob_record_ > BlobFileHeader::kEncodedLength);
+  end_of_blob_record_ = file_size_ - BlobFileFooter::kEncodedLength;
+  if (!blob_file_footer.meta_index_handle.IsNull()) {
+    end_of_blob_record_ -=
+        (blob_file_footer.meta_index_handle.size() + kBlockTrailerSize);
+  }
+
+  if (blob_file_header.flags & BlobFileHeader::kHasUncompressionDictionary) {
+    status_ = InitUncompressionDict(blob_file_footer, file_.get(),
+                                    &uncompression_dict_);
+    if (!status_.ok()) {
+      return false;
+    }
+    decoder_.SetUncompressionDict(uncompression_dict_.get());
+    // the layout of blob file is like:
+    // |  ....   |
+    // | records |
+    // | compression dict + kBlockTrailerSize(5) |
+    // | metaindex block(40) + kBlockTrailerSize(5) |
+    // | footer(kEncodedLength: 32) |
+    end_of_blob_record_ -=
+        (uncompression_dict_->GetRawDict().size() + kBlockTrailerSize);
+  }
+
+  assert(end_of_blob_record_ > BlobFileHeader::kMinEncodedLength);
   init_ = true;
   return true;
 }
@@ -44,7 +75,7 @@ bool BlobFileIterator::Init() {
 void BlobFileIterator::SeekToFirst() {
   if (!init_ && !Init()) return;
   status_ = Status::OK();
-  iterate_offset_ = BlobFileHeader::kEncodedLength;
+  iterate_offset_ = header_size_;
   PrefetchAndGet();
 }
 
@@ -71,15 +102,18 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
   }
 
   uint64_t total_length = 0;
-  FixedSlice<kBlobHeaderSize> header_buffer;
-  iterate_offset_ = BlobFileHeader::kEncodedLength;
+  FixedSlice<kRecordHeaderSize> header_buffer;
+  iterate_offset_ = header_size_;
   for (; iterate_offset_ < offset; iterate_offset_ += total_length) {
-    status_ = file_->Read(iterate_offset_, kBlobHeaderSize, &header_buffer,
-                          header_buffer.get());
+    // With for_compaction=true, rate_limiter is enabled. Since
+    // BlobFileIterator is only used for GC, we always set for_compaction to
+    // true.
+    status_ = file_->Read(iterate_offset_, kRecordHeaderSize, &header_buffer,
+                          header_buffer.get(), true /*for_compaction*/);
     if (!status_.ok()) return;
     status_ = decoder_.DecodeHeader(&header_buffer);
     if (!status_.ok()) return;
-    total_length = kBlobHeaderSize + decoder_.GetRecordSize();
+    total_length = kRecordHeaderSize + decoder_.GetRecordSize();
   }
 
   if (iterate_offset_ > offset) iterate_offset_ -= total_length;
@@ -87,18 +121,22 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
 }
 
 void BlobFileIterator::GetBlobRecord() {
-  FixedSlice<kBlobHeaderSize> header_buffer;
-  status_ = file_->Read(iterate_offset_, kBlobHeaderSize, &header_buffer,
-                        header_buffer.get());
+  FixedSlice<kRecordHeaderSize> header_buffer;
+  // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
+  // is only used for GC, we always set for_compaction to true.
+  status_ = file_->Read(iterate_offset_, kRecordHeaderSize, &header_buffer,
+                        header_buffer.get(), true /*for_compaction*/);
   if (!status_.ok()) return;
   status_ = decoder_.DecodeHeader(&header_buffer);
   if (!status_.ok()) return;
 
   Slice record_slice;
   auto record_size = decoder_.GetRecordSize();
-  buffer_.reserve(record_size);
-  status_ = file_->Read(iterate_offset_ + kBlobHeaderSize, record_size,
-                        &record_slice, buffer_.data());
+  buffer_.resize(record_size);
+  // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
+  // is only used for GC, we always set for_compaction to true.
+  status_ = file_->Read(iterate_offset_ + kRecordHeaderSize, record_size,
+                        &record_slice, buffer_.data(), true /*for_compaction*/);
   if (status_.ok()) {
     status_ =
         decoder_.DecodeRecord(&record_slice, &cur_blob_record_, &uncompressed_);
@@ -106,7 +144,7 @@ void BlobFileIterator::GetBlobRecord() {
   if (!status_.ok()) return;
 
   cur_record_offset_ = iterate_offset_;
-  cur_record_size_ = kBlobHeaderSize + record_size;
+  cur_record_size_ = kRecordHeaderSize + record_size;
   iterate_offset_ += cur_record_size_;
   valid_ = true;
 }
@@ -126,7 +164,7 @@ void BlobFileIterator::PrefetchAndGet() {
     readahead_size_ = kMinReadaheadSize;
   }
   auto min_blob_size =
-      iterate_offset_ + kBlobHeaderSize + titan_cf_options_.min_blob_size;
+      iterate_offset_ + kRecordHeaderSize + titan_cf_options_.min_blob_size;
   if (readahead_end_offset_ <= min_blob_size) {
     while (readahead_end_offset_ + readahead_size_ <= min_blob_size &&
            readahead_size_ < kMaxReadaheadSize)
@@ -144,8 +182,10 @@ void BlobFileIterator::PrefetchAndGet() {
 }
 
 BlobFileMergeIterator::BlobFileMergeIterator(
-    std::vector<std::unique_ptr<BlobFileIterator>>&& blob_file_iterators)
-    : blob_file_iterators_(std::move(blob_file_iterators)) {}
+    std::vector<std::unique_ptr<BlobFileIterator>>&& blob_file_iterators,
+    const Comparator* comparator)
+    : blob_file_iterators_(std::move(blob_file_iterators)),
+      min_heap_(BlobFileIterComparator(comparator)) {}
 
 bool BlobFileMergeIterator::Valid() const {
   if (current_ == nullptr) return false;
@@ -167,11 +207,15 @@ void BlobFileMergeIterator::SeekToFirst() {
 }
 
 void BlobFileMergeIterator::Next() {
-  assert(current_ != nullptr);
+  assert(Valid());
   current_->Next();
   if (current_->status().ok() && current_->Valid()) min_heap_.push(current_);
-  current_ = min_heap_.top();
-  min_heap_.pop();
+  if (!min_heap_.empty()) {
+    current_ = min_heap_.top();
+    min_heap_.pop();
+  } else {
+    current_ = nullptr;
+  }
 }
 
 Slice BlobFileMergeIterator::key() const {

@@ -1,15 +1,16 @@
-#include "version_set.h"
+#include "blob_file_set.h"
 
 #include <inttypes.h>
 
-#include "util/filename.h"
+#include "edit_collector.h"
+#include "titan_logging.h"
 
 namespace rocksdb {
 namespace titandb {
 
 const size_t kMaxFileCacheSize = 1024 * 1024;
 
-VersionSet::VersionSet(const TitanDBOptions& options, TitanStats* stats)
+BlobFileSet::BlobFileSet(const TitanDBOptions& options, TitanStats* stats)
     : dirname_(options.dirname),
       env_(options.env),
       env_options_(options),
@@ -22,7 +23,7 @@ VersionSet::VersionSet(const TitanDBOptions& options, TitanStats* stats)
   file_cache_ = NewLRUCache(file_cache_size);
 }
 
-Status VersionSet::Open(
+Status BlobFileSet::Open(
     const std::map<uint32_t, TitanCFOptions>& column_families) {
   // Sets up initial column families.
   AddColumnFamilies(column_families);
@@ -37,14 +38,7 @@ Status VersionSet::Open(
   return OpenManifest(NewFileNumber());
 }
 
-Status VersionSet::Recover() {
-  struct LogReporter : public log::Reader::Reporter {
-    Status* status;
-    void Corruption(size_t, const Status& s) override {
-      if (status->ok()) *status = s;
-    }
-  };
-
+Status BlobFileSet::Recover() {
   // Reads "CURRENT" file, which contains the name of the current manifest file.
   std::string manifest;
   Status s = ReadFileToString(env_, CurrentFileName(dirname_), &manifest);
@@ -65,35 +59,34 @@ Status VersionSet::Recover() {
     file.reset(new SequentialFileReader(std::move(f), file_name));
   }
 
-  bool has_next_file_number = false;
-  uint64_t next_file_number = 0;
-
   // Reads edits from the manifest and applies them one by one.
   {
     LogReporter reporter;
     reporter.status = &s;
     log::Reader reader(nullptr, std::move(file), &reporter, true /*checksum*/,
-                       0 /*initial_offset*/, 0);
+                       0 /*log_num*/);
     Slice record;
     std::string scratch;
+    EditCollector collector;
     while (reader.ReadRecord(&record, &scratch) && s.ok()) {
       VersionEdit edit;
       s = DecodeInto(record, &edit);
       if (!s.ok()) return s;
-      s = Apply(&edit);
+      s = collector.AddEdit(edit);
       if (!s.ok()) return s;
-      if (edit.has_next_file_number_) {
-        assert(edit.next_file_number_ >= next_file_number);
-        next_file_number = edit.next_file_number_;
-        has_next_file_number = true;
-      }
     }
-  }
+    s = collector.Seal(*this);
+    if (!s.ok()) return s;
+    s = collector.Apply(*this);
+    if (!s.ok()) return s;
 
-  if (!has_next_file_number) {
-    return Status::Corruption("no next file number in manifest file");
+    uint64_t next_file_number = 0;
+    s = collector.GetNextFileNumber(&next_file_number);
+    if (!s.ok()) return s;
+    next_file_number_.store(next_file_number);
+    TITAN_LOG_INFO(db_options_.info_log,
+                   "Next blob file number is %" PRIu64 ".", next_file_number);
   }
-  next_file_number_.store(next_file_number);
 
   auto new_manifest_file_number = NewFileNumber();
   s = OpenManifest(new_manifest_file_number);
@@ -103,6 +96,19 @@ Status VersionSet::Recover() {
   std::set<uint64_t> alive_files;
   alive_files.insert(new_manifest_file_number);
   for (const auto& bs : column_families_) {
+    std::string files_str;
+    for (const auto& f : bs.second->files_) {
+      if (!files_str.empty()) {
+        files_str.append(", ");
+      }
+      files_str.append(std::to_string(f.first));
+      if (f.second->is_obsolete()) {
+        files_str.append("(obsolete)");
+      }
+    }
+    TITAN_LOG_INFO(db_options_.info_log,
+                   "Blob files for CF %" PRIu32 " found: %s", bs.first,
+                   files_str.c_str());
     // delete obsoleted files at reopen
     // all the obsolete files's obsolete sequence are 0
     bs.second->GetObsoleteFiles(nullptr, kMaxSequenceNumber);
@@ -120,17 +126,15 @@ Status VersionSet::Recover() {
     if (file_type != FileType::kBlobFile &&
         file_type != FileType::kDescriptorFile)
       continue;
-
+    TITAN_LOG_INFO(db_options_.info_log,
+                   "Titan recovery delete obsolete file %s.", f.c_str());
     env_->DeleteFile(dirname_ + "/" + f);
   }
-
-  // Make sure perform gc on all files at the beginning
-  MarkAllFilesForGC();
 
   return Status::OK();
 }
 
-Status VersionSet::OpenManifest(uint64_t file_number) {
+Status BlobFileSet::OpenManifest(uint64_t file_number) {
   Status s;
 
   auto file_name = DescriptorFileName(dirname_, file_number);
@@ -148,21 +152,24 @@ Status VersionSet::OpenManifest(uint64_t file_number) {
   s = WriteSnapshot(manifest_.get());
   if (s.ok()) {
     ImmutableDBOptions ioptions(db_options_);
-    s = SyncManifest(env_, &ioptions, manifest_->file());
+    s = SyncTitanManifest(env_, stats_, &ioptions, manifest_->file());
   }
+  uint64_t old_manifest_file_number = manifest_file_number_;
   if (s.ok()) {
     // Makes "CURRENT" file that points to the new manifest file.
     s = SetCurrentFile(env_, dirname_, file_number, nullptr);
+    manifest_file_number_ = file_number;
   }
 
   if (!s.ok()) {
     manifest_.reset();
+    manifest_file_number_ = old_manifest_file_number;
     obsolete_manifests_.emplace_back(file_name);
   }
   return s;
 }
 
-Status VersionSet::WriteSnapshot(log::Writer* log) {
+Status BlobFileSet::WriteSnapshot(log::Writer* log) {
   Status s;
   // Saves global information
   {
@@ -192,79 +199,42 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
   return s;
 }
 
-Status VersionSet::LogAndApply(VersionEdit* edit) {
+Status BlobFileSet::LogAndApply(VersionEdit& edit) {
+  TEST_SYNC_POINT("BlobFileSet::LogAndApply");
   // TODO(@huachao): write manifest file unlocked
   std::string record;
-  edit->SetNextFileNumber(next_file_number_.load());
-  edit->EncodeTo(&record);
-  Status s = manifest_->AddRecord(record);
-  if (s.ok()) {
-    ImmutableDBOptions ioptions(db_options_);
-    s = SyncManifest(env_, &ioptions, manifest_->file());
-  }
+  edit.SetNextFileNumber(next_file_number_.load());
+  edit.EncodeTo(&record);
+
+  EditCollector collector;
+  Status s = collector.AddEdit(edit);
+  if (!s.ok()) return s;
+  s = collector.Seal(*this);
+  if (!s.ok()) return s;
+  s = manifest_->AddRecord(record);
   if (!s.ok()) return s;
 
-  return Apply(edit);
+  ImmutableDBOptions ioptions(db_options_);
+  s = SyncTitanManifest(env_, stats_, &ioptions, manifest_->file());
+  if (!s.ok()) return s;
+  return collector.Apply(*this);
 }
 
-Status VersionSet::Apply(VersionEdit* edit) {
-  auto cf_id = edit->column_family_id_;
-  auto it = column_families_.find(cf_id);
-  if (it == column_families_.end()) {
-    // TODO: support OpenForReadOnly which doesn't open DB with all column
-    // family so there are maybe some invalid column family, but we can't just
-    // skip it otherwise blob files of the non-open column families will be
-    // regarded as obsolete and deleted.
-    return Status::OK();
-  }
-  auto& files = it->second->files_;
-
-  for (auto& file : edit->deleted_files_) {
-    auto number = file.first;
-    auto blob_it = files.find(number);
-    if (blob_it == files.end()) {
-      fprintf(stderr, "blob file %" PRIu64 " doesn't exist before\n", number);
-      abort();
-    } else if (blob_it->second->is_obsolete()) {
-      fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n",
-              number);
-      abort();
-    }
-    it->second->MarkFileObsolete(blob_it->second, file.second);
-  }
-
-  for (auto& file : edit->added_files_) {
-    auto number = file->file_number();
-    auto blob_it = files.find(number);
-    if (blob_it != files.end()) {
-      if (blob_it->second->is_obsolete()) {
-        fprintf(stderr, "blob file %" PRIu64 " has been deleted before\n",
-                number);
-      } else {
-        fprintf(stderr, "blob file %" PRIu64 " has been added before\n",
-                number);
-      }
-      abort();
-    }
-    it->second->AddBlobFile(file);
-  }
-
-  it->second->ComputeGCScore();
-  return Status::OK();
-}
-
-void VersionSet::AddColumnFamilies(
+void BlobFileSet::AddColumnFamilies(
     const std::map<uint32_t, TitanCFOptions>& column_families) {
   for (auto& cf : column_families) {
     auto file_cache = std::make_shared<BlobFileCache>(db_options_, cf.second,
                                                       file_cache_, stats_);
     auto blob_storage = std::make_shared<BlobStorage>(
         db_options_, cf.second, cf.first, file_cache, stats_);
+    if (stats_ != nullptr) {
+      stats_->InitializeCF(cf.first, blob_storage);
+    }
     column_families_.emplace(cf.first, blob_storage);
   }
 }
 
-Status VersionSet::DropColumnFamilies(
+Status BlobFileSet::DropColumnFamilies(
     const std::vector<uint32_t>& column_families,
     SequenceNumber obsolete_sequence) {
   Status s;
@@ -274,14 +244,17 @@ Status VersionSet::DropColumnFamilies(
       VersionEdit edit;
       edit.SetColumnFamilyID(it->first);
       for (auto& file : it->second->files_) {
-        ROCKS_LOG_INFO(db_options_.info_log, "Titan add obsolete file [%llu]",
-                       file.second->file_number());
-        edit.DeleteBlobFile(file.first, obsolete_sequence);
+        if (!file.second->is_obsolete()) {
+          TITAN_LOG_INFO(db_options_.info_log,
+                         "Titan add obsolete file [%" PRIu64 "]",
+                         file.second->file_number());
+          edit.DeleteBlobFile(file.first, obsolete_sequence);
+        }
       }
-      s = LogAndApply(&edit);
+      s = LogAndApply(edit);
       if (!s.ok()) return s;
     } else {
-      ROCKS_LOG_ERROR(db_options_.info_log, "column %u not found for drop\n",
+      TITAN_LOG_ERROR(db_options_.info_log, "column %u not found for drop\n",
                       cf_id);
       return Status::NotFound("invalid column family");
     }
@@ -290,7 +263,7 @@ Status VersionSet::DropColumnFamilies(
   return s;
 }
 
-Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
+Status BlobFileSet::MaybeDestroyColumnFamily(uint32_t cf_id) {
   obsolete_columns_.erase(cf_id);
   auto it = column_families_.find(cf_id);
   if (it != column_families_.end()) {
@@ -300,13 +273,37 @@ Status VersionSet::DestroyColumnFamily(uint32_t cf_id) {
     }
     return Status::OK();
   }
-  ROCKS_LOG_ERROR(db_options_.info_log, "column %u not found for destroy\n",
+  TITAN_LOG_ERROR(db_options_.info_log, "column %u not found for destroy\n",
                   cf_id);
   return Status::NotFound("invalid column family");
 }
 
-void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
-                                  SequenceNumber oldest_sequence) {
+Status BlobFileSet::DeleteBlobFilesInRanges(uint32_t cf_id,
+                                            const RangePtr* ranges, size_t n,
+                                            bool include_end,
+                                            SequenceNumber obsolete_sequence) {
+  auto it = column_families_.find(cf_id);
+  if (it != column_families_.end()) {
+    VersionEdit edit;
+    edit.SetColumnFamilyID(cf_id);
+
+    std::vector<uint64_t> files;
+    Status s = it->second->GetBlobFilesInRanges(ranges, n, include_end, &files);
+    if (!s.ok()) return s;
+    for (auto file_number : files) {
+      edit.DeleteBlobFile(file_number, obsolete_sequence);
+    }
+    s = LogAndApply(edit);
+    return s;
+  }
+  TITAN_LOG_ERROR(db_options_.info_log,
+                  "column %u not found for delete blob files in ranges\n",
+                  cf_id);
+  return Status::NotFound("invalid column family");
+}
+
+void BlobFileSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
+                                   SequenceNumber oldest_sequence) {
   for (auto it = column_families_.begin(); it != column_families_.end();) {
     auto& cf_id = it->first;
     auto& blob_storage = it->second;
@@ -331,6 +328,46 @@ void VersionSet::GetObsoleteFiles(std::vector<std::string>* obsolete_files,
   obsolete_files->insert(obsolete_files->end(), obsolete_manifests_.begin(),
                          obsolete_manifests_.end());
   obsolete_manifests_.clear();
+}
+
+void BlobFileSet::GetAllFiles(std::vector<std::string>* files,
+                              std::vector<VersionEdit>* edits) {
+  std::vector<std::string> all_blob_files;
+
+  edits->clear();
+  edits->reserve(column_families_.size());
+
+  // Saves global information
+  {
+    VersionEdit edit;
+    edit.SetNextFileNumber(next_file_number_.load());
+    std::string record;
+    edit.EncodeTo(&record);
+    edits->emplace_back(edit);
+  }
+
+  // Saves all blob files
+  for (auto& cf : column_families_) {
+    VersionEdit edit;
+    edit.SetColumnFamilyID(cf.first);
+    auto& blob_storage = cf.second;
+    blob_storage->GetAllFiles(&all_blob_files);
+    for (auto& file : blob_storage->files_) {
+      edit.AddBlobFile(file.second);
+    }
+    edits->emplace_back(edit);
+  }
+
+  files->clear();
+  files->reserve(all_blob_files.size() + 2);
+
+  for (auto& live_file : all_blob_files) {
+    files->emplace_back(live_file);
+  }
+
+  // Append current MANIFEST and CURRENT file name
+  files->emplace_back(DescriptorFileName("", manifest_file_number_));
+  files->emplace_back(CurrentFileName(""));
 }
 
 }  // namespace titandb

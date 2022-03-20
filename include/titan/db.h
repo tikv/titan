@@ -6,6 +6,8 @@
 namespace rocksdb {
 namespace titandb {
 
+class VersionEdit;
+
 struct TitanCFDescriptor {
   std::string name;
   TitanCFOptions options;
@@ -77,9 +79,51 @@ class TitanDB : public StackableDB {
   Status DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) override =
       0;
 
+  using StackableDB::NewIterator;
+  Iterator* NewIterator(const ReadOptions& opts,
+                        ColumnFamilyHandle* column_family) override {
+    return NewIterator(TitanReadOptions(opts), column_family);
+  }
+  Iterator* NewIterator(const ReadOptions& opts) override {
+    return NewIterator(TitanReadOptions(opts), DefaultColumnFamily());
+  }
+  virtual Iterator* NewIterator(const TitanReadOptions& opts) {
+    return NewIterator(opts, DefaultColumnFamily());
+  }
+  virtual Iterator* NewIterator(const TitanReadOptions& opts,
+                                ColumnFamilyHandle* column_family) = 0;
+
+  using StackableDB::NewIterators;
+  Status NewIterators(const ReadOptions& options,
+                      const std::vector<ColumnFamilyHandle*>& column_families,
+                      std::vector<Iterator*>* iterators) override {
+    return NewIterators(TitanReadOptions(options), column_families, iterators);
+  }
+  virtual Status NewIterators(
+      const TitanReadOptions& options,
+      const std::vector<ColumnFamilyHandle*>& column_families,
+      std::vector<Iterator*>* iterators) = 0;
+
   using StackableDB::Merge;
   Status Merge(const WriteOptions&, ColumnFamilyHandle*, const Slice& /*key*/,
                const Slice& /*value*/) override {
+    return Status::NotSupported("TitanDB doesn't support this operation");
+  }
+
+  using StackableDB::DisableFileDeletions;
+  Status DisableFileDeletions() override {
+    return Status::NotSupported("TitanDB doesn't support this operation");
+  }
+
+  using StackableDB::EnableFileDeletions;
+  Status EnableFileDeletions(bool /*force*/) override {
+    return Status::NotSupported("TitanDB doesn't support this operation");
+  }
+
+  // Get all files in /titandb directory after disable file deletions
+  // edits include all blob file records of every column family
+  virtual Status GetAllTitanFiles(std::vector<std::string>& /*files*/,
+                                  std::vector<VersionEdit>* /*edits*/) {
     return Status::NotSupported("TitanDB doesn't support this operation");
   }
 
@@ -99,15 +143,35 @@ class TitanDB : public StackableDB {
       std::vector<std::string>* const output_file_names = nullptr,
       CompactionJobInfo* compaction_job_info = nullptr) override = 0;
 
+  virtual Status DeleteFilesInRanges(ColumnFamilyHandle* column_family,
+                                     const RangePtr* ranges, size_t n,
+                                     bool include_end = true) = 0;
+
+  virtual Status DeleteBlobFilesInRanges(ColumnFamilyHandle* column_family,
+                                         const RangePtr* ranges, size_t n,
+                                         bool include_end = true) = 0;
+
   using rocksdb::StackableDB::GetOptions;
   Options GetOptions(ColumnFamilyHandle* column_family) const override = 0;
+
+  virtual TitanOptions GetTitanOptions(
+      ColumnFamilyHandle* column_family) const = 0;
+  virtual TitanOptions GetTitanOptions() const {
+    return GetTitanOptions(DefaultColumnFamily());
+  }
 
   using rocksdb::StackableDB::SetOptions;
   Status SetOptions(ColumnFamilyHandle* column_family,
                     const std::unordered_map<std::string, std::string>&
                         new_options) override = 0;
 
+  virtual TitanDBOptions GetTitanDBOptions() const = 0;
+
   struct Properties {
+    // "rocksdb.titandb.num-blob-files-at-level<N>" - returns string containing
+    //      the number of blob files at level <N>, where <N> is an ASCII
+    //      representation of a level number (e.g., "0")."
+    static const std::string kNumBlobFilesAtLevelPrefix;
     //  "rocksdb.titandb.live-blob-size" - returns total blob value size
     //      referenced by LSM tree.
     static const std::string kLiveBlobSize;
@@ -121,6 +185,21 @@ class TitanDB : public StackableDB {
     //  "rocksdb.titandb.obsolete-blob-file-size" - returns size of obsolete
     //      blob files.
     static const std::string kObsoleteBlobFileSize;
+    //  "rocksdb.titandb.discardable_ratio_le0_file_num" - returns count of
+    //      file whose discardable ratio is less or equal to 0%.
+    static const std::string kNumDiscardableRatioLE0File;
+    //  "rocksdb.titandb.discardable_ratio_le20_file_num" - returns count of
+    //      file whose discardable ratio is less or equal to 20%.
+    static const std::string kNumDiscardableRatioLE20File;
+    //  "rocksdb.titandb.discardable_ratio_le50_file_num" - returns count of
+    //      file whose discardable ratio is less or equal to 50%.
+    static const std::string kNumDiscardableRatioLE50File;
+    //  "rocksdb.titandb.discardable_ratio_le80_file_num" - returns count of
+    //      file whose discardable ratio is less or equal to 80%.
+    static const std::string kNumDiscardableRatioLE80File;
+    //  "rocksdb.titandb.discardable_ratio_le100_file_num" - returns count of
+    //      file whose discardable ratio is less or equal to 100%.
+    static const std::string kNumDiscardableRatioLE100File;
   };
 
   bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,

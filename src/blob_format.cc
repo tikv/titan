@@ -1,7 +1,7 @@
 #include "blob_format.h"
 
+#include "test_util/sync_point.h"
 #include "util/crc32c.h"
-#include "util/sync_point.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -36,14 +36,17 @@ bool operator==(const BlobRecord& lhs, const BlobRecord& rhs) {
 
 void BlobEncoder::EncodeRecord(const BlobRecord& record) {
   record_buffer_.clear();
-  compressed_buffer_.clear();
-
-  CompressionType compression;
   record.EncodeTo(&record_buffer_);
-  record_ = Compress(compression_ctx_, record_buffer_, &compressed_buffer_,
-                     &compression);
+  EncodeSlice(record_buffer_);
+}
 
-  EXPECT(record_.size() < std::numeric_limits<uint32_t>::max());
+void BlobEncoder::EncodeSlice(const Slice& record) {
+  compressed_buffer_.clear();
+  CompressionType compression;
+  record_ =
+      Compress(*compression_info_, record, &compressed_buffer_, &compression);
+
+  assert(record_.size() < std::numeric_limits<uint32_t>::max());
   EncodeFixed32(header_ + 4, static_cast<uint32_t>(record_.size()));
   header_[8] = compression;
 
@@ -56,14 +59,14 @@ Status BlobDecoder::DecodeHeader(Slice* src) {
   if (!GetFixed32(src, &crc_)) {
     return Status::Corruption("BlobHeader");
   }
-  header_crc_ = crc32c::Value(src->data(), kBlobHeaderSize - 4);
+  header_crc_ = crc32c::Value(src->data(), kRecordHeaderSize - 4);
 
   unsigned char compression;
   if (!GetFixed32(src, &record_size_) || !GetChar(src, &compression)) {
     return Status::Corruption("BlobHeader");
   }
-  compression_ = static_cast<CompressionType>(compression);
 
+  compression_ = static_cast<CompressionType>(compression);
   return Status::OK();
 }
 
@@ -82,7 +85,11 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
     return DecodeInto(input, record);
   }
   UncompressionContext ctx(compression_);
-  TRY(Uncompress(ctx, input, buffer));
+  UncompressionInfo info(ctx, *uncompression_dict_, compression_);
+  Status s = Uncompress(info, input, buffer);
+  if (!s.ok()) {
+    return s;
+  }
   return DecodeInto(*buffer, record);
 }
 
@@ -121,26 +128,95 @@ Status BlobIndex::DecodeFrom(Slice* src) {
   return s;
 }
 
-bool operator==(const BlobIndex& lhs, const BlobIndex& rhs) {
-  return (lhs.file_number == rhs.file_number &&
-          lhs.blob_handle == rhs.blob_handle);
+void BlobIndex::EncodeDeletionMarkerTo(std::string* dst) {
+  dst->push_back(kBlobRecord);
+  PutVarint64(dst, 0);
+  BlobHandle dummy;
+  dummy.EncodeTo(dst);
+}
+
+bool BlobIndex::IsDeletionMarker(const BlobIndex& index) {
+  return index.file_number == 0;
+}
+
+bool BlobIndex::operator==(const BlobIndex& rhs) const {
+  return (file_number == rhs.file_number && blob_handle == rhs.blob_handle);
+}
+
+void MergeBlobIndex::EncodeTo(std::string* dst) const {
+  BlobIndex::EncodeTo(dst);
+  PutVarint64(dst, source_file_number);
+  PutVarint64(dst, source_file_offset);
+}
+
+void MergeBlobIndex::EncodeToBase(std::string* dst) const {
+  BlobIndex::EncodeTo(dst);
+}
+
+Status MergeBlobIndex::DecodeFrom(Slice* src) {
+  Status s = BlobIndex::DecodeFrom(src);
+  if (!s.ok()) {
+    return s;
+  }
+  if (!GetVarint64(src, &source_file_number) ||
+      !GetVarint64(src, &source_file_offset)) {
+    return Status::Corruption("MergeBlobIndex");
+  }
+  return s;
+}
+
+Status MergeBlobIndex::DecodeFromBase(Slice* src) {
+  return BlobIndex::DecodeFrom(src);
+}
+
+bool MergeBlobIndex::operator==(const MergeBlobIndex& rhs) const {
+  return (source_file_number == rhs.source_file_number &&
+          source_file_offset == rhs.source_file_offset &&
+          BlobIndex::operator==(rhs));
 }
 
 void BlobFileMeta::EncodeTo(std::string* dst) const {
   PutVarint64(dst, file_number_);
   PutVarint64(dst, file_size_);
+  PutVarint64(dst, file_entries_);
+  PutVarint32(dst, file_level_);
+  PutLengthPrefixedSlice(dst, smallest_key_);
+  PutLengthPrefixedSlice(dst, largest_key_);
+}
+
+Status BlobFileMeta::DecodeFromLegacy(Slice* src) {
+  if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_)) {
+    return Status::Corruption("BlobFileMeta decode legacy failed");
+  }
+  assert(smallest_key_.empty());
+  assert(largest_key_.empty());
+  return Status::OK();
 }
 
 Status BlobFileMeta::DecodeFrom(Slice* src) {
-  if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_)) {
-    return Status::Corruption("BlobFileMeta Decode failed");
+  if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) ||
+      !GetVarint64(src, &file_entries_) || !GetVarint32(src, &file_level_)) {
+    return Status::Corruption("BlobFileMeta decode failed");
+  }
+  Slice str;
+  if (GetLengthPrefixedSlice(src, &str)) {
+    smallest_key_.assign(str.data(), str.size());
+  } else {
+    return Status::Corruption("BlobSmallestKey Decode failed");
+  }
+  if (GetLengthPrefixedSlice(src, &str)) {
+    largest_key_.assign(str.data(), str.size());
+  } else {
+    return Status::Corruption("BlobLargestKey decode failed");
   }
   return Status::OK();
 }
 
 bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs) {
   return (lhs.file_number_ == rhs.file_number_ &&
-          lhs.file_size_ == rhs.file_size_);
+          lhs.file_size_ == rhs.file_size_ &&
+          lhs.file_entries_ == rhs.file_entries_ &&
+          lhs.file_level_ == rhs.file_level_);
 }
 
 void BlobFileMeta::FileStateTransit(const FileEvent& event) {
@@ -152,7 +228,7 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
       // normal state after flush completed.
       assert(state_ == FileState::kPendingLSM ||
              state_ == FileState::kPendingGC || state_ == FileState::kNormal ||
-             state_ == FileState::kBeingGC);
+             state_ == FileState::kBeingGC || state_ == FileState::kObsolete);
       if (state_ == FileState::kPendingLSM) state_ = FileState::kNormal;
       break;
     case FileEvent::kGCCompleted:
@@ -187,29 +263,61 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
       assert(state_ != FileState::kObsolete);
       state_ = FileState::kObsolete;
       break;
+    case FileEvent::kNeedMerge:
+      if (state_ == FileState::kToMerge) {
+        break;
+      }
+      assert(state_ == FileState::kNormal);
+      state_ = FileState::kToMerge;
+      break;
+    case FileEvent::kReset:
+      state_ = FileState::kNormal;
+      break;
     default:
-      fprintf(stderr,
-              "Unknown file event[%d], file number[%lu], file state[%d]",
-              static_cast<int>(event), static_cast<std::size_t>(file_number_),
-              static_cast<int>(state_));
-      abort();
+      assert(false);
   }
 }
 
-void BlobFileMeta::AddDiscardableSize(uint64_t _discardable_size) {
-  assert(_discardable_size < file_size_);
-  discardable_size_ += _discardable_size;
-  assert(discardable_size_ < file_size_);
+TitanInternalStats::StatsType BlobFileMeta::GetDiscardableRatioLevel() const {
+  auto ratio = GetDiscardableRatio();
+  TitanInternalStats::StatsType type;
+  if (ratio < std::numeric_limits<double>::epsilon()) {
+    type = TitanInternalStats::NUM_DISCARDABLE_RATIO_LE0;
+  } else if (ratio <= 0.2) {
+    type = TitanInternalStats::NUM_DISCARDABLE_RATIO_LE20;
+  } else if (ratio <= 0.5) {
+    type = TitanInternalStats::NUM_DISCARDABLE_RATIO_LE50;
+  } else if (ratio <= 0.8) {
+    type = TitanInternalStats::NUM_DISCARDABLE_RATIO_LE80;
+  } else if (ratio <= 1.0 ||
+             (ratio - 1.0) < std::numeric_limits<double>::epsilon()) {
+    type = TitanInternalStats::NUM_DISCARDABLE_RATIO_LE100;
+  } else {
+    fprintf(stderr, "invalid discardable ratio  %lf for blob file %" PRIu64,
+            ratio, this->file_number_);
+    type = TitanInternalStats::NUM_DISCARDABLE_RATIO_LE100;
+  }
+  return type;
 }
 
-double BlobFileMeta::GetDiscardableRatio() const {
-  return static_cast<double>(discardable_size_) /
-         static_cast<double>(file_size_);
+void BlobFileMeta::Dump(bool with_keys) const {
+  fprintf(stdout, "file %" PRIu64 ", size %" PRIu64 ", level %" PRIu32,
+          file_number_, file_size_, file_level_);
+  if (with_keys) {
+    fprintf(stdout, ", smallest key: %s, largest key: %s",
+            Slice(smallest_key_).ToString(true /*hex*/).c_str(),
+            Slice(largest_key_).ToString(true /*hex*/).c_str());
+  }
+  fprintf(stdout, "\n");
 }
 
 void BlobFileHeader::EncodeTo(std::string* dst) const {
   PutFixed32(dst, kHeaderMagicNumber);
   PutFixed32(dst, version);
+
+  if (version == BlobFileHeader::kVersion2) {
+    PutFixed32(dst, flags);
+  }
 }
 
 Status BlobFileHeader::DecodeFrom(Slice* src) {
@@ -218,8 +326,15 @@ Status BlobFileHeader::DecodeFrom(Slice* src) {
     return Status::Corruption(
         "Blob file header magic number missing or mismatched.");
   }
-  if (!GetFixed32(src, &version) || version != kVersion1) {
+  if (!GetFixed32(src, &version) ||
+      (version != kVersion1 && version != kVersion2)) {
     return Status::Corruption("Blob file header version missing or invalid.");
+  }
+  if (version == BlobFileHeader::kVersion2) {
+    // Check that no other flags are set
+    if (!GetFixed32(src, &flags) || flags & ~kHasUncompressionDictionary) {
+      return Status::Corruption("Blob file header flags missing or invalid.");
+    }
   }
   return Status::OK();
 }
