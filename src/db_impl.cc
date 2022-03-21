@@ -102,10 +102,8 @@ class TitanDBImpl::FileManager : public BlobFileManager {
   Status BatchDeleteFiles(
       const std::vector<std::unique_ptr<BlobFileHandle>>& handles) override {
     Status s;
-    uint64_t file_size = 0;
     for (auto& handle : handles) {
       s = db_->env_->DeleteFile(handle->GetName());
-      file_size += handle->GetFile()->GetFileSize();
     }
     {
       MutexLock l(&db_->mutex_);
