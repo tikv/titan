@@ -70,16 +70,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     bool is_small_kv = value.size() < cf_options_.min_blob_size;
     if (is_small_kv) {
-      if (builder_unbuffered()) {
-        // We can append this into SST safely, without disorder issue.
-        base_builder_->Add(key, value);
-      } else {
-        // We have to let builder to cache this KV pair, and it will be returned
-        // when state changed
-        std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
-            NewCachedRecordContext(ikey, value);
-        blob_builder_->AddSmall(std::move(ctx));
-      }
+      AddSmallToTableAdaptively(key, ikey, value);
       return;
     } else {
       // We write to blob file and insert index
@@ -115,21 +106,24 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
                         index.file_number, get_status.ToString().c_str());
       }
     }
-    if (builder_unbuffered()) {
-      base_builder_->Add(key, value);
-    } else {
-      std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
-          NewCachedRecordContext(ikey, value);
-      blob_builder_->AddSmall(std::move(ctx));
-    }
+    AddSmallToTableAdaptively(key, ikey, value);
   } else {
-    if (builder_unbuffered()) {
-      base_builder_->Add(key, value);
-    } else {
-      std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
-              NewCachedRecordContext(ikey, value);
-      blob_builder_->AddSmall(std::move(ctx));
-    }
+    // Mainly processing kTypeMerge and kTypeBlobIndex in both flushing and compaction.
+    AddSmallToTableAdaptively(key, ikey, value);
+  }
+}
+
+void TitanTableBuilder::AddSmallToTableAdaptively(const Slice& key, const ParsedInternalKey& parsedKey, const Slice& value){
+  if (builder_unbuffered()) {
+    // We can directly append this into SST safely, without disorder issue.
+    // Only when base_builder_ is in unbuffered state
+    base_builder_->Add(key, value);
+  } else {
+    // We have to let builder to cache this KV pair, and it will be returned
+    // when state changed
+    std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
+            NewCachedRecordContext(parsedKey, value);
+    blob_builder_->AddSmall(std::move(ctx));
   }
 }
 
