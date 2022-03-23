@@ -122,8 +122,8 @@ void TitanTableBuilder::AddSmall(const Slice& key,
     // Only when base_builder_ is in unbuffered state
     base_builder_->Add(key, value);
   } else {
-    // We have to let builder to cache this KV pair, and it will be returned
-    // when state changed
+    // We have to let builder to cache this KV pair, and it will be flushed to base table
+    // when the state changes to unbuffered
     std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
         NewCachedRecordContext(parsedKey, value);
     blob_builder_->AddSmall(std::move(ctx));
