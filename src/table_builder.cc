@@ -108,12 +108,15 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     }
     AddToBaseTable(key, ikey, value);
   } else {
-    // Mainly processing kTypeMerge and kTypeBlobIndex in both flushing and compaction.
+    // Mainly processing kTypeMerge and kTypeBlobIndex in both flushing and
+    // compaction.
     AddToBaseTable(key, ikey, value);
   }
 }
 
-void TitanTableBuilder::AddToBaseTable(const Slice& key, const ParsedInternalKey& parsedKey, const Slice& value){
+void TitanTableBuilder::AddToBaseTable(const Slice& key,
+                                       const ParsedInternalKey& parsedKey,
+                                       const Slice& value) {
   if (builder_unbuffered()) {
     // We can directly append this into SST safely, without disorder issue.
     // Only when base_builder_ is in unbuffered state
@@ -122,7 +125,7 @@ void TitanTableBuilder::AddToBaseTable(const Slice& key, const ParsedInternalKey
     // We have to let builder to cache this KV pair, and it will be returned
     // when state changed
     std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
-            NewCachedRecordContext(parsedKey, value);
+        NewCachedRecordContext(parsedKey, value);
     blob_builder_->AddSmall(std::move(ctx));
   }
 }
