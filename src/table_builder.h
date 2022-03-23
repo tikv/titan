@@ -71,7 +71,7 @@ class TitanTableBuilder : public TableBuilder {
   Status GetBlobRecord(const BlobIndex& index, BlobRecord* record,
                        PinnableSlice* buffer);
 
-  void AddSmallToTableAdaptively(const Slice& key, const ParsedInternalKey& parsedKey, const Slice& value);
+  void AddToBaseTable(const Slice& key, const ParsedInternalKey& parsedKey, const Slice& value);
 
   Status status_;
   uint32_t cf_id_;

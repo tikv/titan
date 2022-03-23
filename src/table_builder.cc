@@ -70,7 +70,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     bool is_small_kv = value.size() < cf_options_.min_blob_size;
     if (is_small_kv) {
-      AddSmallToTableAdaptively(key, ikey, value);
+      AddToBaseTable(key, ikey, value);
       return;
     } else {
       // We write to blob file and insert index
@@ -106,14 +106,14 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
                         index.file_number, get_status.ToString().c_str());
       }
     }
-    AddSmallToTableAdaptively(key, ikey, value);
+    AddToBaseTable(key, ikey, value);
   } else {
     // Mainly processing kTypeMerge and kTypeBlobIndex in both flushing and compaction.
-    AddSmallToTableAdaptively(key, ikey, value);
+    AddToBaseTable(key, ikey, value);
   }
 }
 
-void TitanTableBuilder::AddSmallToTableAdaptively(const Slice& key, const ParsedInternalKey& parsedKey, const Slice& value){
+void TitanTableBuilder::AddToBaseTable(const Slice& key, const ParsedInternalKey& parsedKey, const Slice& value){
   if (builder_unbuffered()) {
     // We can directly append this into SST safely, without disorder issue.
     // Only when base_builder_ is in unbuffered state
