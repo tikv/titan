@@ -123,8 +123,13 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       blob_builder_->AddSmall(std::move(ctx));
     }
   } else {
-    assert(builder_unbuffered());
-    base_builder_->Add(key, value);
+    if (builder_unbuffered()) {
+      base_builder_->Add(key, value);
+    } else {
+      std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx =
+              NewCachedRecordContext(ikey, value);
+      blob_builder_->AddSmall(std::move(ctx));
+    }
   }
 }
 
