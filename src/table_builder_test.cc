@@ -495,10 +495,28 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
     std::string key(1, i);
     InternalKey ikey(key, 1, kTypeValue);
     std::string value;
-    if (i % 2 == 0) {
+    if (i % 4 == 0) {
       value = std::string(1, i);
-    } else {
+    } else if (i % 4 == 1){
       value = std::string(kMinBlobSize, i);
+    } else if (i % 4 == 2){
+      ikey.Set(key, 1, kTypeBlobIndex);
+      BlobIndex blobIndex;
+      // set different values in different fields
+      blobIndex.file_number = i;
+      blobIndex.blob_handle.size = i*2+1;
+      blobIndex.blob_handle.offset = i*3+2;
+      blobIndex.EncodeTo(&value);
+    } else {
+      ikey.Set(key, 1, kTypeMerge);
+      MergeBlobIndex mergeIndex;
+      // set different values in different fields
+      mergeIndex.file_number = i;
+      mergeIndex.blob_handle.size = i*2+1;
+      mergeIndex.blob_handle.offset = i*3+2;
+      mergeIndex.source_file_number = i*4+3;
+      mergeIndex.source_file_offset = i*5+4;
+      mergeIndex.EncodeTo(&value);
     }
     table_builder->Add(ikey.Encode(), value);
   }
@@ -523,10 +541,10 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
     ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
     // check order
     ASSERT_EQ(ikey.user_key, key);
-    if (i % 2 == 0) {
+    if (i % 4 == 0) {
       ASSERT_EQ(ikey.type, kTypeValue);
       ASSERT_EQ(iter->value(), std::string(1, i));
-    } else {
+    } else if (i % 4 == 1) {
       ASSERT_EQ(ikey.type, kTypeBlobIndex);
       BlobIndex index;
       ASSERT_OK(DecodeInto(iter->value(), &index));
@@ -536,6 +554,24 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
       ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
       ASSERT_EQ(record.key, key);
       ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
+    }else if (i % 4 == 2){
+      ASSERT_EQ(ikey.type, kTypeBlobIndex);
+      BlobIndex index;
+      // We do not have corresponding blob file in this test, so we only check BlobIndex.
+      ASSERT_OK(DecodeInto(iter->value(), &index));
+      ASSERT_EQ(index.file_number, i);
+      ASSERT_EQ(index.blob_handle.size, i*2+1);
+      ASSERT_EQ(index.blob_handle.offset, i*3+2);
+    }else{
+      ASSERT_EQ(ikey.type, kTypeMerge);
+      MergeBlobIndex mergeIndex;
+      // We do not have corresponding blob file in this test, so we only check MergeBlobIndex.
+      ASSERT_OK(DecodeInto(iter->value(), &mergeIndex));
+      ASSERT_EQ(mergeIndex.file_number, i);
+      ASSERT_EQ(mergeIndex.blob_handle.size, i*2+1);
+      ASSERT_EQ(mergeIndex.blob_handle.offset, i*3+2);
+      ASSERT_EQ(mergeIndex.source_file_number, i*4+3);
+      ASSERT_EQ(mergeIndex.source_file_offset, i*5+4);
     }
     iter->Next();
   }
