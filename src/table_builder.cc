@@ -117,6 +117,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
 void TitanTableBuilder::AddBase(const Slice& key,
                                 const ParsedInternalKey& parsedKey,
                                 const Slice& value) {
+  // "parsedKey" was parsed from "key" (i.e., an internal key).
   if (builder_unbuffered()) {
     // We can directly append this into SST safely, without disorder issue.
     // Only when base_builder_ is in unbuffered state
