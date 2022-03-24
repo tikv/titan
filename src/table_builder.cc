@@ -70,7 +70,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     bool is_small_kv = value.size() < cf_options_.min_blob_size;
     if (is_small_kv) {
-      AddSmall(key, ikey, value);
+      AddBase(key, ikey, value);
       return;
     } else {
       // We write to blob file and insert index
@@ -106,17 +106,17 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
                         index.file_number, get_status.ToString().c_str());
       }
     }
-    AddSmall(key, ikey, value);
+    AddBase(key, ikey, value);
   } else {
     // Mainly processing kTypeMerge and kTypeBlobIndex in both flushing and
     // compaction.
-    AddSmall(key, ikey, value);
+    AddBase(key, ikey, value);
   }
 }
 
-void TitanTableBuilder::AddSmall(const Slice& key,
-                                 const ParsedInternalKey& parsedKey,
-                                 const Slice& value) {
+void TitanTableBuilder::AddBase(const Slice& key,
+                                const ParsedInternalKey& parsedKey,
+                                const Slice& value) {
   if (builder_unbuffered()) {
     // We can directly append this into SST safely, without disorder issue.
     // Only when base_builder_ is in unbuffered state
@@ -186,10 +186,10 @@ void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
     FinishBlobFile();
   }
 
-  AddToBaseTable(contexts);
+  AddBlobResultsToBase(contexts);
 }
 
-void TitanTableBuilder::AddToBaseTable(
+void TitanTableBuilder::AddBlobResultsToBase(
     const BlobFileBuilder::OutContexts& contexts) {
   if (contexts.empty()) return;
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
@@ -229,7 +229,7 @@ void TitanTableBuilder::FinishBlobFile() {
     s = blob_builder_->Finish(&contexts);
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
-    AddToBaseTable(contexts);
+    AddBlobResultsToBase(contexts);
 
     if (s.ok() && ok()) {
       TITAN_LOG_INFO(db_options_.info_log,

@@ -60,7 +60,7 @@ class TitanTableBuilder : public TableBuilder {
 
   void AddBlob(const ParsedInternalKey& ikey, const Slice& value);
 
-  void AddToBaseTable(const BlobFileBuilder::OutContexts& contexts);
+  void AddBlobResultsToBase(const BlobFileBuilder::OutContexts& contexts);
 
   bool ShouldMerge(const std::shared_ptr<BlobFileMeta>& file);
 
@@ -71,8 +71,8 @@ class TitanTableBuilder : public TableBuilder {
   Status GetBlobRecord(const BlobIndex& index, BlobRecord* record,
                        PinnableSlice* buffer);
 
-  void AddSmall(const Slice& key, const ParsedInternalKey& parsedKey,
-                const Slice& value);
+  void AddBase(const Slice& key, const ParsedInternalKey& parsedKey,
+               const Slice& value);
 
   Status status_;
   uint32_t cf_id_;
