@@ -183,7 +183,8 @@ void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
       cf_options_.blob_file_target_size) {
     // if blob file hit the size limit, we have to finish it
     // in this case, when calling `BlobFileBuilder::Finish`, builder will be in
-    // unbuffered state, so it will not trigger another `AddBlobResultsToBase` call
+    // unbuffered state, so it will not trigger another `AddBlobResultsToBase`
+    // call
     FinishBlobFile();
   }
 
