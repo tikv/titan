@@ -56,6 +56,13 @@ class BlobGCJobTest : public testing::TestWithParam<bool /*gc_merge_mode*/> {
     ASSERT_EQ(expected, b->files_.size());
   }
 
+  void CheckBigBlob(){
+    auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
+    for (auto file : b->files_){
+      ASSERT_GT(file.second->file_size(), options_.merge_small_file_threshold);
+    }
+  }
+
   void ClearDir() {
     std::vector<std::string> filenames;
     options_.env->GetChildren(options_.dirname, &filenames);
@@ -401,6 +408,19 @@ TEST_P(BlobGCJobTest, Reopen) {
   Reopen();
   RunGC(true /*expect_gc*/, true /*dissable_merge_small*/);
   CheckBlobNumber(1);
+}
+
+TEST_P(BlobGCJobTest, ReopenForBigBlob) {
+  NewDB();
+  for (int i = 0; i < 1000000; i++) {
+    ASSERT_OK(db_->Put(WriteOptions(), GenKey(i), GenValue(i)));
+  }
+  Flush();
+  CheckBlobNumber(1);
+  CheckBigBlob();
+
+  Reopen();
+  RunGC(true /*expect_gc*/, true /*disable_merge_small*/);
 }
 
 // Tests blob file will be kept after GC, if it is still visible by active
