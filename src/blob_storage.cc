@@ -200,25 +200,32 @@ void BlobStorage::GetAllFiles(std::vector<std::string>* files) {
 }
 
 void BlobStorage::ComputeGCScore() {
-  // TODO: no need to recompute all everytime
   MutexLock l(&mutex_);
-  gc_score_.clear();
+  std::unordered_map<uint64_t, double> has_computed_score;
 
+  for (const auto &score : gc_score_){
+    has_computed_score[score.file_number] = score.score;
+  }
+
+  gc_score_.clear();
   for (auto& file : files_) {
     if (file.second->is_obsolete()) {
       continue;
     }
-    gc_score_.push_back({});
-    auto& gcs = gc_score_.back();
-    gcs.file_number = file.first;
-    if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
+
+    const uint64_t file_number = file.first;
+    double score;
+    if (has_computed_score.count(file_number)){
+      score = has_computed_score[file_number];
+    } else if (file.second->file_size() < cf_options_.merge_small_file_threshold){
       // for the small file or file with gc mark (usually the file that just
       // recovered) we want gc these file but more hope to gc other file with
       // more invalid data
-      gcs.score = cf_options_.blob_file_discardable_ratio;
+      score = cf_options_.blob_file_discardable_ratio;
     } else {
-      gcs.score = file.second->GetDiscardableRatio();
+      score = file.second->GetDiscardableRatio();
     }
+    gc_score_.push_back({file_number, score});
   }
 
   std::sort(gc_score_.begin(), gc_score_.end(),
