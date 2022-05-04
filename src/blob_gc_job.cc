@@ -273,13 +273,6 @@ Status BlobGCJob::BatchWriteNewIndices(const BlobFileBuilder::OutContexts& conte
   auto* cfh = blob_gc_->column_family_handle();
   Status s;
   for (const auto& ctx : contexts) {
-    MergeBlobIndex merge_blob_index;
-    merge_blob_index.file_number = ctx->new_blob_index.file_number;
-    merge_blob_index.source_file_number = ctx->original_blob_index.file_number;
-    merge_blob_index.source_file_offset =
-        ctx->original_blob_index.blob_handle.offset;
-    merge_blob_index.blob_handle = ctx->new_blob_index.blob_handle;
-
     std::string index_entry;
     BlobIndex original_index = ctx->original_blob_index;
     ParsedInternalKey ikey;
@@ -287,7 +280,8 @@ Status BlobGCJob::BatchWriteNewIndices(const BlobFileBuilder::OutContexts& conte
       return Status::Corruption(Slice());;
     }
     if (!gc_merge_rewrite_) {
-      merge_blob_index.EncodeToBase(&index_entry);
+      const BlobIndex &index = ctx->new_blob_index;
+      index.EncodeTo(&index_entry);
       // Store WriteBatch for rewriting new Key-Index pairs to LSM
       GarbageCollectionWriteCallback callback(cfh, ikey.user_key.ToString(),
                                               std::move(original_index));
@@ -298,6 +292,13 @@ Status BlobGCJob::BatchWriteNewIndices(const BlobFileBuilder::OutContexts& conte
       s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), ikey.user_key,
                                             index_entry);
     } else {
+      MergeBlobIndex merge_blob_index;
+      merge_blob_index.file_number = ctx->new_blob_index.file_number;
+      merge_blob_index.source_file_number =
+          ctx->original_blob_index.file_number;
+      merge_blob_index.source_file_offset =
+          ctx->original_blob_index.blob_handle.offset;
+      merge_blob_index.blob_handle = ctx->new_blob_index.blob_handle;
       merge_blob_index.EncodeTo(&index_entry);
       rewrite_batches_without_callback_.emplace_back(
           std::make_pair(WriteBatch(), original_index.blob_handle.size));
