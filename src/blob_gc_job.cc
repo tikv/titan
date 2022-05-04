@@ -415,6 +415,9 @@ Status BlobGCJob::InstallOutputBlobFiles() {
   for (auto& builder : blob_file_builders_) {
     BlobFileBuilder::OutContexts contexts;
     s = builder.second->Finish(&contexts);
+    if (!s.ok()) {
+      break;
+    }
     BatchWriteNewIndices(contexts, &s);
     if (!s.ok()) {
       break;
