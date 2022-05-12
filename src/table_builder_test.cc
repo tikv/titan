@@ -123,30 +123,10 @@ class TestTableFactory : public TableFactory {
   }
 
   TableBuilder* NewTableBuilder(const TableBuilderOptions& options,
-                                uint32_t column_family_id,
                                 WritableFileWriter* file) const override {
-    latest_table_builder_ =
-        base_factory_->NewTableBuilder(options, column_family_id, file);
+    latest_table_builder_ = base_factory_->NewTableBuilder(options, file);
     return latest_table_builder_;
   }
-
-  std::string GetPrintableTableOptions() const override {
-    return base_factory_->GetPrintableTableOptions();
-  }
-
-  Status SanitizeOptions(const DBOptions& db_options,
-                         const ColumnFamilyOptions& cf_options) const override {
-    // Override this when we need to validate our options.
-    return base_factory_->SanitizeOptions(db_options, cf_options);
-  }
-
-  Status GetOptionString(std::string* opt_string,
-                         const std::string& delimiter) const override {
-    // Override this when we need to persist our options.
-    return base_factory_->GetOptionString(opt_string, delimiter);
-  }
-
-  void* GetOptions() override { return base_factory_->GetOptions(); }
 
   bool IsDeleteRangeSupported() const override {
     return base_factory_->IsDeleteRangeSupported();
@@ -348,7 +328,7 @@ TEST_F(TableBuilderTest, Basic) {
     ASSERT_TRUE(iter->Valid());
     std::string key(1, i);
     ParsedInternalKey ikey;
-    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    ASSERT_OK(ParseInternalKey(iter->key(), &ikey, false));
     ASSERT_EQ(ikey.user_key, key);
     if (i % 2 == 0) {
       ASSERT_EQ(ikey.type, kTypeValue);
@@ -414,7 +394,7 @@ TEST_F(TableBuilderTest, DictCompress) {
     ASSERT_TRUE(iter->Valid());
     std::string key(1, i);
     ParsedInternalKey ikey;
-    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    ASSERT_OK(ParseInternalKey(iter->key(), &ikey, false));
     ASSERT_EQ(ikey.user_key, key);
     ASSERT_EQ(ikey.type, kTypeBlobIndex);
     BlobIndex index;
@@ -538,7 +518,7 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
     ASSERT_TRUE(iter->Valid());
     std::string key(1, i);
     ParsedInternalKey ikey;
-    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    ASSERT_OK(ParseInternalKey(iter->key(), &ikey, false));
     // check order
     ASSERT_EQ(ikey.user_key, key);
     if (i % 4 == 0) {
@@ -611,7 +591,7 @@ TEST_F(TableBuilderTest, NoBlob) {
     ASSERT_TRUE(iter->Valid());
     std::string key(1, i);
     ParsedInternalKey ikey;
-    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    ASSERT_OK(ParseInternalKey(iter->key(), &ikey, false));
     ASSERT_EQ(ikey.user_key, key);
     ASSERT_EQ(ikey.type, kTypeValue);
     ASSERT_EQ(iter->value(), std::string(1, i));
@@ -760,8 +740,8 @@ TEST_F(TableBuilderTest, LevelMerge) {
 
     // Compare sst key
     ParsedInternalKey first_ikey, second_ikey;
-    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &first_ikey));
-    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &second_ikey));
+    ASSERT_OK(ParseInternalKey(first_iter->key(), &first_ikey, false));
+    ASSERT_OK(ParseInternalKey(first_iter->key(), &second_ikey, false));
     ASSERT_EQ(first_ikey.type, kTypeBlobIndex);
     ASSERT_EQ(second_ikey.type, kTypeBlobIndex);
     ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
@@ -875,8 +855,8 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
 
     // Compare sst key
     ParsedInternalKey first_ikey, second_ikey;
-    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &first_ikey));
-    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &second_ikey));
+    ASSERT_OK(ParseInternalKey(first_iter->key(), &first_ikey, false));
+    ASSERT_OK(ParseInternalKey(first_iter->key(), &second_ikey, false));
     ASSERT_EQ(first_ikey.type, second_ikey.type);
     ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
 

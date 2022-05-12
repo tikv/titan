@@ -4,12 +4,12 @@
 #include <queue>
 
 #include "blob_format.h"
+#include "file/random_access_file_reader.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "table/internal_iterator.h"
 #include "titan/options.h"
 #include "util.h"
-#include "util/file_reader_writer.h"
 
 namespace rocksdb {
 namespace titandb {

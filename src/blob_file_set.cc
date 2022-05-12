@@ -152,7 +152,7 @@ Status BlobFileSet::OpenManifest(uint64_t file_number) {
   s = WriteSnapshot(manifest_.get());
   if (s.ok()) {
     ImmutableDBOptions ioptions(db_options_);
-    s = SyncTitanManifest(env_, stats_, &ioptions, manifest_->file());
+    s = SyncTitanManifest(stats_, &ioptions, manifest_->file());
   }
   uint64_t old_manifest_file_number = manifest_file_number_;
   if (s.ok()) {
@@ -215,7 +215,7 @@ Status BlobFileSet::LogAndApply(VersionEdit& edit) {
   if (!s.ok()) return s;
 
   ImmutableDBOptions ioptions(db_options_);
-  s = SyncTitanManifest(env_, stats_, &ioptions, manifest_->file());
+  s = SyncTitanManifest(stats_, &ioptions, manifest_->file());
   if (!s.ok()) return s;
   return collector.Apply(*this);
 }

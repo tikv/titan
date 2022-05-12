@@ -29,9 +29,11 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
     auto* db_impl = reinterpret_cast<DBImpl*>(db);
     PinnableSlice index_entry;
     bool is_blob_index;
-    auto s = db_impl->GetImpl(ReadOptions(), cfh_, key_, &index_entry,
-                              nullptr /*value_found*/,
-                              nullptr /*read_callback*/, &is_blob_index);
+    GetImplOptions gopts;
+    gopts.column_family = cfh_;
+    gopts.value = &index_entry;
+    gopts.is_blob_index = &is_blob_index;
+    auto s = db_impl->GetImpl(ReadOptions(), key_, gopts);
     if (!s.ok() && !s.IsNotFound()) {
       return s;
     }
@@ -284,8 +286,8 @@ void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
     std::string index_entry;
     BlobIndex original_index = ctx->original_blob_index;
     ParsedInternalKey ikey;
-    if (!ParseInternalKey(ctx->key, &ikey)) {
-      *s = Status::Corruption(Slice());
+    *s = ParseInternalKey(ctx->key, &ikey, false /*log_err_key*/);
+    if (!s->ok()) {
       return;
     }
     if (!gc_merge_rewrite_) {
@@ -343,9 +345,11 @@ Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
   assert(discardable != nullptr);
   PinnableSlice index_entry;
   bool is_blob_index = false;
-  Status s = base_db_impl_->GetImpl(
-      ReadOptions(), blob_gc_->column_family_handle(), key, &index_entry,
-      nullptr /*value_found*/, nullptr /*read_callback*/, &is_blob_index);
+  GetImplOptions gopts;
+  gopts.column_family = blob_gc_->column_family_handle();
+  gopts.value = &index_entry;
+  gopts.is_blob_index = &is_blob_index;
+  Status s = base_db_impl_->GetImpl(ReadOptions(), key, gopts);
   if (!s.ok() && !s.IsNotFound()) {
     return s;
   }

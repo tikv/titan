@@ -66,7 +66,7 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     for (auto& file : files) {
       RecordTick(statistics(db_->stats_.get()), TITAN_BLOB_FILE_SYNCED);
       {
-        StopWatch sync_sw(db_->env_, statistics(db_->stats_.get()),
+        StopWatch sync_sw(db_->db_options_.clock, statistics(db_->stats_.get()),
                           TITAN_BLOB_FILE_SYNC_MICROS);
         s = file.second->GetFile()->Sync(false);
       }
@@ -615,11 +615,15 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                             PinnableSlice* value) {
   Status s;
   bool is_blob_index = false;
-  s = db_impl_->GetImpl(options, handle, key, value, nullptr /*value_found*/,
-                        nullptr /*read_callback*/, &is_blob_index);
+  GetImplOptions gopts;
+  gopts.column_family = handle;
+  gopts.value = value;
+  gopts.is_blob_index = &is_blob_index;
+  s = db_impl_->GetImpl(options, key, gopts);
   if (!s.ok() || !is_blob_index) return s;
 
-  StopWatch get_sw(env_, statistics(stats_.get()), TITAN_GET_MICROS);
+  StopWatch get_sw(db_options_.clock, statistics(stats_.get()),
+                   TITAN_GET_MICROS);
   RecordTick(statistics(stats_.get()), TITAN_NUM_GET);
 
   BlobIndex index;
@@ -638,7 +642,7 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   mutex_.Unlock();
 
   if (storage) {
-    StopWatch read_sw(env_, statistics(stats_.get()),
+    StopWatch read_sw(db_options_.clock, statistics(stats_.get()),
                       TITAN_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
     RecordTick(statistics(stats_.get()), TITAN_BLOB_FILE_NUM_KEYS_READ);

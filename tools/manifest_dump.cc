@@ -12,8 +12,8 @@ int main() {
 
 #include "edit_collector.h"
 #include "rocksdb/env.h"
-#include "util/file_reader_writer.h"
 #include "util/gflags_compat.h"
+#include "util/sequence_file_reader.h"
 #include "version_edit.h"
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;

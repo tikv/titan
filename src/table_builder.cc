@@ -27,8 +27,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   if (!ok()) return;
 
   ParsedInternalKey ikey;
-  if (!ParseInternalKey(key, &ikey)) {
-    status_ = Status::Corruption(Slice());
+  status_ = ParseInternalKey(key, &ikey, false /*log_err_key*/);
+  if (!status_.ok()) {
     return;
   }
 
@@ -145,7 +145,7 @@ void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
 
   BlobFileBuilder::OutContexts contexts;
 
-  StopWatch write_sw(db_options_.env, statistics(stats_),
+  StopWatch write_sw(db_options_.clock, statistics(stats_),
                      TITAN_BLOB_FILE_WRITE_MICROS);
 
   // Init blob_builder_ first
@@ -197,8 +197,8 @@ void TitanTableBuilder::AddBlobResultsToBase(
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
        contexts) {
     ParsedInternalKey ikey;
-    if (!ParseInternalKey(ctx->key, &ikey)) {
-      status_ = Status::Corruption(Slice());
+    status_ = ParseInternalKey(key, &ikey, false /*log_err_key*/);
+    if (!status_.ok()) {
       return;
     }
     if (ctx->has_value) {

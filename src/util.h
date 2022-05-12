@@ -1,9 +1,9 @@
 #pragma once
 
+#include "file/writable_file_writer.h"
 #include "options/db_options.h"
 #include "rocksdb/cache.h"
 #include "util/compression.h"
-#include "util/file_reader_writer.h"
 
 #include "titan_stats.h"
 
@@ -75,9 +75,9 @@ void DeleteCacheValue(const Slice&, void* value) {
   delete reinterpret_cast<T*>(value);
 }
 
-Status SyncTitanManifest(Env* env, TitanStats* stats,
-                         const ImmutableDBOptions* db_options,
-                         WritableFileWriter* file);
+Status SyncTitanManifest(TitanStats *stats,
+                         const ImmutableDBOptions *db_options,
+                         WritableFileWriter *file);
 
 }  // namespace titandb
 }  // namespace rocksdb

@@ -61,16 +61,16 @@ void TitanCheckpointImpl::CleanStagingDirectory(
 Status TitanCheckpointImpl::CreateTitanManifest(
     const std::string& file_name, std::vector<VersionEdit>* edits) {
   Status s;
-  Env* env = db_->GetEnv();
+  FileSystem *fs = db_->GetFileSystem();
   bool use_fsync = db_->GetDBOptions().use_fsync;
-  const EnvOptions env_options;
+  const FileOptions file_options;
   std::unique_ptr<WritableFileWriter> file;
 
   {
-    std::unique_ptr<WritableFile> f;
-    s = env->NewWritableFile(file_name, &f, env_options);
+    std::unique_ptr<FSWritableFile> f;
+    s = fs->NewWritableFile(file_name, &f, file_options);
     if (!s.ok()) return s;
-    file.reset(new WritableFileWriter(std::move(f), file_name, env_options));
+    file.reset(new WritableFileWriter(std::move(f), file_name, file_options));
   }
   std::unique_ptr<log::Writer> manifest;
   manifest.reset(new log::Writer(std::move(file), 0, false));
@@ -125,7 +125,8 @@ Status TitanCheckpointImpl::CreateCheckpoint(
     // Create base DB checkpoint
     auto base_db_checkpoint = new rocksdb::CheckpointImpl(db_);
     s = base_db_checkpoint->CreateCheckpoint(base_checkpoint_dir,
-                                             log_size_for_flush);
+                                             log_size_for_flush,
+                                             nullptr /*sequence_number_ptr*/);
     delete base_db_checkpoint;
     base_db_checkpoint = nullptr;
 
@@ -155,15 +156,15 @@ Status TitanCheckpointImpl::CreateCheckpoint(
         [&](const std::string& src_dirname, const std::string& fname,
             uint64_t size_limit_bytes, FileType) {
           TITAN_LOG_INFO(titandb_options.info_log, "Copying %s", fname.c_str());
-          return CopyFile(db_->GetEnv(), src_dirname + fname,
+          return CopyFile(db_->GetFileSystem(), src_dirname + fname,
                           full_private_path + fname, size_limit_bytes,
                           titandb_options.use_fsync);
         } /* copy_file_cb */,
         [&](const std::string& fname, const std::string& contents, FileType) {
           TITAN_LOG_INFO(titandb_options.info_log, "Creating %s",
                          fname.c_str());
-          return CreateFile(db_->GetEnv(), full_private_path + fname, contents,
-                            titandb_options.use_fsync);
+          return CreateFile(db_->GetFileSystem(), full_private_path + fname,
+                            contents, titandb_options.use_fsync);
         } /* create_file_cb */,
         log_size_for_flush, full_private_path);
   }
