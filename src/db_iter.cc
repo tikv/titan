@@ -1,5 +1,7 @@
 #include "db_iter.h"
 
+#include "blob/blob_index.h"
+
 namespace rocksdb {
 namespace titandb {
 

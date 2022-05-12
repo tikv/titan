@@ -52,9 +52,10 @@ Status BlobFileSet::Recover() {
   auto file_name = dirname_ + "/" + manifest;
   std::unique_ptr<SequentialFileReader> file;
   {
-    std::unique_ptr<SequentialFile> f;
-    s = env_->NewSequentialFile(file_name, &f,
-                                env_->OptimizeForManifestRead(env_options_));
+    std::unique_ptr<FSSequentialFile> f;
+    FileSystem* fs = env_->GetFileSystem();
+    s = fs->NewSequentialFile(
+        file_name, fs->OptimizeForManifestRead(FileOptions(env_options_)), &f);
     if (!s.ok()) return s;
     file.reset(new SequentialFileReader(std::move(f), file_name));
   }
@@ -140,10 +141,12 @@ Status BlobFileSet::OpenManifest(uint64_t file_number) {
   auto file_name = DescriptorFileName(dirname_, file_number);
   std::unique_ptr<WritableFileWriter> file;
   {
-    std::unique_ptr<WritableFile> f;
-    s = env_->NewWritableFile(file_name, &f, env_options_);
+    std::unique_ptr<FSWritableFile> f;
+    FileSystem* fs = env_->GetFileSystem();
+    s = fs->NewWritableFile(file_name, FileOptions(env_options_), &f);
     if (!s.ok()) return s;
-    file.reset(new WritableFileWriter(std::move(f), file_name, env_options_));
+    file.reset(new WritableFileWriter(std::move(f), file_name,
+                                      FileOptions(env_options_)));
   }
 
   manifest_.reset(new log::Writer(std::move(file), 0, false));

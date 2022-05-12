@@ -32,6 +32,8 @@ class TitanTableFactory : public TableFactory {
 
   const char* Name() const override { return "TitanTable"; }
 
+  using TableFactory::NewTableReader;
+
   Status
   NewTableReader(const ReadOptions &ro, const TableReaderOptions &options,
                  std::unique_ptr<RandomAccessFileReader> &&file,

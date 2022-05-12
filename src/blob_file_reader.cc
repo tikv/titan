@@ -268,8 +268,8 @@ Status InitUncompressionDict(
 
   Slice dict_slice;
   CacheAllocationPtr dict_buf(new char[dict_block.size()]);
-  s = file->Read(dict_block.offset(), dict_block.size(), &dict_slice,
-                 dict_buf.get());
+  s = file->Read(IOOptions(), dict_block.offset(), dict_block.size(),
+                 &dict_slice, dict_buf.get());
   if (!s.ok()) {
     return s;
   }
