@@ -39,37 +39,41 @@ class BlobFileSizeCollectorTest : public testing::Test {
   }
 
   void NewFileWriter(std::unique_ptr<WritableFileWriter>* result) {
-    std::unique_ptr<WritableFile> writable_file;
-    ASSERT_OK(env_->NewWritableFile(file_name_, &writable_file, env_options_));
+    std::unique_ptr<FSWritableFile> writable_file;
+    ASSERT_OK(env_->GetFileSystem()->NewWritableFile(
+        file_name_, FileOptions(env_options_), &writable_file,
+        nullptr /*dbg*/));
     result->reset(new WritableFileWriter(std::move(writable_file), file_name_,
-                                         env_options_));
+                                         FileOptions(env_options_)));
     ASSERT_TRUE(*result);
   }
 
   void NewTableBuilder(WritableFileWriter* file,
                        std::unique_ptr<TableBuilder>* result) {
     CompressionOptions compression_opts;
-    TableBuilderOptions options(cf_ioptions_, cf_moptions_,
-                                cf_ioptions_.internal_comparator, &collectors_,
-                                kNoCompression, 0 /*sample_for_compression*/,
-                                compression_opts, false /*skip_filters*/,
-                                kDefaultColumnFamilyName, 0 /*level*/);
-    result->reset(table_factory_->NewTableBuilder(options, 0, file));
+    TableBuilderOptions options(
+        ImmutableOptions(ImmutableDBOptions(db_options_), cf_ioptions_),
+        cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
+        kNoCompression, compression_opts, 0 /*column_family_id*/,
+        kDefaultColumnFamilyName, 0 /*level*/);
+    result->reset(table_factory_->NewTableBuilder(options, file));
     ASSERT_TRUE(*result);
   }
 
   void NewFileReader(std::unique_ptr<RandomAccessFileReader>* result) {
-    std::unique_ptr<RandomAccessFile> file;
-    ASSERT_OK(env_->NewRandomAccessFile(file_name_, &file, env_options_));
-    result->reset(
-        new RandomAccessFileReader(std::move(file), file_name_, env_));
+    std::unique_ptr<FSRandomAccessFile> file;
+    ASSERT_OK(env_->GetFileSystem()->NewRandomAccessFile(
+        file_name_, FileOptions(env_options_), &file, nullptr /*dbg*/));
+    result->reset(new RandomAccessFileReader(std::move(file), file_name_,
+                                             env_->GetSystemClock().get()));
     ASSERT_TRUE(*result);
   }
 
   void NewTableReader(std::unique_ptr<RandomAccessFileReader>&& file,
                       std::unique_ptr<TableReader>* result) {
-    TableReaderOptions options(cf_ioptions_, nullptr, env_options_,
-                               cf_ioptions_.internal_comparator);
+    TableReaderOptions options(
+        ImmutableOptions(ImmutableDBOptions(db_options_), cf_ioptions_),
+        nullptr, env_options_, cf_ioptions_.internal_comparator);
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file->file_name(), &file_size));
     ASSERT_TRUE(file_size > 0);

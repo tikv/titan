@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rocksdb/env.h"
-#include "test_util/fault_injection_test_env.h"
+#include "utilities/fault_injection_env.h"
 
 #include <memory>
 

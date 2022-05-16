@@ -3,6 +3,7 @@
 
 #include "blob_file_set.h"
 #include "blob_storage.h"
+#include "monitoring/statistics.h"
 #include "monitoring/statistics_impl.h"
 
 #include <functional>

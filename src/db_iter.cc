@@ -1,6 +1,8 @@
 #include "db_iter.h"
 
-#include "blob/blob_index.h"
+// #include "blob/blob_index.h"
+#include "blob_storage.h"
+#include "db/arena_wrapped_db_iter.h"
 
 namespace rocksdb {
 namespace titandb {

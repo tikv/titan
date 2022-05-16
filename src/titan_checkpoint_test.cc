@@ -3,12 +3,12 @@
 #include "port/port.h"
 #include "port/stack_trace.h"
 #include "rocksdb/env.h"
-#include "test_util/fault_injection_test_env.h"
 #include "test_util/sync_point.h"
 #include "test_util/testharness.h"
 #include "test_util/testutil.h"
 #include "titan/checkpoint.h"
 #include "titan/db.h"
+#include "utilities/fault_injection_env.h"
 
 namespace rocksdb {
 namespace titandb {

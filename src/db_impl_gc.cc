@@ -200,7 +200,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     // Nothing to do
     TITAN_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
-    StopWatch gc_sw(db_options_.clock, statistics(stats_.get()),
+    StopWatch gc_sw(env_->GetSystemClock().get(), statistics(stats_.get()),
                     TITAN_GC_MICROS);
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_,
                           gc_merge_rewrite, env_, env_options_,

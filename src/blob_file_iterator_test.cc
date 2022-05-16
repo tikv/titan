@@ -56,10 +56,11 @@ class BlobFileIteratorTest : public testing::Test {
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     {
-      std::unique_ptr<WritableFile> f;
-      ASSERT_OK(env_->NewWritableFile(file_name_, &f, env_options_));
-      writable_file_.reset(
-          new WritableFileWriter(std::move(f), file_name_, env_options_));
+      std::unique_ptr<FSWritableFile> f;
+      ASSERT_OK(env_->GetFileSystem()->NewWritableFile(
+          file_name_, FileOptions(env_options_), &f, nullptr /*dbg*/));
+      writable_file_.reset(new WritableFileWriter(std::move(f), file_name_,
+                                                  FileOptions(env_options_)));
     }
     builder_.reset(
         new BlobFileBuilder(db_options, cf_options, writable_file_.get()));

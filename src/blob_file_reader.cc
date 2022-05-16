@@ -7,8 +7,10 @@
 #include <inttypes.h>
 
 #include "file/filename.h"
+#include "file/readahead_raf.h"
 #include "table/block_based/block.h"
 #include "table/internal_iterator.h"
+#include "table/meta_blocks.h"
 #include "test_util/sync_point.h"
 #include "titan_stats.h"
 #include "util/crc32c.h"
@@ -21,17 +23,19 @@ Status NewBlobFileReader(uint64_t file_number, uint64_t readahead_size,
                          const TitanDBOptions& db_options,
                          const EnvOptions& env_options, Env* env,
                          std::unique_ptr<RandomAccessFileReader>* result) {
-  std::unique_ptr<RandomAccessFile> file;
+  std::unique_ptr<FSRandomAccessFile> file;
   auto file_name = BlobFileName(db_options.dirname, file_number);
-  Status s = env->NewRandomAccessFile(file_name, &file, env_options);
+  Status s = env->GetFileSystem()->NewRandomAccessFile(
+      file_name, FileOptions(env_options), &file, nullptr /*dbg*/);
   if (!s.ok()) return s;
 
   if (readahead_size > 0) {
     file = NewReadaheadRandomAccessFile(std::move(file), readahead_size);
   }
   result->reset(new RandomAccessFileReader(
-      std::move(file), file_name, nullptr /*env*/, nullptr /*stats*/,
-      0 /*hist_type*/, nullptr /*file_read_hist*/, env_options.rate_limiter));
+      std::move(file), file_name, nullptr /*clock*/, nullptr /*io_tracer*/,
+      nullptr /*stats*/, 0 /*hist_type*/, nullptr /*file_read_hist*/,
+      env_options.rate_limiter));
   return s;
 }
 
@@ -39,7 +43,8 @@ const uint64_t kMaxReadaheadSize = 256 << 10;
 
 namespace {
 
-void GenerateCachePrefix(std::string* dst, Cache* cc, RandomAccessFile* file) {
+void GenerateCachePrefix(std::string *dst, Cache *cc,
+                         FSRandomAccessFile *file) {
   char buffer[kMaxVarint64Length * 3 + 1];
   auto size = file->GetUniqueId(buffer, sizeof(buffer));
   if (size == 0) {
@@ -93,8 +98,9 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
   }
 
   FixedSlice<BlobFileFooter::kEncodedLength> buffer;
-  s = file->Read(file_size - BlobFileFooter::kEncodedLength,
-                 BlobFileFooter::kEncodedLength, &buffer, buffer.get());
+  s = file->Read(IOOptions(), file_size - BlobFileFooter::kEncodedLength,
+                 BlobFileFooter::kEncodedLength, &buffer, buffer.get(),
+                 nullptr /*aligned_buf*/);
   if (!s.ok()) {
     return s;
   }
@@ -121,8 +127,8 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
 Status BlobFileReader::ReadHeader(std::unique_ptr<RandomAccessFileReader>& file,
                                   BlobFileHeader* header) {
   FixedSlice<BlobFileHeader::kMaxEncodedLength> buffer;
-  Status s =
-      file->Read(0, BlobFileHeader::kMaxEncodedLength, &buffer, buffer.get());
+  Status s = file->Read(IOOptions(), 0, BlobFileHeader::kMaxEncodedLength,
+                        &buffer, buffer.get(), nullptr /*aligned_buf*/);
   if (!s.ok()) return s;
 
   s = DecodeInto(buffer, header, true /*ignore_extra_bytes*/);
@@ -185,7 +191,8 @@ Status BlobFileReader::ReadRecord(const BlobHandle& handle, BlobRecord* record,
                                   OwnedSlice* buffer) {
   Slice blob;
   CacheAllocationPtr ubuf(new char[handle.size]);
-  Status s = file_->Read(handle.offset, handle.size, &blob, ubuf.get());
+  Status s = file_->Read(IOOptions(), handle.offset, handle.size, &blob,
+                         ubuf.get(), nullptr /*aligned_buf*/);
   if (!s.ok()) {
     return s;
   }
@@ -241,8 +248,9 @@ Status InitUncompressionDict(
   BlockHandle meta_index_handle = footer.meta_index_handle;
   Slice blob;
   CacheAllocationPtr ubuf(new char[meta_index_handle.size()]);
-  Status s = file->Read(meta_index_handle.offset(), meta_index_handle.size(),
-                        &blob, ubuf.get());
+  Status s = file->Read(IOOptions(), meta_index_handle.offset(),
+                        meta_index_handle.size(), &blob, ubuf.get(),
+                        nullptr /*aligned_buf*/);
   if (!s.ok()) {
     return s;
   }
@@ -251,13 +259,13 @@ Status InitUncompressionDict(
   std::unique_ptr<Block> meta(
       new Block(std::move(meta_block_content), kDisableGlobalSequenceNumber));
 
-  std::unique_ptr<InternalIterator> meta_iter(
-      meta->NewDataIterator(BytewiseComparator(), BytewiseComparator()));
+  std::unique_ptr<InternalIterator> meta_iter(meta->NewDataIterator(
+      BytewiseComparator(), kDisableGlobalSequenceNumber));
 
   bool dict_is_found = false;
   BlockHandle dict_block;
-  s = SeekToMetaBlock(meta_iter.get(), kCompressionDictBlock, &dict_is_found,
-                      &dict_block);
+  s = SeekToMetaBlock(meta_iter.get(), kCompressionDictBlockName,
+                      &dict_is_found, &dict_block);
   if (!s.ok()) {
     return s;
   }
@@ -269,7 +277,7 @@ Status InitUncompressionDict(
   Slice dict_slice;
   CacheAllocationPtr dict_buf(new char[dict_block.size()]);
   s = file->Read(IOOptions(), dict_block.offset(), dict_block.size(),
-                 &dict_slice, dict_buf.get());
+                 &dict_slice, dict_buf.get(), nullptr /*aligned_buf*/);
   if (!s.ok()) {
     return s;
   }

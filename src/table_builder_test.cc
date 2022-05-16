@@ -30,11 +30,13 @@ class FileManager : public BlobFileManager {
     auto name = BlobFileName(db_options_.dirname, number);
     std::unique_ptr<WritableFileWriter> file;
     {
-      std::unique_ptr<WritableFile> f;
-      Status s = env_->NewWritableFile(name, &f, env_options_);
+      std::unique_ptr<FSWritableFile> f;
+      Status s = env_->GetFileSystem()->NewWritableFile(
+          name, FileOptions(env_options_), &f, nullptr /*dbg*/);
       if (!s.ok()) return s;
       f->SetIOPriority(pri);
-      file.reset(new WritableFileWriter(std::move(f), name, env_options_));
+      file.reset(new WritableFileWriter(std::move(f), name,
+                                        FileOptions(env_options_)));
     }
     handle->reset(new FileHandle(number, name, std::move(file)));
     return Status::OK();
@@ -112,13 +114,15 @@ class TestTableFactory : public TableFactory {
 
   const char* Name() const override { return "TestTableFactory"; }
 
-  Status NewTableReader(
-      const TableReaderOptions& options,
-      std::unique_ptr<RandomAccessFileReader>&& file, uint64_t file_size,
-      std::unique_ptr<TableReader>* result,
-      bool prefetch_index_and_filter_in_cache) const override {
-    return base_factory_->NewTableReader(options, std::move(file), file_size,
-                                         result,
+  using TableFactory::NewTableReader;
+
+  Status
+  NewTableReader(const ReadOptions &ro, const TableReaderOptions &options,
+                 std::unique_ptr<RandomAccessFileReader> &&file,
+                 uint64_t file_size, std::unique_ptr<TableReader> *result,
+                 bool prefetch_index_and_filter_in_cache) const override {
+    return base_factory_->NewTableReader(ro, options, std::move(file),
+                                         file_size, result,
                                          prefetch_index_and_filter_in_cache);
   }
 
@@ -155,7 +159,7 @@ class TableBuilderTest : public testing::Test {
     base_table_factory_ =
         std::make_shared<TestTableFactory>(cf_options_.table_factory);
     cf_options_.table_factory = base_table_factory_;
-    cf_ioptions_.table_factory = base_table_factory_.get();
+    cf_ioptions_.table_factory = base_table_factory_;
     table_factory_.reset(new TitanTableFactory(
         db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
         blob_file_set_.get(), nullptr));
@@ -182,16 +186,20 @@ class TableBuilderTest : public testing::Test {
 
   void NewFileWriter(const std::string& fname,
                      std::unique_ptr<WritableFileWriter>* result) {
-    std::unique_ptr<WritableFile> file;
-    ASSERT_OK(env_->NewWritableFile(fname, &file, env_options_));
-    result->reset(new WritableFileWriter(std::move(file), fname, env_options_));
+    std::unique_ptr<FSWritableFile> file;
+    ASSERT_OK(env_->GetFileSystem()->NewWritableFile(
+        fname, FileOptions(env_options_), &file, nullptr /*dbg*/));
+    result->reset(new WritableFileWriter(std::move(file), fname,
+                                         FileOptions(env_options_)));
   }
 
   void NewFileReader(const std::string& fname,
                      std::unique_ptr<RandomAccessFileReader>* result) {
-    std::unique_ptr<RandomAccessFile> file;
-    ASSERT_OK(env_->NewRandomAccessFile(fname, &file, env_options_));
-    result->reset(new RandomAccessFileReader(std::move(file), fname, env_));
+    std::unique_ptr<FSRandomAccessFile> file;
+    ASSERT_OK(env_->GetFileSystem()->NewRandomAccessFile(
+        fname, FileOptions(env_options_), &file, nullptr /*dbg*/));
+    result->reset(new RandomAccessFileReader(std::move(file), fname,
+                                             env_->GetSystemClock().get()));
   }
 
   void NewBaseFileWriter(std::unique_ptr<WritableFileWriter>* result) {
@@ -217,8 +225,9 @@ class TableBuilderTest : public testing::Test {
     NewFileReader(fname, &file);
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file->file_name(), &file_size));
-    TableReaderOptions options(cf_ioptions_, nullptr, env_options_,
-                               cf_ioptions_.internal_comparator);
+    TableReaderOptions options(
+        ImmutableOptions(ImmutableDBOptions(db_options_), cf_ioptions_),
+        nullptr, env_options_, cf_ioptions_.internal_comparator);
     ASSERT_OK(table_factory_->NewTableReader(options, std::move(file),
                                              file_size, result));
   }
@@ -234,12 +243,12 @@ class TableBuilderTest : public testing::Test {
                        std::unique_ptr<TableBuilder>* result,
                        CompressionOptions compression_opts,
                        int target_level = 0) {
-    TableBuilderOptions options(cf_ioptions_, cf_moptions_,
-                                cf_ioptions_.internal_comparator, &collectors_,
-                                kNoCompression, 0 /*sample_for_compression*/,
-                                compression_opts, false /*skip_filters*/,
-                                kDefaultColumnFamilyName, target_level);
-    result->reset(table_factory_->NewTableBuilder(options, 0, file));
+    TableBuilderOptions options(
+        ImmutableOptions(ImmutableDBOptions(db_options_), cf_ioptions_),
+        cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
+        kNoCompression, compression_opts, 0 /*column_family_id*/,
+        kDefaultColumnFamilyName, target_level);
+    result->reset(table_factory_->NewTableBuilder(options, file));
   }
 
   port::Mutex mutex_;
@@ -267,17 +276,17 @@ class TableBuilderTest : public testing::Test {
 // builder.
 TEST_F(TableBuilderTest, BeforeDBInitialized) {
   CompressionOptions compression_opts;
-  TableBuilderOptions opts(cf_ioptions_, cf_moptions_,
-                           cf_ioptions_.internal_comparator, &collectors_,
-                           kNoCompression, 0 /*sample_for_compression*/,
-                           compression_opts, false /*skip_filters*/,
-                           kDefaultColumnFamilyName, 0 /*target_level*/);
+  TableBuilderOptions opts(
+      ImmutableOptions(ImmutableDBOptions(db_options_), cf_ioptions_),
+      cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
+      kNoCompression, compression_opts, 0 /*column_family_id*/,
+      kDefaultColumnFamilyName, 0 /*target_level*/);
 
   db_impl_->TEST_set_initialized(false);
   std::unique_ptr<WritableFileWriter> file1;
   NewBaseFileWriter(&file1);
   std::unique_ptr<TableBuilder> builder1(
-      table_factory_->NewTableBuilder(opts, 0 /*cf_id*/, file1.get()));
+      table_factory_->NewTableBuilder(opts, file1.get()));
   ASSERT_EQ(builder1.get(), base_table_factory_->latest_table_builder());
   builder1->Abandon();
 
@@ -285,7 +294,7 @@ TEST_F(TableBuilderTest, BeforeDBInitialized) {
   std::unique_ptr<WritableFileWriter> file2;
   NewBaseFileWriter(&file2);
   std::unique_ptr<TableBuilder> builder2(
-      table_factory_->NewTableBuilder(opts, 0 /*cf_id*/, file2.get()));
+      table_factory_->NewTableBuilder(opts, file2.get()));
   ASSERT_NE(builder2.get(), base_table_factory_->latest_table_builder());
   builder2->Abandon();
 }

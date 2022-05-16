@@ -7,11 +7,11 @@ namespace rocksdb {
 namespace titandb {
 
 Status TitanTableFactory::NewTableReader(
-    const TableReaderOptions& options,
-    std::unique_ptr<RandomAccessFileReader>&& file, uint64_t file_size,
-    std::unique_ptr<TableReader>* result,
+    const ReadOptions &ro, const TableReaderOptions &options,
+    std::unique_ptr<RandomAccessFileReader> &&file, uint64_t file_size,
+    std::unique_ptr<TableReader> *result,
     bool prefetch_index_and_filter_in_cache) const {
-  return base_factory_->NewTableReader(options, std::move(file), file_size,
+  return base_factory_->NewTableReader(ro, options, std::move(file), file_size,
                                        result,
                                        prefetch_index_and_filter_in_cache);
 }
@@ -20,7 +20,7 @@ TableBuilder *
 TitanTableFactory::NewTableBuilder(const TableBuilderOptions &options,
                                    WritableFileWriter *file) const {
   std::unique_ptr<TableBuilder> base_builder(
-      base_factory_->NewTableBuilder(options, options.column_family_id, file));
+      base_factory_->NewTableBuilder(options, file));
   if (!db_impl_->initialized()) {
     return base_builder.release();
   }
@@ -40,7 +40,7 @@ TitanTableFactory::NewTableBuilder(const TableBuilderOptions &options,
   return new TitanTableBuilder(
       options.column_family_id, db_options_, cf_options,
       std::move(base_builder), blob_manager_, blob_storage, stats_,
-      std::max(1, num_levels - 2) /* merge level */, options.level);
+      std::max(1, num_levels - 2) /* merge level */, options.level_at_creation);
 }
 
 }  // namespace titandb

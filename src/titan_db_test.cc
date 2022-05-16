@@ -280,9 +280,8 @@ class TitanDBTest : public testing::Test {
     ASSERT_OK(TitanDB::Open(TitanOptions(options), dbname_, &db));
     auto cf_options = db->GetOptions(db->DefaultColumnFamily());
     auto db_options = db->GetDBOptions();
-    ImmutableCFOptions immu_cf_options(ImmutableDBOptions(db_options),
-                                       cf_options);
-    ASSERT_EQ(original_table_factory, immu_cf_options.table_factory);
+    ImmutableCFOptions immu_cf_options(cf_options);
+    ASSERT_EQ(original_table_factory, immu_cf_options.table_factory.get());
     ASSERT_OK(db->Close());
     delete db;
 

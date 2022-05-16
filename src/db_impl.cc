@@ -12,6 +12,7 @@
 #include "blob_file_size_collector.h"
 #include "blob_gc.h"
 #include "compaction_filter.h"
+#include "db/arena_wrapped_db_iter.h"
 #include "db_iter.h"
 #include "logging/log_buffer.h"
 #include "monitoring/statistics_impl.h"
@@ -39,12 +40,14 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     Status s;
     std::unique_ptr<WritableFileWriter> file;
     {
-      std::unique_ptr<WritableFile> f;
-      s = db_->env_->NewWritableFile(name, &f, db_->env_options_);
+      std::unique_ptr<FSWritableFile> f;
+      s = db_->env_->GetFileSystem()->NewWritableFile(
+          name, FileOptions(db_->env_options_), &f, nullptr /*dbg*/);
       if (!s.ok()) return s;
 
       f->SetIOPriority(pri);
-      file.reset(new WritableFileWriter(std::move(f), name, db_->env_options_));
+      file.reset(new WritableFileWriter(std::move(f), name,
+                                        FileOptions(db_->env_options_)));
     }
 
     handle->reset(new FileHandle(number, name, std::move(file)));
@@ -66,7 +69,8 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     for (auto& file : files) {
       RecordTick(statistics(db_->stats_.get()), TITAN_BLOB_FILE_SYNCED);
       {
-        StopWatch sync_sw(db_->db_options_.clock, statistics(db_->stats_.get()),
+        StopWatch sync_sw(db_->env_->GetSystemClock().get(),
+                          statistics(db_->stats_.get()),
                           TITAN_BLOB_FILE_SYNC_MICROS);
         s = file.second->GetFile()->Sync(false);
       }
@@ -160,13 +164,15 @@ void TitanDBImpl::StartBackgroundTasks() {
   if (thread_purge_obsolete_ == nullptr &&
       db_options_.purge_obsolete_files_period_sec > 0) {
     thread_purge_obsolete_.reset(new rocksdb::RepeatableThread(
-        [this]() { TitanDBImpl::PurgeObsoleteFiles(); }, "titanbg", env_,
+        [this]() { TitanDBImpl::PurgeObsoleteFiles(); }, "titanbg",
+        env_->GetSystemClock().get(),
         db_options_.purge_obsolete_files_period_sec * 1000 * 1000));
   }
   if (thread_dump_stats_ == nullptr &&
       db_options_.titan_stats_dump_period_sec > 0) {
     thread_dump_stats_.reset(new rocksdb::RepeatableThread(
-        [this]() { TitanDBImpl::DumpStats(); }, "titanst", env_,
+        [this]() { TitanDBImpl::DumpStats(); }, "titanst",
+        env_->GetSystemClock().get(),
         db_options_.titan_stats_dump_period_sec * 1000 * 1000));
   }
 }
@@ -615,14 +621,14 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                             PinnableSlice* value) {
   Status s;
   bool is_blob_index = false;
-  GetImplOptions gopts;
+  DBImpl::GetImplOptions gopts;
   gopts.column_family = handle;
   gopts.value = value;
   gopts.is_blob_index = &is_blob_index;
   s = db_impl_->GetImpl(options, key, gopts);
   if (!s.ok() || !is_blob_index) return s;
 
-  StopWatch get_sw(db_options_.clock, statistics(stats_.get()),
+  StopWatch get_sw(env_->GetSystemClock().get(), statistics(stats_.get()),
                    TITAN_GET_MICROS);
   RecordTick(statistics(stats_.get()), TITAN_NUM_GET);
 
@@ -642,7 +648,7 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   mutex_.Unlock();
 
   if (storage) {
-    StopWatch read_sw(db_options_.clock, statistics(stats_.get()),
+    StopWatch read_sw(env_->GetSystemClock().get(), statistics(stats_.get()),
                       TITAN_BLOB_FILE_READ_MICROS);
     s = storage->Get(options, index, &record, &buffer);
     RecordTick(statistics(stats_.get()), TITAN_BLOB_FILE_NUM_KEYS_READ);
@@ -732,7 +738,8 @@ Iterator* TitanDBImpl::NewIteratorImpl(
       options, cfd, options.snapshot->GetSequenceNumber(),
       nullptr /*read_callback*/, true /*allow_blob*/, true /*allow_refresh*/));
   return new TitanDBIterator(options, storage.get(), snapshot, std::move(iter),
-                             env_, stats_.get(), db_options_.info_log.get());
+                             env_->GetSystemClock().get(), stats_.get(),
+                             db_options_.info_log.get());
 }
 
 Status TitanDBImpl::NewIterators(

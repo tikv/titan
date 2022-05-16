@@ -68,7 +68,7 @@ Status TitanCheckpointImpl::CreateTitanManifest(
 
   {
     std::unique_ptr<FSWritableFile> f;
-    s = fs->NewWritableFile(file_name, &f, file_options);
+    s = fs->NewWritableFile(file_name, file_options, &f, nullptr /*dbg*/);
     if (!s.ok()) return s;
     file.reset(new WritableFileWriter(std::move(f), file_name, file_options));
   }

@@ -145,8 +145,8 @@ void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
 
   BlobFileBuilder::OutContexts contexts;
 
-  StopWatch write_sw(db_options_.clock, statistics(stats_),
-                     TITAN_BLOB_FILE_WRITE_MICROS);
+  StopWatch write_sw(db_options_.env->GetSystemClock().get(),
+                     statistics(stats_), TITAN_BLOB_FILE_WRITE_MICROS);
 
   // Init blob_builder_ first
   if (!blob_builder_) {
@@ -197,7 +197,7 @@ void TitanTableBuilder::AddBlobResultsToBase(
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
        contexts) {
     ParsedInternalKey ikey;
-    status_ = ParseInternalKey(key, &ikey, false /*log_err_key*/);
+    status_ = ParseInternalKey(ctx->key, &ikey, false /*log_err_key*/);
     if (!status_.ok()) {
       return;
     }
@@ -316,6 +316,18 @@ bool TitanTableBuilder::NeedCompact() const {
 
 TableProperties TitanTableBuilder::GetTableProperties() const {
   return base_builder_->GetTableProperties();
+}
+
+IOStatus TitanTableBuilder::io_status() const {
+  return base_builder_->io_status();
+}
+
+std::string TitanTableBuilder::GetFileChecksum() const {
+  return base_builder_->GetFileChecksum();
+}
+
+const char *TitanTableBuilder::GetFileChecksumFuncName() const {
+  return base_builder_->GetFileChecksumFuncName();
 }
 
 bool TitanTableBuilder::ShouldMerge(

@@ -53,9 +53,10 @@ Status BlobFileSet::Recover() {
   std::unique_ptr<SequentialFileReader> file;
   {
     std::unique_ptr<FSSequentialFile> f;
-    FileSystem* fs = env_->GetFileSystem();
+    auto fs = env_->GetFileSystem();
     s = fs->NewSequentialFile(
-        file_name, fs->OptimizeForManifestRead(FileOptions(env_options_)), &f);
+        file_name, fs->OptimizeForManifestRead(FileOptions(env_options_)), &f,
+        nullptr /*dbg*/);
     if (!s.ok()) return s;
     file.reset(new SequentialFileReader(std::move(f), file_name));
   }
@@ -142,8 +143,9 @@ Status BlobFileSet::OpenManifest(uint64_t file_number) {
   std::unique_ptr<WritableFileWriter> file;
   {
     std::unique_ptr<FSWritableFile> f;
-    FileSystem* fs = env_->GetFileSystem();
-    s = fs->NewWritableFile(file_name, FileOptions(env_options_), &f);
+    auto fs = env_->GetFileSystem();
+    s = fs->NewWritableFile(file_name, FileOptions(env_options_), &f,
+                            nullptr /*dbg*/);
     if (!s.ok()) return s;
     file.reset(new WritableFileWriter(std::move(f), file_name,
                                       FileOptions(env_options_)));
@@ -160,7 +162,8 @@ Status BlobFileSet::OpenManifest(uint64_t file_number) {
   uint64_t old_manifest_file_number = manifest_file_number_;
   if (s.ok()) {
     // Makes "CURRENT" file that points to the new manifest file.
-    s = SetCurrentFile(env_, dirname_, file_number, nullptr);
+    s = SetCurrentFile(env_->GetFileSystem().get(), dirname_, file_number,
+                       nullptr);
     manifest_file_number_ = file_number;
   }
 

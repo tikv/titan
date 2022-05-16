@@ -9,6 +9,8 @@
 #include <memory>
 #include <unordered_map>
 
+#include "blob_file_reader.h"
+#include "blob_format.h"
 #include "db/db_iter.h"
 #include "rocksdb/env.h"
 #include "titan_logging.h"

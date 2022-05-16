@@ -29,7 +29,7 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
     auto* db_impl = reinterpret_cast<DBImpl*>(db);
     PinnableSlice index_entry;
     bool is_blob_index;
-    GetImplOptions gopts;
+    DBImpl::GetImplOptions gopts;
     gopts.column_family = cfh_;
     gopts.value = &index_entry;
     gopts.is_blob_index = &is_blob_index;
@@ -345,7 +345,7 @@ Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
   assert(discardable != nullptr);
   PinnableSlice index_entry;
   bool is_blob_index = false;
-  GetImplOptions gopts;
+  DBImpl::GetImplOptions gopts;
   gopts.column_family = blob_gc_->column_family_handle();
   gopts.value = &index_entry;
   gopts.is_blob_index = &is_blob_index;

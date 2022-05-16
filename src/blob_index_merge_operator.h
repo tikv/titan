@@ -25,6 +25,7 @@ class BlobIndexMergeOperator : public MergeOperator {
   //    merge.
   bool FullMergeV2(const MergeOperationInput& merge_in,
                    MergeOperationOutput* merge_out) const override {
+    /*
     Status s;
     if (merge_in.existing_value && merge_in.value_type == kValue) {
       merge_out->new_type = kValue;
@@ -77,6 +78,8 @@ class BlobIndexMergeOperator : public MergeOperator {
       merge_index.EncodeTo(&merge_out->new_value);
     }
     return true;
+    */
+    return false;
   }
 
   bool PartialMergeMulti(const Slice& key,

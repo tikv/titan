@@ -62,10 +62,11 @@ class BlobFileTest : public testing::Test {
 
     std::unique_ptr<WritableFileWriter> file;
     {
-      std::unique_ptr<WritableFile> f;
-      ASSERT_OK(env_->NewWritableFile(file_name_, &f, env_options_));
-      file.reset(
-          new WritableFileWriter(std::move(f), file_name_, env_options_));
+      std::unique_ptr<FSWritableFile> f;
+      ASSERT_OK(env_->GetFileSystem()->NewWritableFile(
+          file_name_, FileOptions(env_options_), &f, nullptr /*dbg*/));
+      file.reset(new WritableFileWriter(std::move(f), file_name_,
+                                        FileOptions(env_options_)));
     }
     std::unique_ptr<BlobFileBuilder> builder;
     if (blob_file_version == 0) {
@@ -135,10 +136,11 @@ class BlobFileTest : public testing::Test {
 
     std::unique_ptr<WritableFileWriter> file;
     {
-      std::unique_ptr<WritableFile> f;
-      ASSERT_OK(env_->NewWritableFile(file_name_, &f, env_options_));
-      file.reset(
-          new WritableFileWriter(std::move(f), file_name_, env_options_));
+      std::unique_ptr<FSWritableFile> f;
+      ASSERT_OK(env_->GetFileSystem()->NewWritableFile(
+          file_name_, FileOptions(env_options_), &f, nullptr /*dbg*/));
+      file.reset(new WritableFileWriter(std::move(f), file_name_,
+                                        FileOptions(env_options_)));
     }
 
     std::unique_ptr<BlobFileBuilder> builder;
