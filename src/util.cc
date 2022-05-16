@@ -48,9 +48,9 @@ void UnrefCacheHandle(void* arg1, void* arg2) {
   cache->Release(h);
 }
 
-Status SyncTitanManifest(TitanStats *stats,
-                         const ImmutableDBOptions *db_options,
-                         WritableFileWriter *file) {
+Status SyncTitanManifest(TitanStats* stats,
+                         const ImmutableDBOptions* db_options,
+                         WritableFileWriter* file) {
   StopWatch sw(db_options->clock, statistics(stats),
                TITAN_MANIFEST_FILE_SYNC_MICROS);
   return file->Sync(db_options->use_fsync);

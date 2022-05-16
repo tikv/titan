@@ -13,8 +13,13 @@ TitanDBIterator::TitanDBIterator(const TitanReadOptions &options,
                                  std::unique_ptr<ArenaWrappedDBIter> iter,
                                  SystemClock *clock, TitanStats *stats,
                                  Logger *info_log)
-    : options_(options), storage_(storage), snap_(snap), iter_(std::move(iter)),
-      clock_(clock), stats_(stats), info_log_(info_log) {}
+    : options_(options),
+      storage_(storage),
+      snap_(snap),
+      iter_(std::move(iter)),
+      clock_(clock),
+      stats_(stats),
+      info_log_(info_log) {}
 
 TitanDBIterator::~TitanDBIterator() {
   RecordInHistogram(statistics(stats_), TITAN_ITER_TOUCH_BLOB_FILE_COUNT,
@@ -95,10 +100,8 @@ Slice TitanDBIterator::key() const {
 
 Slice TitanDBIterator::value() const {
   assert(Valid() && !options_.key_only);
-  if (options_.key_only)
-    return Slice();
-  if (!iter_->IsBlob())
-    return iter_->value();
+  if (options_.key_only) return Slice();
+  if (!iter_->IsBlob()) return iter_->value();
   return record_.value;
 }
 
@@ -178,5 +181,5 @@ void TitanDBIterator::GetBlobValueImpl(const BlobIndex &index) {
   return;
 }
 
-} // namespace titandb
-} // namespace rocksdb
+}  // namespace titandb
+}  // namespace rocksdb

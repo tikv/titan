@@ -43,8 +43,8 @@ const uint64_t kMaxReadaheadSize = 256 << 10;
 
 namespace {
 
-void GenerateCachePrefix(std::string *dst, Cache *cc,
-                         FSRandomAccessFile *file) {
+void GenerateCachePrefix(std::string* dst, Cache* cc,
+                         FSRandomAccessFile* file) {
   char buffer[kMaxVarint64Length * 3 + 1];
   auto size = file->GetUniqueId(buffer, sizeof(buffer));
   if (size == 0) {

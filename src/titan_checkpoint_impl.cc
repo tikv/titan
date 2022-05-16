@@ -61,7 +61,7 @@ void TitanCheckpointImpl::CleanStagingDirectory(
 Status TitanCheckpointImpl::CreateTitanManifest(
     const std::string& file_name, std::vector<VersionEdit>* edits) {
   Status s;
-  FileSystem *fs = db_->GetFileSystem();
+  FileSystem* fs = db_->GetFileSystem();
   bool use_fsync = db_->GetDBOptions().use_fsync;
   const FileOptions file_options;
   std::unique_ptr<WritableFileWriter> file;

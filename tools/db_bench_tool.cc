@@ -6357,8 +6357,9 @@ class Benchmark {
     s = db_with_cfh->db->NewDefaultReplayer(db_with_cfh->cfh,
                                             std::move(trace_reader), &replayer);
     if (!s.ok()) {
-      fprintf(stderr, "Encountered an error creating a default Replayer. "
-                      "Error: %s\n",
+      fprintf(stderr,
+              "Encountered an error creating a default Replayer. "
+              "Error: %s\n",
               s.ToString().c_str());
       exit(1);
     }

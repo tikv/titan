@@ -116,11 +116,11 @@ class TestTableFactory : public TableFactory {
 
   using TableFactory::NewTableReader;
 
-  Status
-  NewTableReader(const ReadOptions &ro, const TableReaderOptions &options,
-                 std::unique_ptr<RandomAccessFileReader> &&file,
-                 uint64_t file_size, std::unique_ptr<TableReader> *result,
-                 bool prefetch_index_and_filter_in_cache) const override {
+  Status NewTableReader(
+      const ReadOptions& ro, const TableReaderOptions& options,
+      std::unique_ptr<RandomAccessFileReader>&& file, uint64_t file_size,
+      std::unique_ptr<TableReader>* result,
+      bool prefetch_index_and_filter_in_cache) const override {
     return base_factory_->NewTableReader(ro, options, std::move(file),
                                          file_size, result,
                                          prefetch_index_and_filter_in_cache);

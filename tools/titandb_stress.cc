@@ -2642,8 +2642,8 @@ class StressTest {
   void PrintEnv() const {
     fprintf(stdout, "RocksDB version           : %d.%d\n", kMajorVersion,
             kMinorVersion);
-    const auto &props = GetRocksBuildProperties();
-    const auto &sha = props.find("rocksdb_build_git_sha");
+    const auto& props = GetRocksBuildProperties();
+    const auto& sha = props.find("rocksdb_build_git_sha");
     if (sha != props.end()) {
       fprintf(stdout, "RocksDB hash              : %s\n", sha->second.c_str());
     }
@@ -2717,11 +2717,11 @@ class StressTest {
 
     fprintf(stdout, "Memtablerep               : %s\n", memtablerep);
 
-    rocksdb::KillPoint *kp = rocksdb::KillPoint::GetInstance();
+    rocksdb::KillPoint* kp = rocksdb::KillPoint::GetInstance();
     fprintf(stdout, "Test kill odd             : %d\n", kp->rocksdb_kill_odds);
     if (!kp->rocksdb_kill_exclude_prefixes.empty()) {
       fprintf(stdout, "Skipping kill points prefixes:\n");
-      for (auto &p : kp->rocksdb_kill_exclude_prefixes) {
+      for (auto& p : kp->rocksdb_kill_exclude_prefixes) {
         fprintf(stdout, "  %s\n", p.c_str());
       }
     }
@@ -4624,7 +4624,7 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  rocksdb::KillPoint *kp = rocksdb::KillPoint::GetInstance();
+  rocksdb::KillPoint* kp = rocksdb::KillPoint::GetInstance();
   kp->rocksdb_kill_odds = FLAGS_kill_random_test;
   kp->rocksdb_kill_exclude_prefixes = SplitString(FLAGS_kill_exclude_prefixes);
 

@@ -16,9 +16,8 @@ Status TitanTableFactory::NewTableReader(
                                        prefetch_index_and_filter_in_cache);
 }
 
-TableBuilder *
-TitanTableFactory::NewTableBuilder(const TableBuilderOptions &options,
-                                   WritableFileWriter *file) const {
+TableBuilder *TitanTableFactory::NewTableBuilder(
+    const TableBuilderOptions &options, WritableFileWriter *file) const {
   std::unique_ptr<TableBuilder> base_builder(
       base_factory_->NewTableBuilder(options, file));
   if (!db_impl_->initialized()) {

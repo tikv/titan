@@ -75,9 +75,9 @@ void DeleteCacheValue(const Slice&, void* value) {
   delete reinterpret_cast<T*>(value);
 }
 
-Status SyncTitanManifest(TitanStats *stats,
-                         const ImmutableDBOptions *db_options,
-                         WritableFileWriter *file);
+Status SyncTitanManifest(TitanStats* stats,
+                         const ImmutableDBOptions* db_options,
+                         WritableFileWriter* file);
 
 }  // namespace titandb
 }  // namespace rocksdb

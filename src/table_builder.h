@@ -49,9 +49,9 @@ class TitanTableBuilder : public TableBuilder {
 
   std::string GetFileChecksum() const override;
 
-  const char *GetFileChecksumFuncName() const override;
+  const char* GetFileChecksumFuncName() const override;
 
-private:
+ private:
   friend class TableBuilderTest;
 
   bool ok() const { return status().ok(); }

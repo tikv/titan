@@ -326,7 +326,7 @@ std::string TitanTableBuilder::GetFileChecksum() const {
   return base_builder_->GetFileChecksum();
 }
 
-const char *TitanTableBuilder::GetFileChecksumFuncName() const {
+const char* TitanTableBuilder::GetFileChecksumFuncName() const {
   return base_builder_->GetFileChecksumFuncName();
 }
 

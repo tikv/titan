@@ -34,11 +34,11 @@ class TitanTableFactory : public TableFactory {
 
   using TableFactory::NewTableReader;
 
-  Status
-  NewTableReader(const ReadOptions &ro, const TableReaderOptions &options,
-                 std::unique_ptr<RandomAccessFileReader> &&file,
-                 uint64_t file_size, std::unique_ptr<TableReader> *result,
-                 bool prefetch_index_and_filter_in_cache = true) const override;
+  Status NewTableReader(
+      const ReadOptions& ro, const TableReaderOptions& options,
+      std::unique_ptr<RandomAccessFileReader>&& file, uint64_t file_size,
+      std::unique_ptr<TableReader>* result,
+      bool prefetch_index_and_filter_in_cache = true) const override;
 
   TableBuilder* NewTableBuilder(const TableBuilderOptions& options,
                                 WritableFileWriter* file) const override;
