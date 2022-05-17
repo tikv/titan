@@ -13,7 +13,7 @@ option(WITH_SNAPPY "build with SNAPPY" OFF)
 if (WITH_SNAPPY)
   find_package(Snappy REQUIRED)
   add_definitions(-DSNAPPY)
-  include_directories(${SNAPPY_INCLUDE_DIR})
+  include_directories(${Snappy_INCLUDE_DIRS})
 endif()
 
 option(WITH_BZ2 "build with bzip2" OFF)
