@@ -32,6 +32,8 @@ class TitanCompactionFilter final : public CompactionFilter {
 
   const char *Name() const override { return filter_name_.c_str(); }
 
+  bool IsStackedBlobDbInternalCompactionFilter() const override { return true; }
+
   Decision FilterV3(int level, const Slice &key, SequenceNumber seqno,
                     ValueType value_type, const Slice &value,
                     std::string *new_value,
