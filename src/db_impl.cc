@@ -412,8 +412,6 @@ Status TitanDBImpl::CreateColumnFamilies(
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
     options.merge_operator = shared_merge_operator_;
-    base_descs.emplace_back(desc.name, options);
-
     if (options.compaction_filter != nullptr ||
         options.compaction_filter_factory != nullptr) {
       std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
@@ -423,6 +421,8 @@ Status TitanDBImpl::CreateColumnFamilies(
       options.compaction_filter = nullptr;
       options.compaction_filter_factory = titan_cf_factory;
     }
+
+    base_descs.emplace_back(desc.name, options);
   }
 
   Status s = db_impl_->CreateColumnFamilies(base_descs, handles);
