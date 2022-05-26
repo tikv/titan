@@ -998,22 +998,11 @@ TEST_F(TitanDBTest, SetOptions) {
 
   std::unordered_map<std::string, std::string> opts;
 
-  // Set titan blob_run_mode.
+  // Set titan options.
   opts["blob_run_mode"] = "kReadOnly";
   ASSERT_OK(db_->SetOptions(opts));
   titan_options = db_->GetTitanOptions();
   ASSERT_EQ(TitanBlobRunMode::kReadOnly, titan_options.blob_run_mode);
-  opts.clear();
-
-  // Set titan gc_merge_rewrite.
-  opts["gc_merge_rewrite"] = "true";
-  ASSERT_OK(db_->SetOptions(opts));
-  titan_options = db_->GetTitanOptions();
-  ASSERT_EQ(true, titan_options.gc_merge_rewrite);
-  opts["gc_merge_rewrite"] = "0";
-  ASSERT_OK(db_->SetOptions(opts));
-  titan_options = db_->GetTitanOptions();
-  ASSERT_EQ(false, titan_options.gc_merge_rewrite);
   opts.clear();
 
   // Set column family options.

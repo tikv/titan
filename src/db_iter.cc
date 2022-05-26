@@ -40,7 +40,7 @@ void TitanDBIterator::SeekToFirst() {
   iter_->SeekToFirst();
   if (ShouldGetBlobValue()) {
     StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
-    GetBlobValue(true);
+    GetBlobValue();
     RecordTick(statistics(stats_), TITAN_NUM_SEEK);
   }
 }
@@ -49,7 +49,7 @@ void TitanDBIterator::SeekToLast() {
   iter_->SeekToLast();
   if (ShouldGetBlobValue()) {
     StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
-    GetBlobValue(false);
+    GetBlobValue();
     RecordTick(statistics(stats_), TITAN_NUM_SEEK);
   }
 }
@@ -58,7 +58,7 @@ void TitanDBIterator::Seek(const Slice &target) {
   iter_->Seek(target);
   if (ShouldGetBlobValue()) {
     StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
-    GetBlobValue(true);
+    GetBlobValue();
     RecordTick(statistics(stats_), TITAN_NUM_SEEK);
   }
 }
@@ -67,7 +67,7 @@ void TitanDBIterator::SeekForPrev(const Slice &target) {
   iter_->SeekForPrev(target);
   if (ShouldGetBlobValue()) {
     StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
-    GetBlobValue(false);
+    GetBlobValue();
     RecordTick(statistics(stats_), TITAN_NUM_SEEK);
   }
 }
@@ -77,7 +77,7 @@ void TitanDBIterator::Next() {
   iter_->Next();
   if (ShouldGetBlobValue()) {
     StopWatch next_sw(clock_, statistics(stats_), TITAN_NEXT_MICROS);
-    GetBlobValue(true);
+    GetBlobValue();
     RecordTick(statistics(stats_), TITAN_NUM_NEXT);
   }
 }
@@ -87,7 +87,7 @@ void TitanDBIterator::Prev() {
   iter_->Prev();
   if (ShouldGetBlobValue()) {
     StopWatch prev_sw(clock_, statistics(stats_), TITAN_PREV_MICROS);
-    GetBlobValue(false);
+    GetBlobValue();
     RecordTick(statistics(stats_), TITAN_NUM_PREV);
   }
 }
@@ -116,7 +116,7 @@ bool TitanDBIterator::ShouldGetBlobValue() {
   return true;
 }
 
-void TitanDBIterator::GetBlobValue(bool forward) {
+void TitanDBIterator::GetBlobValue() {
   assert(iter_->status().ok());
 
   BlobIndex index;
@@ -128,30 +128,7 @@ void TitanDBIterator::GetBlobValue(bool forward) {
                     status_.ToString().c_str());
     return;
   }
-  while (BlobIndex::IsDeletionMarker(index)) {
-    // skip deletion marker
-    if (forward) {
-      iter_->Next();
-    } else {
-      iter_->Prev();
-    }
-    if (!ShouldGetBlobValue()) {
-      return;
-    } else {
-      status_ = DecodeInto(iter_->value(), &index);
-      if (!status_.ok()) {
-        TITAN_LOG_ERROR(info_log_,
-                        "Titan iterator: failed to decode blob index %s: %s",
-                        iter_->value().ToString(true /*hex*/).c_str(),
-                        status_.ToString().c_str());
-        return;
-      }
-    }
-  }
-  GetBlobValueImpl(index);
-}
 
-void TitanDBIterator::GetBlobValueImpl(const BlobIndex &index) {
   auto it = files_.find(index.file_number);
   if (it == files_.end()) {
     std::unique_ptr<BlobFilePrefetcher> prefetcher;

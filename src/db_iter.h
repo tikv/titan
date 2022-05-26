@@ -52,9 +52,7 @@ class TitanDBIterator : public Iterator {
  private:
   bool ShouldGetBlobValue();
 
-  void GetBlobValue(bool forward);
-
-  void GetBlobValueImpl(const BlobIndex &index);
+  void GetBlobValue();
 
   Status status_;
   BlobRecord record_;
