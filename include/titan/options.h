@@ -222,7 +222,7 @@ struct ImmutableTitanCFOptions {
 struct MutableTitanCFOptions {
   MutableTitanCFOptions() : MutableTitanCFOptions(TitanCFOptions()) {}
 
-  explicit MutableTitanCFOptions(const TitanCFOptions &opts)
+  explicit MutableTitanCFOptions(const TitanCFOptions& opts)
       : blob_run_mode(opts.blob_run_mode) {}
 
   TitanBlobRunMode blob_run_mode;

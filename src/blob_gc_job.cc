@@ -76,17 +76,24 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
   uint64_t read_bytes_;
 };
 
-BlobGCJob::BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
-                     const TitanDBOptions &titan_db_options, Env *env,
-                     const EnvOptions &env_options,
-                     BlobFileManager *blob_file_manager,
-                     BlobFileSet *blob_file_set, LogBuffer *log_buffer,
-                     std::atomic_bool *shuting_down, TitanStats *stats)
-    : blob_gc_(blob_gc), base_db_(db),
-      base_db_impl_(reinterpret_cast<DBImpl *>(base_db_)), mutex_(mutex),
-      db_options_(titan_db_options), env_(env), env_options_(env_options),
-      blob_file_manager_(blob_file_manager), blob_file_set_(blob_file_set),
-      log_buffer_(log_buffer), shuting_down_(shuting_down), stats_(stats) {}
+BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
+                     const TitanDBOptions& titan_db_options, Env* env,
+                     const EnvOptions& env_options,
+                     BlobFileManager* blob_file_manager,
+                     BlobFileSet* blob_file_set, LogBuffer* log_buffer,
+                     std::atomic_bool* shuting_down, TitanStats* stats)
+    : blob_gc_(blob_gc),
+      base_db_(db),
+      base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)),
+      mutex_(mutex),
+      db_options_(titan_db_options),
+      env_(env),
+      env_options_(env_options),
+      blob_file_manager_(blob_file_manager),
+      blob_file_set_(blob_file_set),
+      log_buffer_(log_buffer),
+      shuting_down_(shuting_down),
+      stats_(stats) {}
 
 BlobGCJob::~BlobGCJob() {
   if (log_buffer_) {
@@ -284,7 +291,7 @@ void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
     callback.value = index_entry;
     rewrite_batches_.emplace_back(
         std::make_pair(WriteBatch(), std::move(callback)));
-    auto &wb = rewrite_batches_.back().first;
+    auto& wb = rewrite_batches_.back().first;
     *s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), ikey.user_key,
                                           index_entry);
     if (!s->ok()) break;
@@ -467,7 +474,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
 
   std::unordered_map<uint64_t, uint64_t>
       dropped;  // blob_file_number -> dropped_size
-  for (auto &write_batch : rewrite_batches_) {
+  for (auto& write_batch : rewrite_batches_) {
     if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
       s = Status::Aborted("Column family drop");
       break;

@@ -51,7 +51,7 @@ Status BlobFileSizeCollector::AddUserKey(const Slice& /* key */,
   }
 
   BlobIndex index;
-  auto s = index.DecodeFrom(const_cast<Slice *>(&value));
+  auto s = index.DecodeFrom(const_cast<Slice*>(&value));
   if (!s.ok()) {
     return s;
   }

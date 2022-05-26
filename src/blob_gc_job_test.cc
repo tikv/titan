@@ -23,7 +23,7 @@ std::string GenValue(int i) {
 }
 
 class BlobGCJobTest : public testing::Test {
-public:
+ public:
   std::string dbname_;
   TitanDB* db_;
   DBImpl* base_db_;

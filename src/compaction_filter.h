@@ -62,10 +62,6 @@ class TitanCompactionFilter final : public CompactionFilter {
       // Unable to decode blob index. Keeping the value.
       return Decision::kKeep;
     }
-    if (BlobIndex::IsDeletionMarker(blob_index)) {
-      // TODO(yiwu): handle deletion marker at bottom level.
-      return Decision::kKeep;
-    }
 
     BlobRecord record;
     PinnableSlice buffer;
