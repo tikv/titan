@@ -19,7 +19,7 @@ struct ThreadParam {
   ThreadParam() = default;
   ThreadParam(uint32_t _concurrency, uint32_t _repeat, bool _sync)
       : concurrency(_concurrency), repeat(_repeat), sync(_sync) {}
-  ThreadParam(const ThreadParam &rhs)
+  ThreadParam(const ThreadParam& rhs)
       : concurrency(rhs.concurrency), repeat(rhs.repeat), sync(rhs.sync) {}
 
   uint32_t concurrency{4};
@@ -134,16 +134,16 @@ TEST_F(TitanThreadSafetyTest, Basic) {
   Open();
   const uint64_t kNumEntries = 100;
   std::vector<port::Thread> threads;
-  std::map<std::string, ColumnFamilyHandle *> handles;
+  std::map<std::string, ColumnFamilyHandle*> handles;
   std::map<std::string, uint32_t> ref_count;
   std::map<std::string, std::string> data;
   for (uint64_t i = 1; i <= kNumEntries; i++) {
     PutMap(data, i);
   }
   ASSERT_EQ(kNumEntries, data.size());
-  std::vector<std::function<void(ColumnFamilyHandle *)>> jobs = {
+  std::vector<std::function<void(ColumnFamilyHandle*)>> jobs = {
       // Write and Flush
-      [&](ColumnFamilyHandle *handle) {
+      [&](ColumnFamilyHandle* handle) {
         ASSERT_TRUE(handle != nullptr);
         for (uint64_t i = 1; i <= kNumEntries; i++) {
           PutCF(handle, i);
@@ -153,13 +153,13 @@ TEST_F(TitanThreadSafetyTest, Basic) {
         VerifyCF(handle, data);
       },
       // Compact
-      [&](ColumnFamilyHandle *handle) {
+      [&](ColumnFamilyHandle* handle) {
         ASSERT_TRUE(handle != nullptr);
         CompactRangeOptions copts;
         ASSERT_OK(db_->CompactRange(copts, handle, nullptr, nullptr));
       },
       // GC
-      [&](ColumnFamilyHandle *handle) {
+      [&](ColumnFamilyHandle* handle) {
         ASSERT_TRUE(handle != nullptr);
         GC(handle);
       }};
@@ -169,7 +169,7 @@ TEST_F(TitanThreadSafetyTest, Basic) {
   for (uint32_t col = 0; col < param_.concurrency; col++) {
     std::string name = std::to_string(col);
     TitanCFDescriptor desc(name, options_);
-    ColumnFamilyHandle *handle = nullptr;
+    ColumnFamilyHandle* handle = nullptr;
     ASSERT_OK(db_->CreateColumnFamily(desc, &handle));
     {
       MutexLock l(&mutex_);

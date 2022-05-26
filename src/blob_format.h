@@ -167,7 +167,7 @@ struct BlobIndex {
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
 
-  friend bool operator==(const BlobIndex &lhs, const BlobIndex &rhs);
+  friend bool operator==(const BlobIndex& lhs, const BlobIndex& rhs);
 };
 
 // Format of blob file meta (not fixed size):

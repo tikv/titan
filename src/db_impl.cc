@@ -1043,8 +1043,6 @@ Status TitanDBImpl::SetOptions(
   auto opts = new_options;
   bool set_blob_run_mode = false;
   TitanBlobRunMode blob_run_mode = TitanBlobRunMode::kNormal;
-  bool set_gc_merge_rewrite = false;
-  bool gc_merge_rewrite = false;
   {
     auto p = opts.find("blob_run_mode");
     set_blob_run_mode = (p != opts.end());
@@ -1076,8 +1074,8 @@ Status TitanDBImpl::SetOptions(
       MutexLock l(&mutex_);
       assert(cf_info_.count(cf_id) > 0);
       TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
-      cf_info.titan_table_factory->SetBlobRunMode(mode);
-      cf_info.mutable_cf_options.blob_run_mode = mode;
+      cf_info.titan_table_factory->SetBlobRunMode(blob_run_mode);
+      cf_info.mutable_cf_options.blob_run_mode = blob_run_mode;
     }
   }
   return Status::OK();

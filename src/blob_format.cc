@@ -128,7 +128,7 @@ Status BlobIndex::DecodeFrom(Slice* src) {
   return s;
 }
 
-bool operator==(const BlobIndex &lhs, const BlobIndex &rhs) {
+bool operator==(const BlobIndex& lhs, const BlobIndex& rhs) {
   return (lhs.file_number == rhs.file_number &&
           lhs.blob_handle == rhs.blob_handle);
 }
