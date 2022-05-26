@@ -184,12 +184,13 @@ TEST_F(TitanCompactionFilterTest, FilterNewColumnFamily) {
   ColumnFamilyHandle *handle = nullptr;
   ASSERT_OK(db_->CreateColumnFamily(desc, &handle));
 
-  ASSERT_OK(handle->Put(WriteOptions(), "skip-key", "skip-value"));
-  ASSERT_OK(handle->Flush(FlushOptions()));
-  ASSERT_OK(handle->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+  ASSERT_OK(db_->Put(WriteOptions(), handle, "skip-key", "skip-value"));
+  ASSERT_OK(db_->Flush(FlushOptions(), handle));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), handle, nullptr, nullptr));
 
   std::string value;
-  ASSERT_TRUE(handle->Get(ReadOptions(), "skip-key", &value).IsNotFound());
+  ASSERT_TRUE(db_->Get(ReadOptions(), handle, "skip-key", &value).IsNotFound());
+  ASSERT_OK(db_->DestroyColumnFamilyHandle(handle));
 }
 
 }  // namespace titandb
