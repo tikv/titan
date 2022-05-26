@@ -177,6 +177,21 @@ TEST_F(TitanCompactionFilterTest, CompactSkipValue) {
   ASSERT_TRUE(db_->Get(ReadOptions(), "skip-key", &value).IsNotFound());
 }
 
+TEST_F(TitanCompactionFilterTest, FilterNewColumnFamily) {
+  options_.skip_value_in_compaction_filter = true;
+  Open();
+  TitanCFDescriptor desc("last_summer", options_);
+  ColumnFamilyHandle *handle = nullptr;
+  ASSERT_OK(db_->CreateColumnFamily(desc, &handle));
+
+  ASSERT_OK(handle->Put(WriteOptions(), "skip-key", "skip-value"));
+  ASSERT_OK(handle->Flush(FlushOptions()));
+  ASSERT_OK(handle->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+
+  std::string value;
+  ASSERT_TRUE(handle->Get(ReadOptions(), "skip-key", &value).IsNotFound());
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
 
