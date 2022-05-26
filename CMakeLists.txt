@@ -123,7 +123,6 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         blob_format_test
         blob_gc_job_test
         blob_gc_picker_test
-        # blob_index_merge_operator_test
         gc_stats_test
         table_builder_test
         thread_safety_test

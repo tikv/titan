@@ -61,7 +61,6 @@ int main() {
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
 #include "rocksdb/write_batch.h"
-// #include "util/build_version.h"
 #include "util/coding.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
