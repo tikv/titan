@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "blob_file_size_collector.h"
 #include "titan_logging.h"
 
 namespace rocksdb {
@@ -75,26 +74,17 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
   uint64_t read_bytes_;
 };
 
-BlobGCJob::BlobGCJob(BlobGC* blob_gc, DB* db, port::Mutex* mutex,
-                     const TitanDBOptions& titan_db_options,
-                     bool gc_merge_rewrite, Env* env,
-                     const EnvOptions& env_options,
-                     BlobFileManager* blob_file_manager,
-                     BlobFileSet* blob_file_set, LogBuffer* log_buffer,
-                     std::atomic_bool* shuting_down, TitanStats* stats)
-    : blob_gc_(blob_gc),
-      base_db_(db),
-      base_db_impl_(reinterpret_cast<DBImpl*>(base_db_)),
-      mutex_(mutex),
-      db_options_(titan_db_options),
-      gc_merge_rewrite_(gc_merge_rewrite),
-      env_(env),
-      env_options_(env_options),
-      blob_file_manager_(blob_file_manager),
-      blob_file_set_(blob_file_set),
-      log_buffer_(log_buffer),
-      shuting_down_(shuting_down),
-      stats_(stats) {}
+BlobGCJob::BlobGCJob(BlobGC *blob_gc, DB *db, port::Mutex *mutex,
+                     const TitanDBOptions &titan_db_options, Env *env,
+                     const EnvOptions &env_options,
+                     BlobFileManager *blob_file_manager,
+                     BlobFileSet *blob_file_set, LogBuffer *log_buffer,
+                     std::atomic_bool *shuting_down, TitanStats *stats)
+    : blob_gc_(blob_gc), base_db_(db),
+      base_db_impl_(reinterpret_cast<DBImpl *>(base_db_)), mutex_(mutex),
+      db_options_(titan_db_options), env_(env), env_options_(env_options),
+      blob_file_manager_(blob_file_manager), blob_file_set_(blob_file_set),
+      log_buffer_(log_buffer), shuting_down_(shuting_down), stats_(stats) {}
 
 BlobGCJob::~BlobGCJob() {
   if (log_buffer_) {
@@ -274,12 +264,9 @@ void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
   auto* cfh = blob_gc_->column_family_handle();
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
        contexts) {
-    MergeBlobIndex merge_blob_index;
-    merge_blob_index.file_number = ctx->new_blob_index.file_number;
-    merge_blob_index.source_file_number = ctx->original_blob_index.file_number;
-    merge_blob_index.source_file_offset =
-        ctx->original_blob_index.blob_handle.offset;
-    merge_blob_index.blob_handle = ctx->new_blob_index.blob_handle;
+    BlobIndex blob_index;
+    blob_index.file_number = ctx->new_blob_index.file_number;
+    blob_index.blob_handle = ctx->new_blob_index.blob_handle;
 
     std::string index_entry;
     BlobIndex original_index = ctx->original_blob_index;
@@ -288,25 +275,16 @@ void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
       *s = Status::Corruption(Slice());
       return;
     }
-    if (!gc_merge_rewrite_) {
-      merge_blob_index.EncodeToBase(&index_entry);
-      // Store WriteBatch for rewriting new Key-Index pairs to LSM
-      GarbageCollectionWriteCallback callback(cfh, ikey.user_key.ToString(),
-                                              std::move(original_index));
-      callback.value = index_entry;
-      rewrite_batches_.emplace_back(
-          std::make_pair(WriteBatch(), std::move(callback)));
-      auto& wb = rewrite_batches_.back().first;
-      *s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), ikey.user_key,
-                                            index_entry);
-    } else {
-      merge_blob_index.EncodeTo(&index_entry);
-      rewrite_batches_without_callback_.emplace_back(
-          std::make_pair(WriteBatch(), original_index.blob_handle.size));
-      auto& wb = rewrite_batches_without_callback_.back().first;
-      *s = WriteBatchInternal::Merge(&wb, cfh->GetID(), ikey.user_key,
-                                     index_entry);
-    }
+    blob_index.EncodeTo(&index_entry);
+    // Store WriteBatch for rewriting new Key-Index pairs to LSM
+    GarbageCollectionWriteCallback callback(cfh, ikey.user_key.ToString(),
+                                            std::move(original_index));
+    callback.value = index_entry;
+    rewrite_batches_.emplace_back(
+        std::make_pair(WriteBatch(), std::move(callback)));
+    auto &wb = rewrite_batches_.back().first;
+    *s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), ikey.user_key,
+                                          index_entry);
     if (!s->ok()) break;
   }
 }
@@ -485,65 +463,39 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
 
   std::unordered_map<uint64_t, uint64_t>
       dropped;  // blob_file_number -> dropped_size
-  if (!gc_merge_rewrite_) {
-    for (auto& write_batch : rewrite_batches_) {
-      if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
-        s = Status::Aborted("Column family drop");
-        break;
-      }
-      if (IsShutingDown()) {
-        s = Status::ShutdownInProgress();
-        break;
-      }
-      s = db_impl->WriteWithCallback(wo, &write_batch.first,
-                                     &write_batch.second);
-      if (s.ok()) {
-        // count written bytes for new blob index.
-        metrics_.gc_bytes_written += write_batch.first.GetDataSize();
-        metrics_.gc_num_keys_relocated++;
-        metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
-        // Key is successfully written to LSM.
-      } else if (s.IsBusy()) {
-        metrics_.gc_num_keys_overwritten++;
-        metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
-        // The key is overwritten in the meanwhile. Drop the blob record.
-        // Though record is dropped, the diff won't counted in discardable
-        // ratio,
-        // so we should update the live_data_size here.
-        BlobIndex blob_index;
-        Slice str(write_batch.second.value);
-        blob_index.DecodeFrom(&str);
-        dropped[blob_index.file_number] += blob_index.blob_handle.size;
-      } else {
-        // We hit an error.
-        break;
-      }
-      // count read bytes in write callback
-      metrics_.gc_bytes_read += write_batch.second.read_bytes();
+  for (auto &write_batch : rewrite_batches_) {
+    if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
+      s = Status::Aborted("Column family drop");
+      break;
     }
-  } else {
-    for (auto& write_batch : rewrite_batches_without_callback_) {
-      if (blob_gc_->GetColumnFamilyData()->IsDropped()) {
-        s = Status::Aborted("Column family drop");
-        break;
-      }
-      if (IsShutingDown()) {
-        s = Status::ShutdownInProgress();
-        break;
-      }
-      s = db_impl->Write(wo, &write_batch.first);
-      if (s.ok()) {
-        // count written bytes for new blob index.
-        metrics_.gc_bytes_written += write_batch.first.GetDataSize();
-        metrics_.gc_num_keys_relocated++;
-        metrics_.gc_bytes_relocated += write_batch.second;
-        // Key is successfully written to LSM.
-      } else {
-        // We hit an error.
-        break;
-      }
-      // read bytes is 0
+    if (IsShutingDown()) {
+      s = Status::ShutdownInProgress();
+      break;
     }
+    s = db_impl->WriteWithCallback(wo, &write_batch.first, &write_batch.second);
+    if (s.ok()) {
+      // count written bytes for new blob index.
+      metrics_.gc_bytes_written += write_batch.first.GetDataSize();
+      metrics_.gc_num_keys_relocated++;
+      metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
+      // Key is successfully written to LSM.
+    } else if (s.IsBusy()) {
+      metrics_.gc_num_keys_overwritten++;
+      metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
+      // The key is overwritten in the meanwhile. Drop the blob record.
+      // Though record is dropped, the diff won't counted in discardable
+      // ratio,
+      // so we should update the live_data_size here.
+      BlobIndex blob_index;
+      Slice str(write_batch.second.value);
+      blob_index.DecodeFrom(&str);
+      dropped[blob_index.file_number] += blob_index.blob_handle.size;
+    } else {
+      // We hit an error.
+      break;
+    }
+    // count read bytes in write callback
+    metrics_.gc_bytes_read += write_batch.second.read_bytes();
   }
   if (s.IsBusy()) {
     s = Status::OK();

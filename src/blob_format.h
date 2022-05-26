@@ -3,7 +3,6 @@
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
-#include "rocksdb/types.h"
 #include "table/format.h"
 #include "util.h"
 
@@ -165,26 +164,10 @@ struct BlobIndex {
   uint64_t file_number{0};
   BlobHandle blob_handle;
 
-  virtual ~BlobIndex() {}
-
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
-  static void EncodeDeletionMarkerTo(std::string* dst);
-  static bool IsDeletionMarker(const BlobIndex& index);
 
-  bool operator==(const BlobIndex& rhs) const;
-};
-
-struct MergeBlobIndex : public BlobIndex {
-  uint64_t source_file_number{0};
-  uint64_t source_file_offset{0};
-
-  void EncodeTo(std::string* dst) const;
-  void EncodeToBase(std::string* dst) const;
-  Status DecodeFrom(Slice* src);
-  Status DecodeFromBase(Slice* src);
-
-  bool operator==(const MergeBlobIndex& rhs) const;
+  friend bool operator==(const BlobIndex &lhs, const BlobIndex &rhs);
 };
 
 // Format of blob file meta (not fixed size):

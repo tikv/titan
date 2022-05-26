@@ -1,6 +1,5 @@
 #include <inttypes.h>
 #include <options/cf_options.h>
-#include <initializer_list>
 #include <map>
 #include <vector>
 
@@ -15,6 +14,22 @@
 
 namespace rocksdb {
 namespace titandb {
+
+struct ThreadParam {
+  ThreadParam() = default;
+  ThreadParam(uint32_t _concurrency, uint32_t _repeat, bool _sync)
+      : concurrency(_concurrency), repeat(_repeat), sync(_sync) {}
+  ThreadParam(const ThreadParam &rhs)
+      : concurrency(rhs.concurrency), repeat(rhs.repeat), sync(rhs.sync) {}
+
+  uint32_t concurrency{4};
+
+  uint32_t repeat{10};
+
+  // when set true, faster worker will run extra jobs util slowest
+  // worker finishes to maximize race condition.
+  bool sync{true};
+};
 
 void DeleteDir(Env* env, const std::string& dirname) {
   std::vector<std::string> filenames;
@@ -68,12 +83,6 @@ class TitanThreadSafetyTest : public testing::Test {
     ASSERT_OK(db_->Put(wopts, handle, key, value));
   }
 
-  void DeleteCF(ColumnFamilyHandle* handle, uint64_t k) {
-    WriteOptions wopts;
-    std::string key = GenKey(k);
-    ASSERT_OK(db_->Delete(wopts, handle, key));
-  }
-
   void VerifyCF(ColumnFamilyHandle* handle,
                 const std::map<std::string, std::string>& data,
                 ReadOptions ropts = ReadOptions()) {
@@ -96,25 +105,6 @@ class TitanThreadSafetyTest : public testing::Test {
     delete iterator;
   }
 
-  void ReadCF(ColumnFamilyHandle* handle,
-              const std::map<std::string, std::string>& data,
-              ReadOptions ropts = ReadOptions()) {
-    db_impl_->PurgeObsoleteFiles();
-
-    for (auto& kv : data) {
-      std::string value;
-      auto s = db_->Get(ropts, handle, kv.first, &value);
-      ASSERT_TRUE(s.ok() || s.IsNotFound());
-    }
-
-    Iterator* iterator = db_->NewIterator(ropts, handle);
-    iterator->SeekToFirst();
-    while (iterator->Valid()) {
-      iterator->Next();
-    }
-    delete iterator;
-  }
-
   std::string GenKey(uint64_t k) {
     char buf[64];
     snprintf(buf, sizeof(buf), "k-%08" PRIu64, k);
@@ -129,56 +119,6 @@ class TitanThreadSafetyTest : public testing::Test {
     }
   }
 
-  void RunJobs(
-      std::initializer_list<std::function<void(ColumnFamilyHandle*)>> jobs) {
-    Open();
-    std::vector<port::Thread> threads;
-    std::map<std::string, ColumnFamilyHandle*> handles;
-    std::map<std::string, uint32_t> ref_count;
-    uint32_t job_count = jobs.size();
-    unfinished_worker_.store(job_count * param_.num_column_family,
-                             std::memory_order_relaxed);
-    for (uint32_t col = 0; col < param_.num_column_family; col++) {
-      std::string name = std::to_string(col);
-      TitanCFDescriptor desc(name, options_);
-      ColumnFamilyHandle* handle = nullptr;
-      ASSERT_OK(db_->CreateColumnFamily(desc, &handle));
-      {
-        MutexLock l(&mutex_);
-        handles[name] = handle;
-        ref_count[name] = job_count;
-      }
-      for (auto& job : jobs) {
-        threads.emplace_back([&, handle, name] {
-          for (uint32_t k = 0; k < param_.repeat; k++) {
-            job(handle);
-          }
-          unfinished_worker_.fetch_sub(1, std::memory_order_relaxed);
-          if (param_.sync) {
-            while (unfinished_worker_.load(std::memory_order_relaxed) != 0) {
-              job(handle);
-            }
-          }
-          bool need_drop = false;
-          {
-            MutexLock l(&mutex_);
-            if ((--ref_count[name]) == 0) {
-              ref_count.erase(name);
-              handles.erase(name);
-              need_drop = true;
-            }
-          }
-          if (need_drop) {
-            ASSERT_OK(db_->DropColumnFamily(handle));
-            db_->DestroyColumnFamilyHandle(handle);
-          }
-        });
-      }
-    }
-    std::for_each(threads.begin(), threads.end(),
-                  std::mem_fn(&port::Thread::join));
-  }
-
   port::Mutex mutex_;
   Env* env_{Env::Default()};
   std::string dbname_;
@@ -186,95 +126,85 @@ class TitanThreadSafetyTest : public testing::Test {
   TitanDB* db_{nullptr};
   TitanDBImpl* db_impl_{nullptr};
 
-  struct TestParam {
-    TestParam() = default;
-
-    uint32_t num_column_family{4};
-
-    uint32_t repeat{10};
-
-    // when set true, faster worker will run extra jobs util slowest
-    // worker finishes to maximize race condition.
-    bool sync{true};
-  } param_;
+  ThreadParam param_;
   std::atomic<uint32_t> unfinished_worker_;
 };
 
-TEST_F(TitanThreadSafetyTest, Insert) {
+TEST_F(TitanThreadSafetyTest, Basic) {
+  Open();
   const uint64_t kNumEntries = 100;
+  std::vector<port::Thread> threads;
+  std::map<std::string, ColumnFamilyHandle *> handles;
+  std::map<std::string, uint32_t> ref_count;
   std::map<std::string, std::string> data;
   for (uint64_t i = 1; i <= kNumEntries; i++) {
     PutMap(data, i);
   }
   ASSERT_EQ(kNumEntries, data.size());
-  RunJobs({// Write and Flush and Verify
-           [&](ColumnFamilyHandle* handle) {
-             ASSERT_TRUE(handle != nullptr);
-             for (uint64_t i = 1; i <= kNumEntries; i++) {
-               PutCF(handle, i);
-             }
-             FlushOptions fopts;
-             ASSERT_OK(db_->Flush(fopts, handle));
-             VerifyCF(handle, data);
-           },
-           [&](ColumnFamilyHandle* handle) {
-             ASSERT_TRUE(handle != nullptr);
-             ReadCF(handle, data);
-           },
-           // Compact
-           [&](ColumnFamilyHandle* handle) {
-             ASSERT_TRUE(handle != nullptr);
-             CompactRangeOptions copts;
-             ASSERT_OK(db_->CompactRange(copts, handle, nullptr, nullptr));
-           },
-           // GC
-           [&](ColumnFamilyHandle* handle) {
-             ASSERT_TRUE(handle != nullptr);
-             GC(handle);
-           }});
-}
-
-TEST_F(TitanThreadSafetyTest, InsertAndDelete) {
-  const uint64_t kNumEntries = 100;
-  std::map<std::string, std::string> data;
-  for (uint64_t i = 1; i <= kNumEntries; i++) {
-    PutMap(data, i);
+  std::vector<std::function<void(ColumnFamilyHandle *)>> jobs = {
+      // Write and Flush
+      [&](ColumnFamilyHandle *handle) {
+        ASSERT_TRUE(handle != nullptr);
+        for (uint64_t i = 1; i <= kNumEntries; i++) {
+          PutCF(handle, i);
+        }
+        FlushOptions fopts;
+        ASSERT_OK(db_->Flush(fopts, handle));
+        VerifyCF(handle, data);
+      },
+      // Compact
+      [&](ColumnFamilyHandle *handle) {
+        ASSERT_TRUE(handle != nullptr);
+        CompactRangeOptions copts;
+        ASSERT_OK(db_->CompactRange(copts, handle, nullptr, nullptr));
+      },
+      // GC
+      [&](ColumnFamilyHandle *handle) {
+        ASSERT_TRUE(handle != nullptr);
+        GC(handle);
+      }};
+  uint32_t job_count = jobs.size();
+  unfinished_worker_.store(job_count * param_.concurrency,
+                           std::memory_order_relaxed);
+  for (uint32_t col = 0; col < param_.concurrency; col++) {
+    std::string name = std::to_string(col);
+    TitanCFDescriptor desc(name, options_);
+    ColumnFamilyHandle *handle = nullptr;
+    ASSERT_OK(db_->CreateColumnFamily(desc, &handle));
+    {
+      MutexLock l(&mutex_);
+      handles[name] = handle;
+      ref_count[name] = job_count;
+    }
+    for (uint32_t job = 0; job < job_count; job++) {
+      threads.emplace_back([&, job, handle, name] {
+        for (uint32_t k = 0; k < param_.repeat; k++) {
+          jobs[job](handle);
+        }
+        unfinished_worker_.fetch_sub(1, std::memory_order_relaxed);
+        if (param_.sync) {
+          while (unfinished_worker_.load(std::memory_order_relaxed) != 0) {
+            jobs[job](handle);
+          }
+        }
+        bool need_drop = false;
+        {
+          MutexLock l(&mutex_);
+          if ((--ref_count[name]) == 0) {
+            ref_count.erase(name);
+            handles.erase(name);
+            need_drop = true;
+          }
+        }
+        if (need_drop) {
+          ASSERT_OK(db_->DropColumnFamily(handle));
+          db_->DestroyColumnFamilyHandle(handle);
+        }
+      });
+    }
   }
-  ASSERT_EQ(kNumEntries, data.size());
-  RunJobs({// Insert and Flush
-           [&](ColumnFamilyHandle* handle) {
-             ASSERT_TRUE(handle != nullptr);
-             for (uint64_t i = 1; i <= kNumEntries; i++) {
-               PutCF(handle, i);
-             }
-             FlushOptions fopts;
-             ASSERT_OK(db_->Flush(fopts, handle));
-           },
-           // Delete and Flush
-           [&](ColumnFamilyHandle* handle) {
-             ASSERT_TRUE(handle != nullptr);
-             for (uint64_t i = 1; i <= kNumEntries; i++) {
-               DeleteCF(handle, i);
-             }
-             FlushOptions fopts;
-             ASSERT_OK(db_->Flush(fopts, handle));
-           },
-           // Read
-           [&](ColumnFamilyHandle* handle) {
-             ASSERT_TRUE(handle != nullptr);
-             ReadCF(handle, data);
-           },
-           // Compact
-           [&](ColumnFamilyHandle* handle) {
-             ASSERT_TRUE(handle != nullptr);
-             CompactRangeOptions copts;
-             ASSERT_OK(db_->CompactRange(copts, handle, nullptr, nullptr));
-           },
-           // GC
-           [&](ColumnFamilyHandle* handle) {
-             ASSERT_TRUE(handle != nullptr);
-             GC(handle);
-           }});
+  std::for_each(threads.begin(), threads.end(),
+                std::mem_fn(&port::Thread::join));
 }
 
 }  // namespace titandb

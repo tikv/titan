@@ -85,8 +85,6 @@ TEST_F(BlobFileSizeCollectorTest, Basic) {
   std::unique_ptr<TableBuilder> table_builder;
   NewTableBuilder(wfile.get(), &table_builder);
 
-  constexpr uint64_t kFirstFileNumber = 1ULL;
-  constexpr uint64_t kSecondFileNumber = 2ULL;
   const int kNumEntries = 100;
   char buf[16];
   for (int i = 0; i < kNumEntries; i++) {
@@ -99,9 +97,9 @@ TEST_F(BlobFileSizeCollectorTest, Basic) {
 
     BlobIndex index;
     if (i % 2 == 0) {
-      index.file_number = kFirstFileNumber;
+      index.file_number = 0ULL;
     } else {
-      index.file_number = kSecondFileNumber;
+      index.file_number = 1ULL;
     }
     index.blob_handle.size = 10;
     std::string value;
@@ -132,8 +130,8 @@ TEST_F(BlobFileSizeCollectorTest, Basic) {
 
   ASSERT_EQ(2, result.size());
 
-  ASSERT_EQ(kNumEntries / 2 * 10, result[kFirstFileNumber]);
-  ASSERT_EQ(kNumEntries / 2 * 10, result[kSecondFileNumber]);
+  ASSERT_EQ(kNumEntries / 2 * 10, result[0]);
+  ASSERT_EQ(kNumEntries / 2 * 10, result[1]);
 }
 
 }  // namespace titandb
