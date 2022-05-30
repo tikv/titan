@@ -246,7 +246,7 @@ Status BlobGCJob::DoRunGC() {
     BlobFileBuilder::OutContexts contexts;
     blob_file_builder->Add(blob_record, std::move(ctx), &contexts);
 
-    BatchWriteNewIndices(contexts, &s);
+    s = BatchWriteNewIndices(contexts);
 
     if (!s.ok()) {
       break;
@@ -269,27 +269,19 @@ Status BlobGCJob::DoRunGC() {
   return s;
 }
 
-void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
-                                     Status* s) {
+Status BlobGCJob::BatchWriteNewIndices(const BlobFileBuilder::OutContexts& contexts) {
   auto* cfh = blob_gc_->column_family_handle();
-  for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
-       contexts) {
-    MergeBlobIndex merge_blob_index;
-    merge_blob_index.file_number = ctx->new_blob_index.file_number;
-    merge_blob_index.source_file_number = ctx->original_blob_index.file_number;
-    merge_blob_index.source_file_offset =
-        ctx->original_blob_index.blob_handle.offset;
-    merge_blob_index.blob_handle = ctx->new_blob_index.blob_handle;
-
+  Status s;
+  for (const auto& ctx : contexts) {
     std::string index_entry;
     BlobIndex original_index = ctx->original_blob_index;
     ParsedInternalKey ikey;
     if (!ParseInternalKey(ctx->key, &ikey)) {
-      *s = Status::Corruption(Slice());
-      return;
+      return Status::Corruption(Slice());;
     }
     if (!gc_merge_rewrite_) {
-      merge_blob_index.EncodeToBase(&index_entry);
+      const BlobIndex &index = ctx->new_blob_index;
+      index.EncodeTo(&index_entry);
       // Store WriteBatch for rewriting new Key-Index pairs to LSM
       GarbageCollectionWriteCallback callback(cfh, ikey.user_key.ToString(),
                                               std::move(original_index));
@@ -297,18 +289,26 @@ void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
       rewrite_batches_.emplace_back(
           std::make_pair(WriteBatch(), std::move(callback)));
       auto& wb = rewrite_batches_.back().first;
-      *s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), ikey.user_key,
+      s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), ikey.user_key,
                                             index_entry);
     } else {
+      MergeBlobIndex merge_blob_index;
+      merge_blob_index.file_number = ctx->new_blob_index.file_number;
+      merge_blob_index.source_file_number =
+          ctx->original_blob_index.file_number;
+      merge_blob_index.source_file_offset =
+          ctx->original_blob_index.blob_handle.offset;
+      merge_blob_index.blob_handle = ctx->new_blob_index.blob_handle;
       merge_blob_index.EncodeTo(&index_entry);
       rewrite_batches_without_callback_.emplace_back(
           std::make_pair(WriteBatch(), original_index.blob_handle.size));
       auto& wb = rewrite_batches_without_callback_.back().first;
-      *s = WriteBatchInternal::Merge(&wb, cfh->GetID(), ikey.user_key,
+      s = WriteBatchInternal::Merge(&wb, cfh->GetID(), ikey.user_key,
                                      index_entry);
     }
-    if (!s->ok()) break;
+    if (!s.ok()) break;
   }
+  return s;
 }
 
 Status BlobGCJob::BuildIterator(
@@ -415,7 +415,10 @@ Status BlobGCJob::InstallOutputBlobFiles() {
   for (auto& builder : blob_file_builders_) {
     BlobFileBuilder::OutContexts contexts;
     s = builder.second->Finish(&contexts);
-    BatchWriteNewIndices(contexts, &s);
+    if (!s.ok()) {
+      break;
+    }
+    s = BatchWriteNewIndices(contexts);
     if (!s.ok()) {
       break;
     }
