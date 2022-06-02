@@ -71,7 +71,6 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     bool is_small_kv = value.size() < cf_options_.min_blob_size;
     if (is_small_kv) {
       AddBase(key, ikey, value);
-      return;
     } else {
       // We write to blob file and insert index
       AddBlob(ikey, value);
@@ -208,15 +207,13 @@ void TitanTableBuilder::AddBlobResultsToBase(
       RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
                  ctx->new_blob_index.blob_handle.size);
       bytes_written_ += ctx->new_blob_index.blob_handle.size;
-      if (ok()) {
-        std::string index_value;
-        ctx->new_blob_index.EncodeTo(&index_value);
+      std::string index_value;
+      ctx->new_blob_index.EncodeTo(&index_value);
 
-        ikey.type = kTypeBlobIndex;
-        std::string index_key;
-        AppendInternalKey(&index_key, ikey);
-        base_builder_->Add(index_key, index_value);
-      }
+      ikey.type = kTypeBlobIndex;
+      std::string index_key;
+      AppendInternalKey(&index_key, ikey);
+      base_builder_->Add(index_key, index_value);
     }
   }
 }
