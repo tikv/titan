@@ -142,13 +142,31 @@ class TestTableFactory : public TableFactory {
 class TableBuilderTest : public testing::Test {
  public:
   TableBuilderTest()
-      : cf_moptions_(cf_options_),
-        cf_ioptions_(options_),
-        tmpdir_(test::TmpDir(env_)),
+      : tmpdir_(test::TmpDir(env_)),
         base_name_(tmpdir_ + "/base"),
         blob_name_(BlobFileName(tmpdir_, kTestFileNumber)) {
     db_options_.dirname = tmpdir_;
+    db_options_.statistics = nullptr;
     cf_options_.min_blob_size = kMinBlobSize;
+    Open();
+  }
+
+  ~TableBuilderTest() {
+    uint64_t last_blob_number =
+        reinterpret_cast<FileManager*>(blob_manager_.get())->LastBlobNumber();
+    for (uint64_t i = kTestFileNumber; i <= last_blob_number; i++) {
+      env_->DeleteFile(BlobFileName(tmpdir_, i));
+    }
+    env_->DeleteFile(base_name_);
+    env_->DeleteDir(tmpdir_);
+  }
+
+  void Open() {
+    // Refresh options.
+    db_ioptions_ = ImmutableDBOptions(db_options_);
+    cf_moptions_ = MutableCFOptions(cf_options_);
+    cf_ioptions_ = ImmutableCFOptions(cf_options_);
+    ioptions_ = ImmutableOptions(db_ioptions_, cf_ioptions_);
     blob_file_set_.reset(new BlobFileSet(db_options_, nullptr));
     std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
     db_impl_.reset(new TitanDBImpl(db_options_, tmpdir_));
@@ -163,16 +181,6 @@ class TableBuilderTest : public testing::Test {
     table_factory_.reset(new TitanTableFactory(
         db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
         blob_file_set_.get(), nullptr));
-  }
-
-  ~TableBuilderTest() {
-    uint64_t last_blob_number =
-        reinterpret_cast<FileManager*>(blob_manager_.get())->LastBlobNumber();
-    for (uint64_t i = kTestFileNumber; i <= last_blob_number; i++) {
-      env_->DeleteFile(BlobFileName(tmpdir_, i));
-    }
-    env_->DeleteFile(base_name_);
-    env_->DeleteDir(tmpdir_);
   }
 
   void BlobFileExists(bool exists) {
@@ -225,9 +233,8 @@ class TableBuilderTest : public testing::Test {
     NewFileReader(fname, &file);
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file->file_name(), &file_size));
-    TableReaderOptions options(
-        ImmutableOptions(ImmutableDBOptions(db_options_), cf_ioptions_),
-        nullptr, env_options_, cf_ioptions_.internal_comparator);
+    TableReaderOptions options(ioptions_, nullptr, env_options_,
+                               cf_ioptions_.internal_comparator);
     ASSERT_OK(table_factory_->NewTableReader(options, std::move(file),
                                              file_size, result));
   }
@@ -244,8 +251,7 @@ class TableBuilderTest : public testing::Test {
                        CompressionOptions compression_opts,
                        int target_level = 0) {
     TableBuilderOptions options(
-        ImmutableOptions(ImmutableDBOptions(db_options_), cf_ioptions_),
-        cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
+        ioptions_, cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
         kNoCompression, compression_opts, 0 /*column_family_id*/,
         kDefaultColumnFamilyName, target_level);
     result->reset(table_factory_->NewTableBuilder(options, file));
@@ -255,11 +261,13 @@ class TableBuilderTest : public testing::Test {
 
   Env* env_{Env::Default()};
   EnvOptions env_options_;
-  Options options_;
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
+  // Derived options.
+  ImmutableDBOptions db_ioptions_;
   MutableCFOptions cf_moptions_;
   ImmutableCFOptions cf_ioptions_;
+  ImmutableOptions ioptions_;
   std::vector<std::unique_ptr<IntTblPropCollectorFactory>> collectors_;
 
   std::string tmpdir_;
@@ -277,8 +285,7 @@ class TableBuilderTest : public testing::Test {
 TEST_F(TableBuilderTest, BeforeDBInitialized) {
   CompressionOptions compression_opts;
   TableBuilderOptions opts(
-      ImmutableOptions(ImmutableDBOptions(db_options_), cf_ioptions_),
-      cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
+      ioptions_, cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
       kNoCompression, compression_opts, 0 /*column_family_id*/,
       kDefaultColumnFamilyName, 0 /*target_level*/);
 
@@ -667,9 +674,7 @@ TEST_F(TableBuilderTest, TargetSize) {
 // correct
 TEST_F(TableBuilderTest, LevelMerge) {
   cf_options_.level_merge = true;
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  Open();
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;

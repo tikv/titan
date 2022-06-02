@@ -77,10 +77,6 @@ if (CODE_COVERAGE)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
 endif()
 
-set(COMMON_LIBS
-  titan
-  rocksdb)
-
 if(WITH_ASAN OR WITH_TSAN)
   find_package(Threads)
   if(CMAKE_USE_PTHREADS_INIT)
@@ -133,7 +129,7 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         compaction_filter_test
         version_test)
   set(TEST_LIBS
-        ${COMMON_LIBS}
+        titan
         testutillib
         gtest)
 
@@ -145,7 +141,7 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
 endif()
 
 if (WITH_TITAN_TOOLS)
-  set(TOOLS_LIBS ${COMMON_LIBS})
+  set(TOOLS_LIBS titan rocksdb)
 
   if (NOT TRAVIS)
     find_package(gflags REQUIRED)
