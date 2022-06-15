@@ -131,10 +131,11 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
   set(TEST_LIBS
         titan
         testutillib
-        gtest)
+        gtest
+        testharness)
 
   foreach(test ${TESTS})
-    add_executable(titan_${test} src/${test}.cc $<TARGET_OBJECTS:testharness>)
+    add_executable(titan_${test} src/${test}.cc)
       target_link_libraries(titan_${test} ${TEST_LIBS})
       add_test(titan_${test} titan_${test})
   endforeach(test ${TESTS})
