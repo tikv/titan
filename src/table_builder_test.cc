@@ -237,7 +237,7 @@ class TableBuilderTest : public testing::Test {
     NewFileReader(FileNumberToName(file_number), &file);
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file->file_name(), &file_size));
-    TableReaderOptions options(ioptions_, nullptr, env_options_,
+    TableReaderOptions options(ioptions_, prefix_extractor_, env_options_,
                                cf_ioptions_.internal_comparator);
     options.cur_file_num = file_number;
     ASSERT_OK(table_factory_->NewTableReader(options, std::move(file),
@@ -269,12 +269,13 @@ class TableBuilderTest : public testing::Test {
   EnvOptions env_options_;
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
+  std::vector<std::unique_ptr<IntTblPropCollectorFactory>> collectors_;
   // Derived options.
   ImmutableDBOptions db_ioptions_;
   MutableCFOptions cf_moptions_;
   ImmutableCFOptions cf_ioptions_;
   ImmutableOptions ioptions_;
-  std::vector<std::unique_ptr<IntTblPropCollectorFactory>> collectors_;
+  std::shared_ptr<const SliceTransform> prefix_extractor_ = nullptr;
 
   std::string tmpdir_;
   uint64_t base_file_number_;

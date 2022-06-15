@@ -9,11 +9,15 @@ class BlobFileSizeCollectorTest : public testing::Test {
  public:
   Env* env_{Env::Default()};
   EnvOptions env_options_;
-  Options options_;
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
+  // Derived options.
+  ImmutableDBOptions db_ioptions_;
   MutableCFOptions cf_moptions_;
   ImmutableCFOptions cf_ioptions_;
+  ImmutableOptions ioptions_;
+  std::shared_ptr<const SliceTransform> prefix_extractor_ = nullptr;
+
   std::unique_ptr<TableFactory> table_factory_;
   std::vector<std::unique_ptr<IntTblPropCollectorFactory>> collectors_;
 
@@ -21,9 +25,7 @@ class BlobFileSizeCollectorTest : public testing::Test {
   std::string file_name_;
 
   BlobFileSizeCollectorTest()
-      : cf_moptions_(cf_options_),
-        cf_ioptions_(options_),
-        table_factory_(NewBlockBasedTableFactory()),
+      : table_factory_(NewBlockBasedTableFactory()),
         tmpdir_(test::TmpDir(env_)),
         file_name_(tmpdir_ + "/TEST") {
     db_options_.dirname = tmpdir_;
@@ -31,6 +33,11 @@ class BlobFileSizeCollectorTest : public testing::Test {
         std::make_shared<BlobFileSizeCollectorFactory>();
     collectors_.emplace_back(new UserKeyTablePropertiesCollectorFactory(
         blob_file_size_collector_factory));
+    // Refresh options.
+    db_ioptions_ = ImmutableDBOptions(db_options_);
+    cf_moptions_ = MutableCFOptions(cf_options_);
+    cf_ioptions_ = ImmutableCFOptions(cf_options_);
+    ioptions_ = ImmutableOptions(db_ioptions_, cf_ioptions_);
   }
 
   ~BlobFileSizeCollectorTest() {
@@ -52,8 +59,7 @@ class BlobFileSizeCollectorTest : public testing::Test {
                        std::unique_ptr<TableBuilder>* result) {
     CompressionOptions compression_opts;
     TableBuilderOptions options(
-        ImmutableOptions(ImmutableDBOptions(db_options_), cf_ioptions_),
-        cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
+        ioptions_, cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
         kNoCompression, compression_opts, 0 /*column_family_id*/,
         kDefaultColumnFamilyName, 0 /*level*/);
     result->reset(table_factory_->NewTableBuilder(options, file));
@@ -71,9 +77,8 @@ class BlobFileSizeCollectorTest : public testing::Test {
 
   void NewTableReader(std::unique_ptr<RandomAccessFileReader>&& file,
                       std::unique_ptr<TableReader>* result) {
-    TableReaderOptions options(
-        ImmutableOptions(ImmutableDBOptions(db_options_), cf_ioptions_),
-        nullptr, env_options_, cf_ioptions_.internal_comparator);
+    TableReaderOptions options(ioptions_, prefix_extractor_, env_options_,
+                               cf_ioptions_.internal_comparator);
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file->file_name(), &file_size));
     ASSERT_TRUE(file_size > 0);
