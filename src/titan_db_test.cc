@@ -19,8 +19,6 @@
 #include "titan/db.h"
 #include "titan_fault_injection_test_env.h"
 
-#include <iostream>
-
 namespace rocksdb {
 namespace titandb {
 
