@@ -251,7 +251,7 @@ class TableBuilderTest : public testing::Test {
     NewTableBuilder(file_number, file, result, compression_opts, target_level);
   }
 
-  void NewTableBuilder(uint64_t file_number, WritableFileWriter* file,
+  void NewTableBuilder(const uint64_t file_number, WritableFileWriter* file,
                        std::unique_ptr<TableBuilder>* result,
                        CompressionOptions compression_opts,
                        int target_level = 0) {
@@ -813,8 +813,8 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
       false /*skip_filters*/, TableReaderCaller::kUncategorized));
 
   // Base file of last level sst
-  std::string second_base = base_file_number_ + 1;
-  NewFileWriter(second_base, &base_file);
+  auto second_base = base_file_number_ + 1;
+  NewFileWriter(FileNumberToName(second_base), &base_file);
 
   CompressionOptions compression_opts;
   compression_opts.enabled = true;
