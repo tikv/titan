@@ -582,6 +582,7 @@ std::string ChecksumTypeToString(rocksdb::ChecksumType ctype) {
   return iter->first;
 }
 
+#ifndef NDEBUG
 std::vector<std::string> SplitString(std::string src) {
   std::vector<std::string> ret;
   if (src.empty()) {
@@ -596,6 +597,7 @@ std::vector<std::string> SplitString(std::string src) {
   ret.push_back(src.substr(pos, src.length()));
   return ret;
 }
+#endif  // !NDEBUG
 }  // namespace
 
 DEFINE_string(compression_type, "snappy",
@@ -2716,6 +2718,7 @@ class StressTest {
 
     fprintf(stdout, "Memtablerep               : %s\n", memtablerep);
 
+#ifndef NDEBUG
     rocksdb::KillPoint* kp = rocksdb::KillPoint::GetInstance();
     fprintf(stdout, "Test kill odd             : %d\n", kp->rocksdb_kill_odds);
     if (!kp->rocksdb_kill_exclude_prefixes.empty()) {
@@ -2724,6 +2727,8 @@ class StressTest {
         fprintf(stdout, "  %s\n", p.c_str());
       }
     }
+#endif  // !NDEBUG
+
     fprintf(stdout, "Snapshot refresh nanos    : %" PRIu64 "\n",
             FLAGS_snap_refresh_nanos);
 
@@ -4623,9 +4628,11 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
+#ifndef NDEBUG
   rocksdb::KillPoint* kp = rocksdb::KillPoint::GetInstance();
   kp->rocksdb_kill_odds = FLAGS_kill_random_test;
   kp->rocksdb_kill_exclude_prefixes = SplitString(FLAGS_kill_exclude_prefixes);
+#endif  // !NDEBUG
 
   std::unique_ptr<rocksdb::StressTest> stress;
   if (FLAGS_test_cf_consistency) {
