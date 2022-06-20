@@ -1922,12 +1922,9 @@ TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
   SyncPoint::GetInstance()->EnableProcessing();
 
   CheckBlobFileCount(1);
+
+  // trigger GC
   CompactAll();
-  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
-  ASSERT_TRUE(blob_storage != nullptr);
-  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
-  blob_storage->ExportBlobFiles(blob_files);
-  ASSERT_EQ(blob_files.size(), 1);
 
   TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCStart");
   DeleteFilesInRange(nullptr, nullptr);
