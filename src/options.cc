@@ -41,7 +41,6 @@ TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
       max_gc_batch_size(immutable_opts.max_gc_batch_size),
       min_gc_batch_size(immutable_opts.min_gc_batch_size),
       blob_file_discardable_ratio(immutable_opts.blob_file_discardable_ratio),
-      sample_file_size_ratio(immutable_opts.sample_file_size_ratio),
       merge_small_file_threshold(immutable_opts.merge_small_file_threshold),
       blob_run_mode(mutable_opts.blob_run_mode),
       skip_value_in_compaction_filter(
@@ -87,8 +86,6 @@ void TitanCFOptions::Dump(Logger* logger) const {
                    min_gc_batch_size);
   TITAN_LOG_HEADER(logger, "TitanCFOptions.blob_file_discardable_ratio  : %lf",
                    blob_file_discardable_ratio);
-  TITAN_LOG_HEADER(logger, "TitanCFOptions.sample_file_size_ratio       : %lf",
-                   sample_file_size_ratio);
   TITAN_LOG_HEADER(logger,
                    "TitanCFOptions.merge_small_file_threshold   : %" PRIu64,
                    merge_small_file_threshold);

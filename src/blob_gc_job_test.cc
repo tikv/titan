@@ -142,7 +142,6 @@ class BlobGCJobTest : public testing::Test {
       cf_options.merge_small_file_threshold = 0;
     }
     cf_options.blob_file_discardable_ratio = 0.4;
-    cf_options.sample_file_size_ratio = 1;
 
     std::unique_ptr<BlobGC> blob_gc;
     {
