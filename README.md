@@ -43,4 +43,10 @@ bash scripts/format-diff.sh
 ```
 
 ## Compatibility with RocksDB
-Current version of Titan is developed and tested with RocksDB 6.4.
+
+Current version of Titan is developed and tested with TiKV's [fork][6.29.tikv] of RocksDB 6.29.
+Another version that is based off TiKV's [fork][6.4.tikv] of RocksDB 6.4 can be found in the [tikv-6.2 branch][tikv-6.2].
+
+[6.4.tikv]: https://github.com/tikv/rocksdb/tree/6.4.tikv
+[6.29.tikv]: https://github.com/tikv/rocksdb/tree/6.29.tikv
+[tikv-6.2]: https://github.com/tikv/titan/tree/tikv-6.1
