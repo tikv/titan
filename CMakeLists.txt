@@ -49,7 +49,7 @@ option(CODE_COVERAGE "Generate code coverage report." OFF)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   set(WITH_TITAN_TESTS OFF)
-  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  if (CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds")
   endif()
 endif()
