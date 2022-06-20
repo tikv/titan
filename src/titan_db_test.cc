@@ -1929,9 +1929,6 @@ TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
   blob_storage->ExportBlobFiles(blob_files);
   ASSERT_EQ(blob_files.size(), 1);
 
-  // trigger GC
-  CompactAll();
-
   TEST_SYNC_POINT("TitanDBTest::DeleteFilesInRangeDuringGC::WaitGCStart");
   DeleteFilesInRange(nullptr, nullptr);
 
