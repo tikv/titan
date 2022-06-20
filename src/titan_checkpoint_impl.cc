@@ -8,9 +8,10 @@
 #include "port/port.h"
 #include "rocksdb/transaction_log.h"
 #include "test_util/sync_point.h"
+#include "utilities/checkpoint/checkpoint_impl.h"
+
 #include "titan_logging.h"
 #include "util.h"
-#include "utilities/checkpoint/checkpoint_impl.h"
 #include "version_edit.h"
 
 namespace rocksdb {

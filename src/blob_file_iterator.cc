@@ -1,9 +1,10 @@
 #include "blob_file_iterator.h"
 
-#include "blob_file_reader.h"
 #include "table/block_based/block_based_table_reader.h"
-#include "util.h"
 #include "util/crc32c.h"
+
+#include "blob_file_reader.h"
+#include "util.h"
 
 namespace rocksdb {
 namespace titandb {

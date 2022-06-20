@@ -1,10 +1,11 @@
 #pragma once
 
+#include "rocksdb/types.h"
+#include "table/table_builder.h"
+
 #include "blob_file_builder.h"
 #include "blob_file_manager.h"
 #include "blob_file_set.h"
-#include "rocksdb/types.h"
-#include "table/table_builder.h"
 #include "titan/options.h"
 #include "titan_stats.h"
 

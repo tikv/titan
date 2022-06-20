@@ -4,9 +4,10 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include "monitoring/statistics.h"
+
 #include "titan_logging.h"
 
 namespace rocksdb {

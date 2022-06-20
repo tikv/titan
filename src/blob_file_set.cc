@@ -1,6 +1,6 @@
 #include "blob_file_set.h"
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include "edit_collector.h"
 #include "titan_logging.h"

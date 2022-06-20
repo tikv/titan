@@ -3,7 +3,7 @@
 #endif
 #include "blob_gc_job.h"
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include <memory>
 

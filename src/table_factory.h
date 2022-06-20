@@ -2,9 +2,10 @@
 
 #include <atomic>
 
+#include "rocksdb/table.h"
+
 #include "blob_file_manager.h"
 #include "blob_file_set.h"
-#include "rocksdb/table.h"
 #include "titan/options.h"
 #include "titan_stats.h"
 

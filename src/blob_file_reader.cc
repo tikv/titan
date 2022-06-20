@@ -4,7 +4,7 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include "file/filename.h"
 #include "file/readahead_raf.h"
@@ -12,9 +12,10 @@
 #include "table/internal_iterator.h"
 #include "table/meta_blocks.h"
 #include "test_util/sync_point.h"
-#include "titan_stats.h"
 #include "util/crc32c.h"
 #include "util/string_util.h"
+
+#include "titan_stats.h"
 
 namespace rocksdb {
 namespace titandb {

@@ -1,9 +1,11 @@
-#include <inttypes.h>
-#include <options/cf_options.h>
+#include <cinttypes>
+
 #include <unordered_map>
 
 #include "db/db_impl/db_impl.h"
 #include "file/filename.h"
+#include "monitoring/statistics.h"
+#include "options/cf_options.h"
 #include "port/port.h"
 #include "rocksdb/utilities/debug.h"
 #include "test_util/sync_point.h"
@@ -15,7 +17,6 @@
 #include "blob_file_size_collector.h"
 #include "db_impl.h"
 #include "db_iter.h"
-#include "monitoring/statistics.h"
 #include "titan/db.h"
 #include "titan_fault_injection_test_env.h"
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "file/filename.h"
+
 #include "titan/checkpoint.h"
 
 namespace rocksdb {

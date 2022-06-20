@@ -4,20 +4,20 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include <memory>
 #include <unordered_map>
 
-#include "blob_file_reader.h"
-#include "blob_format.h"
+#include "db/arena_wrapped_db_iter.h"
 #include "db/db_iter.h"
 #include "rocksdb/env.h"
+
+#include "blob_file_reader.h"
+#include "blob_format.h"
+#include "blob_storage.h"
 #include "titan_logging.h"
 #include "titan_stats.h"
-
-#include "blob_storage.h"
-#include "db/arena_wrapped_db_iter.h"
 
 namespace rocksdb {
 namespace titandb {

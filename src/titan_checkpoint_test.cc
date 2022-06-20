@@ -6,9 +6,10 @@
 #include "test_util/sync_point.h"
 #include "test_util/testharness.h"
 #include "test_util/testutil.h"
+#include "utilities/fault_injection_env.h"
+
 #include "titan/checkpoint.h"
 #include "titan/db.h"
-#include "utilities/fault_injection_env.h"
 
 namespace rocksdb {
 namespace titandb {

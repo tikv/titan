@@ -1,7 +1,8 @@
 #pragma once
 
-#include "blob_format.h"
 #include "file/random_access_file_reader.h"
+
+#include "blob_format.h"
 #include "titan/options.h"
 #include "titan_stats.h"
 
