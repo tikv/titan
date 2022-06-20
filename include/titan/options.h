@@ -203,7 +203,7 @@ struct ImmutableTitanCFOptions {
   uint64_t min_gc_batch_size;
 
   double blob_file_discardable_ratio;
-  
+
   uint64_t merge_small_file_threshold;
 
   bool level_merge;
