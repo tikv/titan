@@ -155,16 +155,6 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: 20
   int max_sorted_runs{20};
 
-  // If set true, Titan will rewrite valid blob index from GC output as merge
-  // operands back to data store.
-  //
-  // With this feature enabled, Titan background GC won't block online write,
-  // trade-off being read performance slightly reduced compared to normal
-  // rewrite mode.
-  //
-  // Default: false
-  bool gc_merge_rewrite{false};
-
   // If set true, Titan will pass empty value in user compaction filter,
   // improves compaction performance by avoid fetching value from blob files.
   //
@@ -225,11 +215,9 @@ struct MutableTitanCFOptions {
   MutableTitanCFOptions() : MutableTitanCFOptions(TitanCFOptions()) {}
 
   explicit MutableTitanCFOptions(const TitanCFOptions& opts)
-      : blob_run_mode(opts.blob_run_mode),
-        gc_merge_rewrite(opts.gc_merge_rewrite) {}
+      : blob_run_mode(opts.blob_run_mode) {}
 
   TitanBlobRunMode blob_run_mode;
-  bool gc_merge_rewrite;
 };
 
 struct TitanOptions : public TitanDBOptions, public TitanCFOptions {

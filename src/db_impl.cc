@@ -147,11 +147,15 @@ TitanDBImpl::TitanDBImpl(const TitanDBOptions& options,
   }
   dirname_ = db_options_.dirname;
   if (db_options_.statistics != nullptr) {
-    db_options_.statistics = titandb::CreateDBStatistics();
+    // The point of `statistics` is that it can be shared by multiple instances.
+    // So we should check if it's a qualified statistics instead of overwriting
+    // it.
+    db_options_.statistics->getTickerCount(TITAN_TICKER_ENUM_MAX - 1);
+    HistogramData data;
+    db_options_.statistics->histogramData(TITAN_HISTOGRAM_ENUM_MAX - 1, &data);
     stats_.reset(new TitanStats(db_options_.statistics.get()));
   }
   blob_manager_.reset(new FileManager(this));
-  shared_merge_operator_ = std::make_shared<BlobIndexMergeOperator>();
 }
 
 TitanDBImpl::~TitanDBImpl() { Close(); }
@@ -272,7 +276,6 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
         db_options_, desc.options, this, blob_manager_, &mutex_,
         blob_file_set_.get(), stats_.get()));
     cf_opts.table_factory = titan_table_factories.back();
-    cf_opts.merge_operator = shared_merge_operator_;
     if (cf_opts.compaction_filter != nullptr ||
         cf_opts.compaction_filter_factory != nullptr) {
       std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
@@ -411,7 +414,6 @@ Status TitanDBImpl::CreateColumnFamilies(
     options.table_factory = titan_table_factory.back();
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
-    options.merge_operator = shared_merge_operator_;
     if (options.compaction_filter != nullptr ||
         options.compaction_filter_factory != nullptr) {
       std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
@@ -626,9 +628,6 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   s = index.DecodeFrom(value);
   assert(s.ok());
   if (!s.ok()) return s;
-  if (BlobIndex::IsDeletionMarker(index)) {
-    return Status::NotFound("encounter deletion marker");
-  }
 
   BlobRecord record;
   PinnableSlice buffer;
@@ -1049,8 +1048,6 @@ Status TitanDBImpl::SetOptions(
   auto opts = new_options;
   bool set_blob_run_mode = false;
   TitanBlobRunMode blob_run_mode = TitanBlobRunMode::kNormal;
-  bool set_gc_merge_rewrite = false;
-  bool gc_merge_rewrite = false;
   {
     auto p = opts.find("blob_run_mode");
     set_blob_run_mode = (p != opts.end());
@@ -1069,19 +1066,6 @@ Status TitanDBImpl::SetOptions(
       opts.erase(p);
     }
   }
-  {
-    auto p = opts.find("gc_merge_rewrite");
-    set_gc_merge_rewrite = (p != opts.end());
-    if (set_gc_merge_rewrite) {
-      try {
-        gc_merge_rewrite = ParseBoolean("", p->second);
-      } catch (std::exception& e) {
-        return Status::InvalidArgument("Error parsing " + p->second + ":" +
-                                       std::string(e.what()));
-      }
-      opts.erase(p);
-    }
-  }
   if (opts.size() > 0) {
     s = db_->SetOptions(column_family, opts);
     if (!s.ok()) {
@@ -1089,19 +1073,14 @@ Status TitanDBImpl::SetOptions(
     }
   }
   // Make sure base db's SetOptions success before setting blob_run_mode.
-  if (set_blob_run_mode || set_gc_merge_rewrite) {
+  if (set_blob_run_mode) {
     uint32_t cf_id = column_family->GetID();
     {
       MutexLock l(&mutex_);
       assert(cf_info_.count(cf_id) > 0);
       TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
-      if (set_blob_run_mode) {
-        cf_info.titan_table_factory->SetBlobRunMode(blob_run_mode);
-        cf_info.mutable_cf_options.blob_run_mode = blob_run_mode;
-      }
-      if (set_gc_merge_rewrite) {
-        cf_info.mutable_cf_options.gc_merge_rewrite = gc_merge_rewrite;
-      }
+      cf_info.titan_table_factory->SetBlobRunMode(blob_run_mode);
+      cf_info.mutable_cf_options.blob_run_mode = blob_run_mode;
     }
   }
   return Status::OK();
