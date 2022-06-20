@@ -87,6 +87,27 @@ if(WITH_ASAN OR WITH_TSAN)
   endif()
 endif()
 
+if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
+  add_subdirectory(${ROCKSDB_DIR} rocksdb EXCLUDE_FROM_ALL)
+  # Check if -latomic is required or not
+  if (NOT MSVC)
+    set(CMAKE_REQUIRED_FLAGS "--std=c++11")
+    CHECK_CXX_SOURCE_COMPILES("
+#include <atomic>
+std::atomic<uint64_t> x(0);
+int main() {
+  uint64_t i = x.load(std::memory_order_relaxed);
+  bool b = x.is_lock_free();
+  return 0;
+}
+" BUILTIN_ATOMIC)
+    if (NOT BUILTIN_ATOMIC)
+      #TODO: Check if -latomic exists
+      list(APPEND THIRDPARTY_LIBS atomic)
+    endif()
+  endif()
+endif()
+
 # Check if -latomic is required or not
 if (NOT MSVC)
   set(CMAKE_REQUIRED_FLAGS "--std=c++11")
@@ -109,7 +130,6 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
   include(CTest)
   include_directories(SYSTEM ${ROCKSDB_DIR}/third-party/gtest-1.8.1/fused-src)
 
-  add_subdirectory(${ROCKSDB_DIR} rocksdb EXCLUDE_FROM_ALL)
   set(TEST_LIBS
         titan
         testutillib
@@ -135,8 +155,8 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
 
   foreach(test ${TESTS})
     add_executable(titan_${test} src/${test}.cc)
-      target_link_libraries(titan_${test} ${TEST_LIBS})
-      add_test(titan_${test} titan_${test})
+    target_link_libraries(titan_${test} ${TEST_LIBS})
+    add_test(titan_${test} titan_${test})
   endforeach(test ${TESTS})
 endif()
 
