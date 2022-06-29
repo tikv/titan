@@ -47,7 +47,7 @@ option(WITH_TITAN_TOOLS "Build with tools." ON)
 option(TRAVIS "Building in Travis." OFF)
 option(CODE_COVERAGE "Generate code coverage report." OFF)
 
-if (CMAKE_BUILD_TYPE STREQUAL "Release")
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(WITH_TITAN_TESTS OFF)
   if (CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds")
@@ -101,7 +101,7 @@ if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
   endif()
 endif()
 
-if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
+if (WITH_TITAN_TESTS AND (CMAKE_BUILD_TYPE STREQUAL "Debug"))
   include(CTest)
   include_directories(SYSTEM ${ROCKSDB_DIR}/third-party/gtest-1.7.0/fused-src)
   set(TESTS
