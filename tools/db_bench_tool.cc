@@ -15,11 +15,15 @@
 #ifndef OS_WIN
 #include <unistd.h>
 #endif
+#ifdef OS_WIN
+#include <io.h>  // open/close
+#endif
 #include <fcntl.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+
 #include <atomic>
 #include <cinttypes>
 #include <condition_variable>
@@ -74,10 +78,6 @@
 #include "utilities/persistent_cache/block_cache_tier.h"
 
 #include "titan/db.h"
-
-#ifdef OS_WIN
-#include <io.h>  // open/close
-#endif
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::RegisterFlagValidator;

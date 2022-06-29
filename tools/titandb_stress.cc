@@ -32,10 +32,11 @@ int main() {
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <cinttypes>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <cinttypes>
 #include <exception>
 #include <queue>
 #include <thread>
@@ -68,13 +69,12 @@ int main() {
 #include "util/mutexlock.h"
 #include "util/random.h"
 #include "util/string_util.h"
+#include "utilities/merge_operators.h"
 // SyncPoint is not supported in Released Windows Mode.
 #if !(defined NDEBUG) || !defined(OS_WIN)
 #include "test_util/sync_point.h"
 #endif  // !(defined NDEBUG) || !defined(OS_WIN)
 #include "test_util/testutil.h"
-
-#include "utilities/merge_operators.h"
 
 #include "titan/db.h"
 #include "titan_build_version.h"

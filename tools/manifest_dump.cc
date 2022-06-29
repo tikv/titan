@@ -10,10 +10,11 @@ int main() {
 
 #include <memory>
 
-#include "edit_collector.h"
 #include "file/sequence_file_reader.h"
 #include "rocksdb/env.h"
 #include "util/gflags_compat.h"
+
+#include "edit_collector.h"
 #include "version_edit.h"
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rocksdb/utilities/stackable_db.h"
+
 #include "titan/options.h"
 
 namespace rocksdb {
