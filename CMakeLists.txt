@@ -47,11 +47,12 @@ option(WITH_TITAN_TOOLS "Build with tools." ON)
 option(TRAVIS "Building in Travis." OFF)
 option(CODE_COVERAGE "Generate code coverage report." OFF)
 
+if (CMAKE_COMPILER_IS_GNUCXX)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds")
+endif()
+
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(WITH_TITAN_TESTS OFF)
-  if (CMAKE_COMPILER_IS_GNUCXX)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds")
-  endif()
 endif()
 
 if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
