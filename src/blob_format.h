@@ -4,6 +4,7 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "table/format.h"
+
 #include "util.h"
 
 namespace rocksdb {

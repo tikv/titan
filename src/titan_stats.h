@@ -11,9 +11,10 @@
 #include "monitoring/statistics.h"
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
+#include "util/string_util.h"
+
 #include "titan/options.h"
 #include "titan/statistics.h"
-#include "util/string_util.h"
 
 namespace rocksdb {
 namespace titandb {

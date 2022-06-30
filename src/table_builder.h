@@ -1,10 +1,11 @@
 #pragma once
 
+#include "rocksdb/types.h"
+#include "table/table_builder.h"
+
 #include "blob_file_builder.h"
 #include "blob_file_manager.h"
 #include "blob_file_set.h"
-#include "rocksdb/types.h"
-#include "table/table_builder.h"
 #include "titan/options.h"
 #include "titan_stats.h"
 
@@ -44,6 +45,12 @@ class TitanTableBuilder : public TableBuilder {
   bool NeedCompact() const override;
 
   TableProperties GetTableProperties() const override;
+
+  IOStatus io_status() const override;
+
+  std::string GetFileChecksum() const override;
+
+  const char* GetFileChecksumFuncName() const override;
 
  private:
   friend class TableBuilderTest;

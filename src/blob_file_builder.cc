@@ -1,5 +1,9 @@
 #include "blob_file_builder.h"
 
+#include "table/block_based/block_based_table_reader.h"
+#include "table/meta_blocks.h"
+#include "util/crc32c.h"
+
 namespace rocksdb {
 namespace titandb {
 
@@ -153,7 +157,7 @@ void BlobFileBuilder::WriteRawBlock(const Slice& block, BlockHandle* handle) {
   status_ = file_->Append(block);
   if (ok()) {
     // follow rocksdb's block based table format
-    char trailer[kBlockTrailerSize];
+    char trailer[BlockBasedTable::kBlockTrailerSize];
     // only compression dictionary and meta index block are written
     // by this method, we use `kNoCompression` as placeholder
     trailer[0] = kNoCompression;
@@ -163,7 +167,7 @@ void BlobFileBuilder::WriteRawBlock(const Slice& block, BlockHandle* handle) {
     auto crc = crc32c::Value(block.data(), block.size());
     crc = crc32c::Extend(crc, trailer, 1);  // Extend to cover compression type
     EncodeFixed32(trailer_without_type, crc32c::Mask(crc));
-    status_ = file_->Append(Slice(trailer, kBlockTrailerSize));
+    status_ = file_->Append(Slice(trailer, BlockBasedTable::kBlockTrailerSize));
   }
 }
 
@@ -172,7 +176,7 @@ void BlobFileBuilder::WriteCompressionDictBlock(
   BlockHandle handle;
   WriteRawBlock(compression_dict_->GetRawDict(), &handle);
   if (ok()) {
-    meta_index_builder->Add(kCompressionDictBlock, handle);
+    meta_index_builder->Add(kCompressionDictBlockName, handle);
   }
 }
 

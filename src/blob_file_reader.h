@@ -1,9 +1,10 @@
 #pragma once
 
+#include "file/random_access_file_reader.h"
+
 #include "blob_format.h"
 #include "titan/options.h"
 #include "titan_stats.h"
-#include "util/file_reader_writer.h"
 
 namespace rocksdb {
 namespace titandb {

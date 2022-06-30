@@ -1,9 +1,11 @@
-#include <inttypes.h>
-#include <options/cf_options.h>
+#include <cinttypes>
+
 #include <unordered_map>
 
 #include "db/db_impl/db_impl.h"
 #include "file/filename.h"
+#include "monitoring/statistics.h"
+#include "options/cf_options.h"
 #include "port/port.h"
 #include "rocksdb/utilities/debug.h"
 #include "test_util/sync_point.h"
@@ -15,7 +17,6 @@
 #include "blob_file_size_collector.h"
 #include "db_impl.h"
 #include "db_iter.h"
-#include "monitoring/statistics.h"
 #include "titan/db.h"
 #include "titan_fault_injection_test_env.h"
 
@@ -234,16 +235,23 @@ class TitanDBTest : public testing::Test {
     }
   }
 
-  void CompactAll(ColumnFamilyHandle* cf_handle = nullptr) {
+  // Note:
+  // - When level is bottommost, always compact, no trivial move.
+  void CompactAll(ColumnFamilyHandle* cf_handle = nullptr, int level = -1) {
     if (cf_handle == nullptr) {
       cf_handle = db_->DefaultColumnFamily();
     }
     auto opts = db_->GetOptions();
+    if (level < 0) {
+      level = opts.num_levels - 1;
+    }
     auto compact_opts = CompactRangeOptions();
     compact_opts.change_level = true;
-    compact_opts.target_level = opts.num_levels - 1;
-    compact_opts.bottommost_level_compaction =
-        BottommostLevelCompaction::kForce;
+    compact_opts.target_level = level;
+    if (level >= opts.num_levels - 1) {
+      compact_opts.bottommost_level_compaction =
+          BottommostLevelCompaction::kForce;
+    }
     ASSERT_OK(db_->CompactRange(compact_opts, cf_handle, nullptr, nullptr));
   }
 
@@ -280,9 +288,8 @@ class TitanDBTest : public testing::Test {
     ASSERT_OK(TitanDB::Open(TitanOptions(options), dbname_, &db));
     auto cf_options = db->GetOptions(db->DefaultColumnFamily());
     auto db_options = db->GetDBOptions();
-    ImmutableCFOptions immu_cf_options(ImmutableDBOptions(db_options),
-                                       cf_options);
-    ASSERT_EQ(original_table_factory, immu_cf_options.table_factory);
+    ImmutableCFOptions immu_cf_options(cf_options);
+    ASSERT_EQ(original_table_factory, immu_cf_options.table_factory.get());
     ASSERT_OK(db->Close());
     delete db;
 
@@ -381,6 +388,7 @@ TEST_F(TitanDBTest, Basic) {
 }
 
 TEST_F(TitanDBTest, DictCompressOptions) {
+#if ZSTD_VERSION_NUMBER >= 10103
   options_.min_blob_size = 1;
   options_.blob_file_compression = CompressionType::kZSTD;
   options_.blob_file_compression_options.window_bits = -14;
@@ -397,6 +405,7 @@ TEST_F(TitanDBTest, DictCompressOptions) {
   }
   Flush();
   VerifyDB(data);
+#endif
 }
 
 TEST_F(TitanDBTest, TableFactory) { TestTableFactory(); }
@@ -698,12 +707,13 @@ TEST_F(TitanDBTest, DeleteFilesInRange) {
   ASSERT_OK(db_->Put(WriteOptions(), GenKey(81), GenValue(8)));
   ASSERT_OK(db_->Put(WriteOptions(), GenKey(91), GenValue(9)));
   Flush();
-  CompactAll();
+  // Not bottommost, we need trivial move.
+  CompactAll(nullptr, 5);
 
   std::string value;
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
   ASSERT_EQ(value, "0");
-  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level5", &value));
   ASSERT_EQ(value, "3");
 
   ASSERT_OK(db_->Put(WriteOptions(), GenKey(12), GenValue(1)));
@@ -721,11 +731,11 @@ TEST_F(TitanDBTest, DeleteFilesInRange) {
 
   // The LSM structure is:
   // L0: [11, 21, 31] [41, 51] [61, 71, 81, 91]
-  // L6: [12, 22, 32] [42, 52] [62, 72, 82, 92]
+  // L5: [12, 22, 32] [42, 52] [62, 72, 82, 92]
   // with 6 alive blob files
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
   ASSERT_EQ(value, "3");
-  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level5", &value));
   ASSERT_EQ(value, "3");
 
   std::unique_ptr<Iterator> iter(db_->NewIterator(ReadOptions()));
@@ -740,11 +750,11 @@ TEST_F(TitanDBTest, DeleteFilesInRange) {
 
   // Now the LSM structure is:
   // L0: [11, 21, 31] [41, 51] [61, 71, 81, 91]
-  // L6: [12, 22, 32]          [62, 72, 82, 92]
+  // L5: [12, 22, 32]          [62, 72, 82, 92]
   // with 4 alive blob files and 2 obsolete blob files
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
   ASSERT_EQ(value, "3");
-  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level6", &value));
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level5", &value));
   ASSERT_EQ(value, "2");
 
   auto blob = GetBlobStorage(db_->DefaultColumnFamily()).lock();
@@ -1724,7 +1734,6 @@ TEST_F(TitanDBTest, PutDeletedDuringGC) {
   ASSERT_TRUE(blob_storage != nullptr);
   std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
   blob_storage->ExportBlobFiles(blob_files);
-  CompactAll();
 
   CheckBlobFileCount(1);
   SyncPoint::GetInstance()->LoadDependency(
@@ -1765,9 +1774,7 @@ TEST_F(TitanDBTest, IngestDuringGC) {
   ASSERT_TRUE(blob_storage != nullptr);
   std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
   blob_storage->ExportBlobFiles(blob_files);
-  CompactAll();
 
-  CheckBlobFileCount(1);
   SyncPoint::GetInstance()->LoadDependency(
       {{"TitanDBTest::PutDeletedDuringGC::ContinueGC",
         "BlobGCJob::Finish::BeforeRewriteValidKeyToLSM"},
@@ -1859,12 +1866,8 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   SyncPoint::GetInstance()->EnableProcessing();
 
   CheckBlobFileCount(1);
-  CompactAll();
   std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
   ASSERT_TRUE(blob_storage != nullptr);
-  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
-  blob_storage->ExportBlobFiles(blob_files);
-  ASSERT_EQ(blob_files.size(), 1);
 
   // trigger GC
   CompactAll();
@@ -1876,6 +1879,7 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::ContinueGC");
   TEST_SYNC_POINT("TitanDBTest::CompactionDuringGC::WaitGCFinish");
 
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
   blob_storage->ExportBlobFiles(blob_files);
   // rewriting index to LSM failed, but the output blob file is already
   // generated
@@ -1889,7 +1893,6 @@ TEST_F(TitanDBTest, CompactionDuringGC) {
   CheckBlobFileCount(1);
 
   Flush();
-  CompactAll();
   CompactAll();
 
   db_impl_->TEST_StartGC(db_impl_->DefaultColumnFamily()->GetID());
@@ -1919,12 +1922,6 @@ TEST_F(TitanDBTest, DeleteFilesInRangeDuringGC) {
   SyncPoint::GetInstance()->EnableProcessing();
 
   CheckBlobFileCount(1);
-  CompactAll();
-  std::shared_ptr<BlobStorage> blob_storage = GetBlobStorage().lock();
-  ASSERT_TRUE(blob_storage != nullptr);
-  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
-  blob_storage->ExportBlobFiles(blob_files);
-  ASSERT_EQ(blob_files.size(), 1);
 
   // trigger GC
   CompactAll();

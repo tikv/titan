@@ -1,6 +1,6 @@
 #include "blob_file_set.h"
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include "edit_collector.h"
 #include "titan_logging.h"
@@ -52,9 +52,11 @@ Status BlobFileSet::Recover() {
   auto file_name = dirname_ + "/" + manifest;
   std::unique_ptr<SequentialFileReader> file;
   {
-    std::unique_ptr<SequentialFile> f;
-    s = env_->NewSequentialFile(file_name, &f,
-                                env_->OptimizeForManifestRead(env_options_));
+    std::unique_ptr<FSSequentialFile> f;
+    auto fs = env_->GetFileSystem();
+    s = fs->NewSequentialFile(
+        file_name, fs->OptimizeForManifestRead(FileOptions(env_options_)), &f,
+        nullptr /*dbg*/);
     if (!s.ok()) return s;
     file.reset(new SequentialFileReader(std::move(f), file_name));
   }
@@ -140,10 +142,13 @@ Status BlobFileSet::OpenManifest(uint64_t file_number) {
   auto file_name = DescriptorFileName(dirname_, file_number);
   std::unique_ptr<WritableFileWriter> file;
   {
-    std::unique_ptr<WritableFile> f;
-    s = env_->NewWritableFile(file_name, &f, env_options_);
+    std::unique_ptr<FSWritableFile> f;
+    auto fs = env_->GetFileSystem();
+    s = fs->NewWritableFile(file_name, FileOptions(env_options_), &f,
+                            nullptr /*dbg*/);
     if (!s.ok()) return s;
-    file.reset(new WritableFileWriter(std::move(f), file_name, env_options_));
+    file.reset(new WritableFileWriter(std::move(f), file_name,
+                                      FileOptions(env_options_)));
   }
 
   manifest_.reset(new log::Writer(std::move(file), 0, false));
@@ -152,12 +157,13 @@ Status BlobFileSet::OpenManifest(uint64_t file_number) {
   s = WriteSnapshot(manifest_.get());
   if (s.ok()) {
     ImmutableDBOptions ioptions(db_options_);
-    s = SyncTitanManifest(env_, stats_, &ioptions, manifest_->file());
+    s = SyncTitanManifest(stats_, &ioptions, manifest_->file());
   }
   uint64_t old_manifest_file_number = manifest_file_number_;
   if (s.ok()) {
     // Makes "CURRENT" file that points to the new manifest file.
-    s = SetCurrentFile(env_, dirname_, file_number, nullptr);
+    s = SetCurrentFile(env_->GetFileSystem().get(), dirname_, file_number,
+                       nullptr);
     manifest_file_number_ = file_number;
   }
 
@@ -215,7 +221,7 @@ Status BlobFileSet::LogAndApply(VersionEdit& edit) {
   if (!s.ok()) return s;
 
   ImmutableDBOptions ioptions(db_options_);
-  s = SyncTitanManifest(env_, stats_, &ioptions, manifest_->file());
+  s = SyncTitanManifest(stats_, &ioptions, manifest_->file());
   if (!s.ok()) return s;
   return collector.Apply(*this);
 }
