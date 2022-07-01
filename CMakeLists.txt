@@ -51,7 +51,7 @@ if (CMAKE_COMPILER_IS_GNUCXX)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds")
 endif()
 
-if (CMAKE_BUILD_TYPE STREQUAL "Release")
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(WITH_TITAN_TESTS OFF)
 endif()
 
@@ -127,7 +127,7 @@ int main() {
   endif()
 endif()
 
-if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
+if (WITH_TITAN_TESTS AND (CMAKE_BUILD_TYPE STREQUAL "Debug"))
   include(CTest)
   include_directories(SYSTEM ${ROCKSDB_DIR}/third-party/gtest-1.8.1/fused-src)
 
