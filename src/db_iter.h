@@ -4,13 +4,18 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include <memory>
 #include <unordered_map>
 
+#include "db/arena_wrapped_db_iter.h"
 #include "db/db_iter.h"
 #include "rocksdb/env.h"
+
+#include "blob_file_reader.h"
+#include "blob_format.h"
+#include "blob_storage.h"
 #include "titan_logging.h"
 #include "titan_stats.h"
 
@@ -19,15 +24,15 @@ namespace titandb {
 
 class TitanDBIterator : public Iterator {
  public:
-  TitanDBIterator(const TitanReadOptions& options, BlobStorage* storage,
+  TitanDBIterator(const TitanReadOptions &options, BlobStorage *storage,
                   std::shared_ptr<ManagedSnapshot> snap,
-                  std::unique_ptr<ArenaWrappedDBIter> iter, Env* env,
-                  TitanStats* stats, Logger* info_log)
+                  std::unique_ptr<ArenaWrappedDBIter> iter, SystemClock *clock,
+                  TitanStats *stats, Logger *info_log)
       : options_(options),
         storage_(storage),
         snap_(snap),
         iter_(std::move(iter)),
-        env_(env),
+        clock_(clock),
         stats_(stats),
         info_log_(info_log) {}
 
@@ -50,7 +55,7 @@ class TitanDBIterator : public Iterator {
   void SeekToFirst() override {
     iter_->SeekToFirst();
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, statistics(stats_), TITAN_SEEK_MICROS);
+      StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
       GetBlobValue();
       RecordTick(statistics(stats_), TITAN_NUM_SEEK);
     }
@@ -59,25 +64,25 @@ class TitanDBIterator : public Iterator {
   void SeekToLast() override {
     iter_->SeekToLast();
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, statistics(stats_), TITAN_SEEK_MICROS);
+      StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
       GetBlobValue();
       RecordTick(statistics(stats_), TITAN_NUM_SEEK);
     }
   }
 
-  void Seek(const Slice& target) override {
+  void Seek(const Slice &target) override {
     iter_->Seek(target);
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, statistics(stats_), TITAN_SEEK_MICROS);
+      StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
       GetBlobValue();
       RecordTick(statistics(stats_), TITAN_NUM_SEEK);
     }
   }
 
-  void SeekForPrev(const Slice& target) override {
+  void SeekForPrev(const Slice &target) override {
     iter_->SeekForPrev(target);
     if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(env_, statistics(stats_), TITAN_SEEK_MICROS);
+      StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
       GetBlobValue();
       RecordTick(statistics(stats_), TITAN_NUM_SEEK);
     }
@@ -87,7 +92,7 @@ class TitanDBIterator : public Iterator {
     assert(Valid());
     iter_->Next();
     if (ShouldGetBlobValue()) {
-      StopWatch next_sw(env_, statistics(stats_), TITAN_NEXT_MICROS);
+      StopWatch next_sw(clock_, statistics(stats_), TITAN_NEXT_MICROS);
       GetBlobValue();
       RecordTick(statistics(stats_), TITAN_NUM_NEXT);
     }
@@ -97,7 +102,7 @@ class TitanDBIterator : public Iterator {
     assert(Valid());
     iter_->Prev();
     if (ShouldGetBlobValue()) {
-      StopWatch prev_sw(env_, statistics(stats_), TITAN_PREV_MICROS);
+      StopWatch prev_sw(clock_, statistics(stats_), TITAN_PREV_MICROS);
       GetBlobValue();
       RecordTick(statistics(stats_), TITAN_NUM_PREV);
     }
@@ -115,7 +120,7 @@ class TitanDBIterator : public Iterator {
     return record_.value;
   }
 
-  bool seqno(SequenceNumber* number) const override {
+  bool seqno(SequenceNumber *number) const override {
     return iter_->seqno(number);
   }
 
@@ -174,14 +179,14 @@ class TitanDBIterator : public Iterator {
   PinnableSlice buffer_;
 
   TitanReadOptions options_;
-  BlobStorage* storage_;
+  BlobStorage *storage_;
   std::shared_ptr<ManagedSnapshot> snap_;
   std::unique_ptr<ArenaWrappedDBIter> iter_;
   std::unordered_map<uint64_t, std::unique_ptr<BlobFilePrefetcher>> files_;
 
-  Env* env_;
-  TitanStats* stats_;
-  Logger* info_log_;
+  SystemClock *clock_;
+  TitanStats *stats_;
+  Logger *info_log_;
 };
 
 }  // namespace titandb

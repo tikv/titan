@@ -3,10 +3,11 @@
 #include <string>
 #include <utility>
 
-#include "db_impl.h"
 #include "rocksdb/compaction_filter.h"
-#include "titan_logging.h"
 #include "util/mutexlock.h"
+
+#include "db_impl.h"
+#include "titan_logging.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -31,6 +32,8 @@ class TitanCompactionFilter final : public CompactionFilter {
   }
 
   const char *Name() const override { return filter_name_.c_str(); }
+
+  bool IsStackedBlobDbInternalCompactionFilter() const override { return true; }
 
   Decision FilterV3(int level, const Slice &key, SequenceNumber seqno,
                     ValueType value_type, const Slice &value,

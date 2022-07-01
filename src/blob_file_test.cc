@@ -1,10 +1,11 @@
 #include <cinttypes>
 
+#include "file/filename.h"
+#include "test_util/testharness.h"
+
 #include "blob_file_builder.h"
 #include "blob_file_cache.h"
 #include "blob_file_reader.h"
-#include "file/filename.h"
-#include "test_util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -62,10 +63,11 @@ class BlobFileTest : public testing::Test {
 
     std::unique_ptr<WritableFileWriter> file;
     {
-      std::unique_ptr<WritableFile> f;
-      ASSERT_OK(env_->NewWritableFile(file_name_, &f, env_options_));
-      file.reset(
-          new WritableFileWriter(std::move(f), file_name_, env_options_));
+      std::unique_ptr<FSWritableFile> f;
+      ASSERT_OK(env_->GetFileSystem()->NewWritableFile(
+          file_name_, FileOptions(env_options_), &f, nullptr /*dbg*/));
+      file.reset(new WritableFileWriter(std::move(f), file_name_,
+                                        FileOptions(env_options_)));
     }
     std::unique_ptr<BlobFileBuilder> builder;
     if (blob_file_version == 0) {
@@ -135,10 +137,11 @@ class BlobFileTest : public testing::Test {
 
     std::unique_ptr<WritableFileWriter> file;
     {
-      std::unique_ptr<WritableFile> f;
-      ASSERT_OK(env_->NewWritableFile(file_name_, &f, env_options_));
-      file.reset(
-          new WritableFileWriter(std::move(f), file_name_, env_options_));
+      std::unique_ptr<FSWritableFile> f;
+      ASSERT_OK(env_->GetFileSystem()->NewWritableFile(
+          file_name_, FileOptions(env_options_), &f, nullptr /*dbg*/));
+      file.reset(new WritableFileWriter(std::move(f), file_name_,
+                                        FileOptions(env_options_)));
     }
 
     std::unique_ptr<BlobFileBuilder> builder;

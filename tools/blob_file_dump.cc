@@ -1,8 +1,9 @@
 // Copyright 2021-present TiKV Project Authors. Licensed under Apache-2.0.
 
-#include "blob_file_iterator.h"
 #include "file/filename.h"
 #include "util/gflags_compat.h"
+
+#include "blob_file_iterator.h"
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::SetUsageMessage;
@@ -29,8 +30,9 @@ int blob_file_dump() {
   handle_error(s, "getting file size");
 
   std::unique_ptr<RandomAccessFileReader> file;
-  std::unique_ptr<RandomAccessFile> f;
-  s = env->NewRandomAccessFile(file_name, &f, EnvOptions());
+  std::unique_ptr<FSRandomAccessFile> f;
+  s = env->GetFileSystem()->NewRandomAccessFile(file_name, FileOptions(), &f,
+                                                nullptr /*dbg*/);
   handle_error(s, "open file");
   file.reset(new RandomAccessFileReader(std::move(f), file_name));
 

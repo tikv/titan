@@ -1,9 +1,10 @@
+#include "test_util/sync_point.h"
+
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc_job.h"
 #include "blob_gc_picker.h"
 #include "db_impl.h"
-#include "test_util/sync_point.h"
 #include "titan_logging.h"
 #include "util.h"
 
@@ -197,7 +198,8 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     // Nothing to do
     TITAN_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
-    StopWatch gc_sw(env_, statistics(stats_.get()), TITAN_GC_MICROS);
+    StopWatch gc_sw(env_->GetSystemClock().get(), statistics(stats_.get()),
+                    TITAN_GC_MICROS);
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
                           env_options_, blob_manager_.get(),
                           blob_file_set_.get(), log_buffer, &shuting_down_,

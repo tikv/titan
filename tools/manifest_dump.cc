@@ -10,10 +10,11 @@ int main() {
 
 #include <memory>
 
-#include "edit_collector.h"
+#include "file/sequence_file_reader.h"
 #include "rocksdb/env.h"
-#include "util/file_reader_writer.h"
 #include "util/gflags_compat.h"
+
+#include "edit_collector.h"
 #include "version_edit.h"
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
@@ -44,8 +45,9 @@ int manifest_dump() {
 
   // Open manifest file.
   std::unique_ptr<SequentialFileReader> file_reader;
-  std::unique_ptr<SequentialFile> file;
-  s = env->NewSequentialFile(FLAGS_path, &file, EnvOptions());
+  std::unique_ptr<FSSequentialFile> file;
+  s = env->GetFileSystem()->NewSequentialFile(FLAGS_path, FileOptions(), &file,
+                                              nullptr /*dbg*/);
   handle_error(s, "open manifest file");
   file_reader.reset(new SequentialFileReader(std::move(file), FLAGS_path));
 

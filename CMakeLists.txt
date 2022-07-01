@@ -9,7 +9,7 @@ if (NOT ROCKSDB_GIT_REPO)
 endif()
 
 if (NOT ROCKSDB_GIT_BRANCH)
-  set(ROCKSDB_GIT_BRANCH "6.4.tikv")
+  set(ROCKSDB_GIT_BRANCH "6.29.tikv")
 endif()
 
 if (NOT DEFINED ROCKSDB_DIR)
@@ -81,10 +81,6 @@ if (CODE_COVERAGE)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
 endif()
 
-set(COMMON_LIBS
-  titan
-  rocksdb)
-
 if(WITH_ASAN OR WITH_TSAN)
   find_package(Threads)
   if(CMAKE_USE_PTHREADS_INIT)
@@ -94,17 +90,53 @@ endif()
 
 if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
   add_subdirectory(${ROCKSDB_DIR} rocksdb EXCLUDE_FROM_ALL)
-  # -latomic is needed when building titandb_stress using clang.
-  # check if libatomic exist before link
-  find_library(HAS_ATOMIC NAMES atomic libatomic.so.1 atomic.so.1)
-  if (HAS_ATOMIC)
-    link_libraries(atomic)
+  # Check if -latomic is required or not
+  if (NOT MSVC)
+    set(CMAKE_REQUIRED_FLAGS "--std=c++11")
+    CHECK_CXX_SOURCE_COMPILES("
+#include <atomic>
+std::atomic<uint64_t> x(0);
+int main() {
+  uint64_t i = x.load(std::memory_order_relaxed);
+  bool b = x.is_lock_free();
+  return 0;
+}
+" BUILTIN_ATOMIC)
+    if (NOT BUILTIN_ATOMIC)
+      #TODO: Check if -latomic exists
+      list(APPEND THIRDPARTY_LIBS atomic)
+    endif()
+  endif()
+endif()
+
+# Check if -latomic is required or not
+if (NOT MSVC)
+  set(CMAKE_REQUIRED_FLAGS "--std=c++11")
+  CHECK_CXX_SOURCE_COMPILES("
+#include <atomic>
+std::atomic<uint64_t> x(0);
+int main() {
+  uint64_t i = x.load(std::memory_order_relaxed);
+  bool b = x.is_lock_free();
+  return 0;
+}
+" BUILTIN_ATOMIC)
+  if (NOT BUILTIN_ATOMIC)
+    #TODO: Check if -latomic exists
+    list(APPEND THIRDPARTY_LIBS atomic)
   endif()
 endif()
 
 if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
   include(CTest)
-  include_directories(SYSTEM ${ROCKSDB_DIR}/third-party/gtest-1.7.0/fused-src)
+  include_directories(SYSTEM ${ROCKSDB_DIR}/third-party/gtest-1.8.1/fused-src)
+
+  set(TEST_LIBS
+        titan
+        testutillib
+        testharness
+        gtest)
+
   set(TESTS
         blob_file_iterator_test
         blob_file_size_collector_test
@@ -121,20 +153,16 @@ if (WITH_TITAN_TESTS AND (NOT CMAKE_BUILD_TYPE STREQUAL "Release"))
         util_test
         compaction_filter_test
         version_test)
-  set(TEST_LIBS
-        ${COMMON_LIBS}
-        testutillib
-        gtest)
 
   foreach(test ${TESTS})
-    add_executable(titan_${test} src/${test}.cc $<TARGET_OBJECTS:testharness>)
-      target_link_libraries(titan_${test} ${TEST_LIBS})
-      add_test(titan_${test} titan_${test})
+    add_executable(titan_${test} src/${test}.cc)
+    target_link_libraries(titan_${test} ${TEST_LIBS})
+    add_test(titan_${test} titan_${test})
   endforeach(test ${TESTS})
 endif()
 
 if (WITH_TITAN_TOOLS)
-  set(TOOLS_LIBS ${COMMON_LIBS})
+  set(TOOLS_LIBS titan rocksdb)
 
   if (NOT TRAVIS)
     find_package(gflags REQUIRED)

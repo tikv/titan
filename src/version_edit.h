@@ -1,11 +1,12 @@
 #pragma once
 
+#include <cinttypes>
+
 #include <set>
 
-#include "blob_format.h"
 #include "rocksdb/slice.h"
 
-#include <inttypes.h>
+#include "blob_format.h"
 
 namespace rocksdb {
 namespace titandb {

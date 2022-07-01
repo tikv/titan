@@ -4,9 +4,10 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include "monitoring/statistics.h"
+
 #include "titan_logging.h"
 
 namespace rocksdb {
@@ -27,8 +28,8 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   if (!ok()) return;
 
   ParsedInternalKey ikey;
-  if (!ParseInternalKey(key, &ikey)) {
-    status_ = Status::Corruption(Slice());
+  status_ = ParseInternalKey(key, &ikey, false /*log_err_key*/);
+  if (!status_.ok()) {
     return;
   }
 
@@ -71,7 +72,6 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     bool is_small_kv = value.size() < cf_options_.min_blob_size;
     if (is_small_kv) {
       AddBase(key, ikey, value);
-      return;
     } else {
       // We write to blob file and insert index
       AddBlob(ikey, value);
@@ -145,8 +145,8 @@ void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
 
   BlobFileBuilder::OutContexts contexts;
 
-  StopWatch write_sw(db_options_.env, statistics(stats_),
-                     TITAN_BLOB_FILE_WRITE_MICROS);
+  StopWatch write_sw(db_options_.env->GetSystemClock().get(),
+                     statistics(stats_), TITAN_BLOB_FILE_WRITE_MICROS);
 
   // Init blob_builder_ first
   if (!blob_builder_) {
@@ -197,8 +197,8 @@ void TitanTableBuilder::AddBlobResultsToBase(
   for (const std::unique_ptr<BlobFileBuilder::BlobRecordContext>& ctx :
        contexts) {
     ParsedInternalKey ikey;
-    if (!ParseInternalKey(ctx->key, &ikey)) {
-      status_ = Status::Corruption(Slice());
+    status_ = ParseInternalKey(ctx->key, &ikey, false /*log_err_key*/);
+    if (!status_.ok()) {
       return;
     }
     if (ctx->has_value) {
@@ -208,15 +208,13 @@ void TitanTableBuilder::AddBlobResultsToBase(
       RecordTick(statistics(stats_), TITAN_BLOB_FILE_BYTES_WRITTEN,
                  ctx->new_blob_index.blob_handle.size);
       bytes_written_ += ctx->new_blob_index.blob_handle.size;
-      if (ok()) {
-        std::string index_value;
-        ctx->new_blob_index.EncodeTo(&index_value);
+      std::string index_value;
+      ctx->new_blob_index.EncodeTo(&index_value);
 
-        ikey.type = kTypeBlobIndex;
-        std::string index_key;
-        AppendInternalKey(&index_key, ikey);
-        base_builder_->Add(index_key, index_value);
-      }
+      ikey.type = kTypeBlobIndex;
+      std::string index_key;
+      AppendInternalKey(&index_key, ikey);
+      base_builder_->Add(index_key, index_value);
     }
   }
 }
@@ -316,6 +314,18 @@ bool TitanTableBuilder::NeedCompact() const {
 
 TableProperties TitanTableBuilder::GetTableProperties() const {
   return base_builder_->GetTableProperties();
+}
+
+IOStatus TitanTableBuilder::io_status() const {
+  return base_builder_->io_status();
+}
+
+std::string TitanTableBuilder::GetFileChecksum() const {
+  return base_builder_->GetFileChecksum();
+}
+
+const char* TitanTableBuilder::GetFileChecksumFuncName() const {
+  return base_builder_->GetFileChecksumFuncName();
 }
 
 bool TitanTableBuilder::ShouldMerge(

@@ -2,11 +2,13 @@
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
-#include <inttypes.h>
+#include <cinttypes>
+
+#include "rocksdb/options.h"
+
 #include "blob_file_cache.h"
 #include "blob_format.h"
 #include "blob_gc.h"
-#include "rocksdb/options.h"
 #include "titan_stats.h"
 
 namespace rocksdb {

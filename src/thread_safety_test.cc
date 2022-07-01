@@ -1,17 +1,19 @@
-#include <inttypes.h>
-#include <options/cf_options.h>
+#include <cinttypes>
+
 #include <initializer_list>
 #include <map>
 #include <vector>
 
-#include "db_impl.h"
-#include "db_iter.h"
 #include "file/filename.h"
+#include "options/cf_options.h"
 #include "port/port.h"
 #include "rocksdb/utilities/debug.h"
 #include "test_util/testharness.h"
-#include "titan/db.h"
 #include "util/random.h"
+
+#include "db_impl.h"
+#include "db_iter.h"
+#include "titan/db.h"
 
 namespace rocksdb {
 namespace titandb {

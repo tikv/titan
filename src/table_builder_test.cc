@@ -1,14 +1,15 @@
+#include "table_builder.h"
+
+#include "file/filename.h"
 #include "table/table_builder.h"
+#include "table/table_reader.h"
+#include "test_util/testharness.h"
 
 #include "blob_file_manager.h"
 #include "blob_file_reader.h"
 #include "blob_file_set.h"
 #include "db_impl.h"
-#include "file/filename.h"
-#include "table/table_reader.h"
-#include "table_builder.h"
 #include "table_factory.h"
-#include "test_util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -30,11 +31,13 @@ class FileManager : public BlobFileManager {
     auto name = BlobFileName(db_options_.dirname, number);
     std::unique_ptr<WritableFileWriter> file;
     {
-      std::unique_ptr<WritableFile> f;
-      Status s = env_->NewWritableFile(name, &f, env_options_);
+      std::unique_ptr<FSWritableFile> f;
+      Status s = env_->GetFileSystem()->NewWritableFile(
+          name, FileOptions(env_options_), &f, nullptr /*dbg*/);
       if (!s.ok()) return s;
       f->SetIOPriority(pri);
-      file.reset(new WritableFileWriter(std::move(f), name, env_options_));
+      file.reset(new WritableFileWriter(std::move(f), name,
+                                        FileOptions(env_options_)));
     }
     handle->reset(new FileHandle(number, name, std::move(file)));
     return Status::OK();
@@ -112,41 +115,23 @@ class TestTableFactory : public TableFactory {
 
   const char* Name() const override { return "TestTableFactory"; }
 
+  using TableFactory::NewTableReader;
+
   Status NewTableReader(
-      const TableReaderOptions& options,
+      const ReadOptions& ro, const TableReaderOptions& options,
       std::unique_ptr<RandomAccessFileReader>&& file, uint64_t file_size,
       std::unique_ptr<TableReader>* result,
       bool prefetch_index_and_filter_in_cache) const override {
-    return base_factory_->NewTableReader(options, std::move(file), file_size,
-                                         result,
+    return base_factory_->NewTableReader(ro, options, std::move(file),
+                                         file_size, result,
                                          prefetch_index_and_filter_in_cache);
   }
 
   TableBuilder* NewTableBuilder(const TableBuilderOptions& options,
-                                uint32_t column_family_id,
                                 WritableFileWriter* file) const override {
-    latest_table_builder_ =
-        base_factory_->NewTableBuilder(options, column_family_id, file);
+    latest_table_builder_ = base_factory_->NewTableBuilder(options, file);
     return latest_table_builder_;
   }
-
-  std::string GetPrintableTableOptions() const override {
-    return base_factory_->GetPrintableTableOptions();
-  }
-
-  Status SanitizeOptions(const DBOptions& db_options,
-                         const ColumnFamilyOptions& cf_options) const override {
-    // Override this when we need to validate our options.
-    return base_factory_->SanitizeOptions(db_options, cf_options);
-  }
-
-  Status GetOptionString(std::string* opt_string,
-                         const std::string& delimiter) const override {
-    // Override this when we need to persist our options.
-    return base_factory_->GetOptionString(opt_string, delimiter);
-  }
-
-  void* GetOptions() override { return base_factory_->GetOptions(); }
 
   bool IsDeleteRangeSupported() const override {
     return base_factory_->IsDeleteRangeSupported();
@@ -158,13 +143,31 @@ class TestTableFactory : public TableFactory {
 class TableBuilderTest : public testing::Test {
  public:
   TableBuilderTest()
-      : cf_moptions_(cf_options_),
-        cf_ioptions_(options_),
-        tmpdir_(test::TmpDir(env_)),
-        base_name_(tmpdir_ + "/base"),
+      : tmpdir_(test::TmpDir(env_)),
+        base_file_number_(1),
         blob_name_(BlobFileName(tmpdir_, kTestFileNumber)) {
     db_options_.dirname = tmpdir_;
+    db_options_.statistics = nullptr;
     cf_options_.min_blob_size = kMinBlobSize;
+    Open();
+  }
+
+  ~TableBuilderTest() {
+    uint64_t last_blob_number =
+        reinterpret_cast<FileManager*>(blob_manager_.get())->LastBlobNumber();
+    for (uint64_t i = kTestFileNumber; i <= last_blob_number; i++) {
+      env_->DeleteFile(BlobFileName(tmpdir_, i));
+    }
+    env_->DeleteFile(FileNumberToName(base_file_number_));
+    env_->DeleteDir(tmpdir_);
+  }
+
+  void Open() {
+    // Refresh options.
+    db_ioptions_ = ImmutableDBOptions(db_options_);
+    cf_moptions_ = MutableCFOptions(cf_options_);
+    cf_ioptions_ = ImmutableCFOptions(cf_options_);
+    ioptions_ = ImmutableOptions(db_ioptions_, cf_ioptions_);
     blob_file_set_.reset(new BlobFileSet(db_options_, nullptr));
     std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
     db_impl_.reset(new TitanDBImpl(db_options_, tmpdir_));
@@ -175,20 +178,10 @@ class TableBuilderTest : public testing::Test {
     base_table_factory_ =
         std::make_shared<TestTableFactory>(cf_options_.table_factory);
     cf_options_.table_factory = base_table_factory_;
-    cf_ioptions_.table_factory = base_table_factory_.get();
+    cf_ioptions_.table_factory = base_table_factory_;
     table_factory_.reset(new TitanTableFactory(
         db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
         blob_file_set_.get(), nullptr));
-  }
-
-  ~TableBuilderTest() {
-    uint64_t last_blob_number =
-        reinterpret_cast<FileManager*>(blob_manager_.get())->LastBlobNumber();
-    for (uint64_t i = kTestFileNumber; i <= last_blob_number; i++) {
-      env_->DeleteFile(BlobFileName(tmpdir_, i));
-    }
-    env_->DeleteFile(base_name_);
-    env_->DeleteDir(tmpdir_);
   }
 
   void BlobFileExists(bool exists) {
@@ -200,26 +193,34 @@ class TableBuilderTest : public testing::Test {
     }
   }
 
+  std::string FileNumberToName(const uint64_t file_number) {
+    return tmpdir_ + "/" + std::to_string(file_number);
+  }
+
   void NewFileWriter(const std::string& fname,
                      std::unique_ptr<WritableFileWriter>* result) {
-    std::unique_ptr<WritableFile> file;
-    ASSERT_OK(env_->NewWritableFile(fname, &file, env_options_));
-    result->reset(new WritableFileWriter(std::move(file), fname, env_options_));
+    std::unique_ptr<FSWritableFile> file;
+    ASSERT_OK(env_->GetFileSystem()->NewWritableFile(
+        fname, FileOptions(env_options_), &file, nullptr /*dbg*/));
+    result->reset(new WritableFileWriter(std::move(file), fname,
+                                         FileOptions(env_options_)));
   }
 
   void NewFileReader(const std::string& fname,
                      std::unique_ptr<RandomAccessFileReader>* result) {
-    std::unique_ptr<RandomAccessFile> file;
-    ASSERT_OK(env_->NewRandomAccessFile(fname, &file, env_options_));
-    result->reset(new RandomAccessFileReader(std::move(file), fname, env_));
+    std::unique_ptr<FSRandomAccessFile> file;
+    ASSERT_OK(env_->GetFileSystem()->NewRandomAccessFile(
+        fname, FileOptions(env_options_), &file, nullptr /*dbg*/));
+    result->reset(new RandomAccessFileReader(std::move(file), fname,
+                                             env_->GetSystemClock().get()));
   }
 
   void NewBaseFileWriter(std::unique_ptr<WritableFileWriter>* result) {
-    NewFileWriter(base_name_, result);
+    NewFileWriter(FileNumberToName(base_file_number_), result);
   }
 
   void NewBaseFileReader(std::unique_ptr<RandomAccessFileReader>* result) {
-    NewFileReader(base_name_, result);
+    NewFileReader(FileNumberToName(base_file_number_), result);
   }
 
   void NewBlobFileReader(std::unique_ptr<BlobFileReader>* result) {
@@ -231,50 +232,54 @@ class TableBuilderTest : public testing::Test {
                                    result, nullptr));
   }
 
-  void NewTableReader(const std::string& fname,
+  void NewTableReader(const uint64_t file_number,
                       std::unique_ptr<TableReader>* result) {
     std::unique_ptr<RandomAccessFileReader> file;
-    NewFileReader(fname, &file);
+    NewFileReader(FileNumberToName(file_number), &file);
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file->file_name(), &file_size));
-    TableReaderOptions options(cf_ioptions_, nullptr, env_options_,
+    TableReaderOptions options(ioptions_, prefix_extractor_, env_options_,
                                cf_ioptions_.internal_comparator);
+    options.cur_file_num = file_number;
     ASSERT_OK(table_factory_->NewTableReader(options, std::move(file),
                                              file_size, result));
   }
 
-  void NewTableBuilder(WritableFileWriter* file,
+  void NewTableBuilder(const uint64_t file_number, WritableFileWriter* file,
                        std::unique_ptr<TableBuilder>* result,
                        int target_level = 0) {
     CompressionOptions compression_opts;
-    NewTableBuilder(file, result, compression_opts, target_level);
+    NewTableBuilder(file_number, file, result, compression_opts, target_level);
   }
 
-  void NewTableBuilder(WritableFileWriter* file,
+  void NewTableBuilder(const uint64_t file_number, WritableFileWriter* file,
                        std::unique_ptr<TableBuilder>* result,
                        CompressionOptions compression_opts,
                        int target_level = 0) {
-    TableBuilderOptions options(cf_ioptions_, cf_moptions_,
-                                cf_ioptions_.internal_comparator, &collectors_,
-                                kNoCompression, 0 /*sample_for_compression*/,
-                                compression_opts, false /*skip_filters*/,
-                                kDefaultColumnFamilyName, target_level);
-    result->reset(table_factory_->NewTableBuilder(options, 0, file));
+    TableBuilderOptions options(
+        ioptions_, cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
+        kNoCompression, compression_opts, 0 /*column_family_id*/,
+        kDefaultColumnFamilyName, target_level, false,
+        TableFileCreationReason::kMisc, 0, 0, 0, "", "", 0, file_number);
+    result->reset(table_factory_->NewTableBuilder(options, file));
   }
 
   port::Mutex mutex_;
 
   Env* env_{Env::Default()};
   EnvOptions env_options_;
-  Options options_;
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
+  std::vector<std::unique_ptr<IntTblPropCollectorFactory>> collectors_;
+  // Derived options.
+  ImmutableDBOptions db_ioptions_;
   MutableCFOptions cf_moptions_;
   ImmutableCFOptions cf_ioptions_;
-  std::vector<std::unique_ptr<IntTblPropCollectorFactory>> collectors_;
+  ImmutableOptions ioptions_;
+  std::shared_ptr<const SliceTransform> prefix_extractor_ = nullptr;
 
   std::string tmpdir_;
-  std::string base_name_;
+  uint64_t base_file_number_;
   std::string blob_name_;
   std::unique_ptr<TitanDBImpl> db_impl_;
   std::shared_ptr<TestTableFactory> base_table_factory_;
@@ -287,17 +292,16 @@ class TableBuilderTest : public testing::Test {
 // builder.
 TEST_F(TableBuilderTest, BeforeDBInitialized) {
   CompressionOptions compression_opts;
-  TableBuilderOptions opts(cf_ioptions_, cf_moptions_,
-                           cf_ioptions_.internal_comparator, &collectors_,
-                           kNoCompression, 0 /*sample_for_compression*/,
-                           compression_opts, false /*skip_filters*/,
-                           kDefaultColumnFamilyName, 0 /*target_level*/);
+  TableBuilderOptions opts(
+      ioptions_, cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
+      kNoCompression, compression_opts, 0 /*column_family_id*/,
+      kDefaultColumnFamilyName, 0 /*target_level*/);
 
   db_impl_->TEST_set_initialized(false);
   std::unique_ptr<WritableFileWriter> file1;
   NewBaseFileWriter(&file1);
   std::unique_ptr<TableBuilder> builder1(
-      table_factory_->NewTableBuilder(opts, 0 /*cf_id*/, file1.get()));
+      table_factory_->NewTableBuilder(opts, file1.get()));
   ASSERT_EQ(builder1.get(), base_table_factory_->latest_table_builder());
   builder1->Abandon();
 
@@ -305,7 +309,7 @@ TEST_F(TableBuilderTest, BeforeDBInitialized) {
   std::unique_ptr<WritableFileWriter> file2;
   NewBaseFileWriter(&file2);
   std::unique_ptr<TableBuilder> builder2(
-      table_factory_->NewTableBuilder(opts, 0 /*cf_id*/, file2.get()));
+      table_factory_->NewTableBuilder(opts, file2.get()));
   ASSERT_NE(builder2.get(), base_table_factory_->latest_table_builder());
   builder2->Abandon();
 }
@@ -314,7 +318,7 @@ TEST_F(TableBuilderTest, Basic) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder);
 
   // Build a base table and a blob file.
   const int n = 100;
@@ -334,7 +338,7 @@ TEST_F(TableBuilderTest, Basic) {
   ASSERT_OK(base_file->Close());
 
   std::unique_ptr<TableReader> base_reader;
-  NewTableReader(base_name_, &base_reader);
+  NewTableReader(base_file_number_, &base_reader);
   std::unique_ptr<BlobFileReader> blob_reader;
   NewBlobFileReader(&blob_reader);
 
@@ -348,7 +352,7 @@ TEST_F(TableBuilderTest, Basic) {
     ASSERT_TRUE(iter->Valid());
     std::string key(1, i);
     ParsedInternalKey ikey;
-    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    ASSERT_OK(ParseInternalKey(iter->key(), &ikey, false));
     ASSERT_EQ(ikey.user_key, key);
     if (i % 2 == 0) {
       ASSERT_EQ(ikey.type, kTypeValue);
@@ -383,7 +387,7 @@ TEST_F(TableBuilderTest, DictCompress) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder);
 
   // Build a base table and a blob file.
   const int n = 100;
@@ -400,7 +404,7 @@ TEST_F(TableBuilderTest, DictCompress) {
   BlobFileExists(true);
 
   std::unique_ptr<TableReader> base_reader;
-  NewTableReader(base_name_, &base_reader);
+  NewTableReader(base_file_number_, &base_reader);
   std::unique_ptr<BlobFileReader> blob_reader;
   NewBlobFileReader(&blob_reader);
 
@@ -414,7 +418,7 @@ TEST_F(TableBuilderTest, DictCompress) {
     ASSERT_TRUE(iter->Valid());
     std::string key(1, i);
     ParsedInternalKey ikey;
-    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    ASSERT_OK(ParseInternalKey(iter->key(), &ikey, false));
     ASSERT_EQ(ikey.user_key, key);
     ASSERT_EQ(ikey.type, kTypeBlobIndex);
     BlobIndex index;
@@ -452,7 +456,7 @@ TEST_F(TableBuilderTest, DictCompressOptions) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder);
 
   // Build a base table and a blob file.
   const int n = 100;
@@ -487,7 +491,7 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder);
 
   // Build a base table and a blob file.
   const int n = 100;
@@ -514,7 +518,7 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
   ASSERT_OK(base_file->Sync(true));
   ASSERT_OK(base_file->Close());
   std::unique_ptr<TableReader> base_reader;
-  NewTableReader(base_name_, &base_reader);
+  NewTableReader(base_file_number_, &base_reader);
   std::unique_ptr<BlobFileReader> blob_reader;
   NewBlobFileReader(&blob_reader);
 
@@ -528,7 +532,7 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
     ASSERT_TRUE(iter->Valid());
     std::string key(1, i);
     ParsedInternalKey ikey;
-    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    ASSERT_OK(ParseInternalKey(iter->key(), &ikey, false));
     // check order
     ASSERT_EQ(ikey.user_key, key);
     if (i % 3 == 0) {
@@ -563,7 +567,7 @@ TEST_F(TableBuilderTest, NoBlob) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder);
 
   const int n = 100;
   for (char i = 0; i < n; i++) {
@@ -578,7 +582,7 @@ TEST_F(TableBuilderTest, NoBlob) {
   BlobFileExists(false);
 
   std::unique_ptr<TableReader> base_reader;
-  NewTableReader(base_name_, &base_reader);
+  NewTableReader(base_file_number_, &base_reader);
 
   ReadOptions ro;
   std::unique_ptr<InternalIterator> iter;
@@ -590,7 +594,7 @@ TEST_F(TableBuilderTest, NoBlob) {
     ASSERT_TRUE(iter->Valid());
     std::string key(1, i);
     ParsedInternalKey ikey;
-    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    ASSERT_OK(ParseInternalKey(iter->key(), &ikey, false));
     ASSERT_EQ(ikey.user_key, key);
     ASSERT_EQ(ikey.type, kTypeValue);
     ASSERT_EQ(iter->value(), std::string(1, i));
@@ -602,7 +606,7 @@ TEST_F(TableBuilderTest, Abandon) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder);
 
   const int n = 100;
   for (char i = 0; i < n; i++) {
@@ -625,7 +629,7 @@ TEST_F(TableBuilderTest, NumEntries) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder);
 
   // Build a base table and a blob file.
   const int n = 100;
@@ -653,7 +657,7 @@ TEST_F(TableBuilderTest, TargetSize) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder);
   const int n = 255;
   for (unsigned char i = 0; i < n; i++) {
     std::string key(1, i);
@@ -678,16 +682,15 @@ TEST_F(TableBuilderTest, TargetSize) {
 // correct
 TEST_F(TableBuilderTest, LevelMerge) {
   cf_options_.level_merge = true;
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  Open();
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder, 0 /* target_level */);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder,
+                  0 /* target_level */);
 
   // Generate a level 0 sst with blob file
-  const int n = 255;
+  const int n = 1;
   for (unsigned char i = 0; i < n; i++) {
     std::string key(1, i);
     InternalKey ikey(key, 1, kTypeValue);
@@ -699,7 +702,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
   ASSERT_OK(base_file->Close());
 
   std::unique_ptr<TableReader> base_reader;
-  NewTableReader(base_name_, &base_reader);
+  NewTableReader(base_file_number_, &base_reader);
   ReadOptions ro;
   std::unique_ptr<InternalIterator> first_iter;
   first_iter.reset(base_reader->NewIterator(
@@ -707,9 +710,10 @@ TEST_F(TableBuilderTest, LevelMerge) {
       false /*skip_filters*/, TableReaderCaller::kUncategorized));
 
   // Base file of last level sst
-  std::string second_base_name = base_name_ + "second";
-  NewFileWriter(second_base_name, &base_file);
-  NewTableBuilder(base_file.get(), &table_builder, cf_options_.num_levels - 1);
+  auto second_base = base_file_number_ + 1;
+  NewFileWriter(FileNumberToName(second_base), &base_file);
+  NewTableBuilder(second_base, base_file.get(), &table_builder,
+                  cf_options_.num_levels - 1);
 
   first_iter->SeekToFirst();
   // Compact level0 sst to last level, values will be merge to another blob file
@@ -723,7 +727,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
   ASSERT_OK(base_file->Close());
 
   std::unique_ptr<TableReader> second_base_reader;
-  NewTableReader(second_base_name, &second_base_reader);
+  NewTableReader(second_base, &second_base_reader);
   std::unique_ptr<InternalIterator> second_iter;
   second_iter.reset(second_base_reader->NewIterator(
       ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
@@ -739,8 +743,8 @@ TEST_F(TableBuilderTest, LevelMerge) {
 
     // Compare sst key
     ParsedInternalKey first_ikey, second_ikey;
-    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &first_ikey));
-    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &second_ikey));
+    ASSERT_OK(ParseInternalKey(first_iter->key(), &first_ikey, false));
+    ASSERT_OK(ParseInternalKey(second_iter->key(), &second_ikey, false));
     ASSERT_EQ(first_ikey.type, kTypeBlobIndex);
     ASSERT_EQ(second_ikey.type, kTypeBlobIndex);
     ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
@@ -765,7 +769,7 @@ TEST_F(TableBuilderTest, LevelMerge) {
     second_iter->Next();
   }
 
-  env_->DeleteFile(second_base_name);
+  env_->DeleteFile(FileNumberToName(second_base));
 }
 
 // Write blob index, to test key order is correct with dictionary compression
@@ -779,7 +783,7 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
-  NewTableBuilder(base_file.get(), &table_builder);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder);
 
   // Generate level 0 sst with blob file
   int n = 100;
@@ -803,7 +807,7 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
   ASSERT_OK(base_file->Close());
 
   std::unique_ptr<TableReader> base_reader;
-  NewTableReader(base_name_, &base_reader);
+  NewTableReader(base_file_number_, &base_reader);
   ReadOptions ro;
   std::unique_ptr<InternalIterator> first_iter;
   first_iter.reset(base_reader->NewIterator(
@@ -811,8 +815,8 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
       false /*skip_filters*/, TableReaderCaller::kUncategorized));
 
   // Base file of last level sst
-  std::string second_base_name = base_name_ + "second";
-  NewFileWriter(second_base_name, &base_file);
+  auto second_base = base_file_number_ + 1;
+  NewFileWriter(FileNumberToName(second_base), &base_file);
 
   CompressionOptions compression_opts;
   compression_opts.enabled = true;
@@ -820,8 +824,8 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
   cf_options_.blob_file_compression_options = compression_opts;
   cf_options_.blob_file_compression = kZSTD;
 
-  NewTableBuilder(base_file.get(), &table_builder, compression_opts,
-                  cf_options_.num_levels - 1);
+  NewTableBuilder(base_file_number_, base_file.get(), &table_builder,
+                  compression_opts, cf_options_.num_levels - 1);
 
   first_iter->SeekToFirst();
   // compact data from level0 to level1
@@ -835,7 +839,7 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
   ASSERT_OK(base_file->Close());
 
   std::unique_ptr<TableReader> second_base_reader;
-  NewTableReader(second_base_name, &second_base_reader);
+  NewTableReader(second_base, &second_base_reader);
   std::unique_ptr<InternalIterator> second_iter;
   second_iter.reset(second_base_reader->NewIterator(
       ro, nullptr /*prefix_extractor*/, nullptr /*arena*/,
@@ -854,8 +858,8 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
 
     // Compare sst key
     ParsedInternalKey first_ikey, second_ikey;
-    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &first_ikey));
-    ASSERT_TRUE(ParseInternalKey(first_iter->key(), &second_ikey));
+    ASSERT_OK(ParseInternalKey(first_iter->key(), &first_ikey, false));
+    ASSERT_OK(ParseInternalKey(first_iter->key(), &second_ikey, false));
     ASSERT_EQ(first_ikey.type, second_ikey.type);
     ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
 
@@ -884,7 +888,7 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
     second_iter->Next();
   }
 
-  env_->DeleteFile(second_base_name);
+  env_->DeleteFile(FileNumberToName(second_base));
 #endif
 }
 

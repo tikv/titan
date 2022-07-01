@@ -32,10 +32,11 @@ int main() {
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <cinttypes>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <cinttypes>
 #include <exception>
 #include <queue>
 #include <thread>
@@ -49,6 +50,7 @@ int main() {
 #include "port/port.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/env.h"
+#include "rocksdb/filter_policy.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
 #include "rocksdb/statistics.h"
@@ -60,7 +62,6 @@ int main() {
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
 #include "rocksdb/write_batch.h"
-#include "util/build_version.h"
 #include "util/coding.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
@@ -68,13 +69,12 @@ int main() {
 #include "util/mutexlock.h"
 #include "util/random.h"
 #include "util/string_util.h"
+#include "utilities/merge_operators.h"
 // SyncPoint is not supported in Released Windows Mode.
 #if !(defined NDEBUG) || !defined(OS_WIN)
 #include "test_util/sync_point.h"
 #endif  // !(defined NDEBUG) || !defined(OS_WIN)
 #include "test_util/testutil.h"
-
-#include "utilities/merge_operators.h"
 
 #include "titan/db.h"
 #include "titan_build_version.h"
@@ -384,12 +384,11 @@ DEFINE_int32(kill_random_test, 0,
              "probability 1/this");
 static const bool FLAGS_kill_random_test_dummy __attribute__((__unused__)) =
     RegisterFlagValidator(&FLAGS_kill_random_test, &ValidateInt32Positive);
-extern int rocksdb_kill_odds;
 
-DEFINE_string(kill_prefix_blacklist, "",
+DEFINE_string(kill_exclude_prefixes, "",
               "If non-empty, kill points with prefix in the list given will be"
               " skipped. Items are comma-separated.");
-extern std::vector<std::string> rocksdb_kill_prefix_blacklist;
+extern std::vector<std::string> rocksdb_kill_exclude_prefixes;
 
 DEFINE_bool(disable_wal, false, "If true, do not write WAL for write.");
 
@@ -583,6 +582,7 @@ std::string ChecksumTypeToString(rocksdb::ChecksumType ctype) {
   return iter->first;
 }
 
+#ifndef NDEBUG
 std::vector<std::string> SplitString(std::string src) {
   std::vector<std::string> ret;
   if (src.empty()) {
@@ -597,6 +597,7 @@ std::vector<std::string> SplitString(std::string src) {
   ret.push_back(src.substr(pos, src.length()));
   return ret;
 }
+#endif  // !NDEBUG
 }  // namespace
 
 DEFINE_string(compression_type, "snappy",
@@ -2642,7 +2643,11 @@ class StressTest {
   void PrintEnv() const {
     fprintf(stdout, "RocksDB version           : %d.%d\n", kMajorVersion,
             kMinorVersion);
-    fprintf(stdout, "RocksDB hash              : %s\n", rocksdb_build_git_sha);
+    const auto& props = GetRocksBuildProperties();
+    const auto& sha = props.find("rocksdb_build_git_sha");
+    if (sha != props.end()) {
+      fprintf(stdout, "RocksDB hash              : %s\n", sha->second.c_str());
+    }
     fprintf(stdout, "Titan hash                : %s\n", titan_build_git_sha);
     fprintf(stdout, "Format version            : %d\n", FLAGS_format_version);
     fprintf(stdout, "TransactionDB             : %s\n",
@@ -2661,7 +2666,7 @@ class StressTest {
             (unsigned long)FLAGS_ops_per_thread);
     std::string ttl_state("unused");
     if (FLAGS_ttl > 0) {
-      ttl_state = NumberToString(FLAGS_ttl);
+      ttl_state = NumberToHumanString(FLAGS_ttl);
     }
     fprintf(stdout, "Time to live(sec)         : %s\n", ttl_state.c_str());
     fprintf(stdout, "Read percentage           : %d%%\n", FLAGS_readpercent);
@@ -2713,13 +2718,17 @@ class StressTest {
 
     fprintf(stdout, "Memtablerep               : %s\n", memtablerep);
 
-    fprintf(stdout, "Test kill odd             : %d\n", rocksdb_kill_odds);
-    if (!rocksdb_kill_prefix_blacklist.empty()) {
+#ifndef NDEBUG
+    rocksdb::KillPoint* kp = rocksdb::KillPoint::GetInstance();
+    fprintf(stdout, "Test kill odd             : %d\n", kp->rocksdb_kill_odds);
+    if (!kp->rocksdb_kill_exclude_prefixes.empty()) {
       fprintf(stdout, "Skipping kill points prefixes:\n");
-      for (auto& p : rocksdb_kill_prefix_blacklist) {
+      for (auto& p : kp->rocksdb_kill_exclude_prefixes) {
         fprintf(stdout, "  %s\n", p.c_str());
       }
     }
+#endif  // !NDEBUG
+
     fprintf(stdout, "Snapshot refresh nanos    : %" PRIu64 "\n",
             FLAGS_snap_refresh_nanos);
 
@@ -4619,8 +4628,11 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  rocksdb_kill_odds = FLAGS_kill_random_test;
-  rocksdb_kill_prefix_blacklist = SplitString(FLAGS_kill_prefix_blacklist);
+#ifndef NDEBUG
+  rocksdb::KillPoint* kp = rocksdb::KillPoint::GetInstance();
+  kp->rocksdb_kill_odds = FLAGS_kill_random_test;
+  kp->rocksdb_kill_exclude_prefixes = SplitString(FLAGS_kill_exclude_prefixes);
+#endif  // !NDEBUG
 
   std::unique_ptr<rocksdb::StressTest> stress;
   if (FLAGS_test_cf_consistency) {
