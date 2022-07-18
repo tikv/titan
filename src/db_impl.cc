@@ -580,6 +580,12 @@ Status TitanDBImpl::Write(const rocksdb::WriteOptions& options,
   return HasBGError() ? GetBGError() : db_->Write(options, updates);
 }
 
+Status TitanDBImpl::MultiBatchWrite(const WriteOptions& options,
+                                    std::vector<WriteBatch*>&& updates) {
+  return HasBGError() ? GetBGError()
+                      : db_->MultiBatchWrite(options, std::move(updates));
+}
+
 Status TitanDBImpl::Delete(const rocksdb::WriteOptions& options,
                            rocksdb::ColumnFamilyHandle* column_family,
                            const rocksdb::Slice& key) {
