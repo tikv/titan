@@ -581,9 +581,10 @@ Status TitanDBImpl::Write(const rocksdb::WriteOptions& options,
 }
 
 Status TitanDBImpl::MultiBatchWrite(const WriteOptions& options,
-                                    std::vector<WriteBatch*>&& updates) {
+                                    std::vector<WriteBatch*>&& updates,
+                                    uint64_t* seq) {
   return HasBGError() ? GetBGError()
-                      : db_->MultiBatchWrite(options, std::move(updates));
+                      : db_->MultiBatchWrite(options, std::move(updates), seq);
 }
 
 Status TitanDBImpl::Delete(const rocksdb::WriteOptions& options,

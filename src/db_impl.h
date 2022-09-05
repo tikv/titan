@@ -66,7 +66,8 @@ class TitanDBImpl : public TitanDB {
 
   using TitanDB::MultiBatchWrite;
   Status MultiBatchWrite(const WriteOptions& options,
-                         std::vector<WriteBatch*>&& updates) override;
+                         std::vector<WriteBatch*>&& updates,
+                         uint64_t* seq) override;
 
   using TitanDB::Delete;
   Status Delete(const WriteOptions& options, ColumnFamilyHandle* column_family,
