@@ -18,7 +18,10 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
  public:
   GarbageCollectionWriteCallback(ColumnFamilyHandle* cfh, std::string&& _key,
                                  BlobIndex blob_index)
-      : cfh_(cfh), key_(std::move(_key)), blob_index_(blob_index) {
+      : cfh_(cfh),
+        key_(std::move(_key)),
+        blob_index_(blob_index),
+        read_bytes_(0) {
     assert(!key_.empty());
   }
 
@@ -190,7 +193,6 @@ Status BlobGCJob::DoRunGC() {
     if (blob_gc_->titan_cf_options().blob_run_mode ==
         TitanBlobRunMode::kFallback) {
       auto* cfh = blob_gc_->column_family_handle();
-      // Store WriteBatch for rewriting new Key-Index pairs to LSM
       GarbageCollectionWriteCallback callback(cfh, gc_iter->key().ToString(),
                                               blob_index);
       rewrite_batches_.emplace_back(
@@ -502,12 +504,17 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
       break;
     }
     s = db_impl->WriteWithCallback(wo, &write_batch.first, &write_batch.second);
-    if (s.ok()) {
+    auto& new_blob_index = write_batch.second.new_blob_index;
+    bool rewritten_as_blob = (new_blob_index.blob_handle.size > 0);
+    if (s.ok() && rewritten_as_blob) {
       // count written bytes for new blob index.
       metrics_.gc_bytes_written += write_batch.first.GetDataSize();
       metrics_.gc_num_keys_relocated++;
       metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
       // Key is successfully written to LSM.
+    } else if (s.ok() && !rewritten_as_blob) {
+      metrics_.gc_num_keys_overwritten++;
+      metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
     } else if (s.IsBusy()) {
       metrics_.gc_num_keys_overwritten++;
       metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
@@ -515,10 +522,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
       // Though record is dropped, the diff won't counted in discardable
       // ratio,
       // so we should update the live_data_size here.
-      auto& new_blob_index = write_batch.second.new_blob_index;
-      if (new_blob_index.blob_handle.size > 0) {
-        dropped[new_blob_index.file_number] += new_blob_index.blob_handle.size;
-      }
+      dropped[new_blob_index.file_number] += new_blob_index.blob_handle.size;
     } else {
       // We hit an error.
       break;
