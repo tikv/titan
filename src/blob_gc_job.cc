@@ -17,12 +17,12 @@ namespace titandb {
 class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
  public:
   GarbageCollectionWriteCallback(ColumnFamilyHandle* cfh, std::string&& _key,
-                                 BlobIndex&& blob_index)
+                                 BlobIndex blob_index)
       : cfh_(cfh), key_(std::move(_key)), blob_index_(blob_index) {
     assert(!key_.empty());
   }
 
-  std::string value;
+  BlobIndex new_blob_index;
 
   virtual Status Callback(DB* db) override {
     auto* db_impl = reinterpret_cast<DBImpl*>(db);
@@ -187,6 +187,30 @@ Status BlobGCJob::DoRunGC() {
       last_key_valid = false;
     }
 
+    if (blob_gc_->titan_cf_options().blob_run_mode ==
+        TitanBlobRunMode::kFallback) {
+      auto* cfh = blob_gc_->column_family_handle();
+
+      ParsedInternalKey ikey;
+      s = ParseInternalKey(gc_iter->key(), &ikey, false /*log_err_key*/);
+      if (!s.ok()) {
+        break;
+      }
+      // Store WriteBatch for rewriting new Key-Index pairs to LSM
+      GarbageCollectionWriteCallback callback(cfh, ikey.user_key.ToString(),
+                                              blob_index);
+      rewrite_batches_.emplace_back(
+          std::make_pair(WriteBatch(), std::move(callback)));
+      auto& wb = rewrite_batches_.back().first;
+      s = WriteBatchInternal::Put(&wb, cfh->GetID(), ikey.user_key,
+                                  gc_iter->value());
+      if (!s.ok()) {
+        break;
+      } else {
+        continue;
+      }
+    }
+
     bool discardable = false;
     s = DiscardEntry(gc_iter->key(), blob_index, &discardable);
     if (!s.ok()) {
@@ -287,8 +311,8 @@ void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
     blob_index.EncodeTo(&index_entry);
     // Store WriteBatch for rewriting new Key-Index pairs to LSM
     GarbageCollectionWriteCallback callback(cfh, ikey.user_key.ToString(),
-                                            std::move(original_index));
-    callback.value = index_entry;
+                                            original_index);
+    callback.new_blob_index = blob_index;
     rewrite_batches_.emplace_back(
         std::make_pair(WriteBatch(), std::move(callback)));
     auto& wb = rewrite_batches_.back().first;
@@ -497,10 +521,10 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
       // Though record is dropped, the diff won't counted in discardable
       // ratio,
       // so we should update the live_data_size here.
-      BlobIndex blob_index;
-      Slice str(write_batch.second.value);
-      blob_index.DecodeFrom(&str);
-      dropped[blob_index.file_number] += blob_index.blob_handle.size;
+      auto& new_blob_index = write_batch.second.new_blob_index;
+      if (new_blob_index.blob_handle.size > 0) {
+        dropped[blob_index.file_number] += blob_index.blob_handle.size;
+      }
     } else {
       // We hit an error.
       break;
