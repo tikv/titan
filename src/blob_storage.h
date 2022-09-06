@@ -32,6 +32,7 @@ class BlobStorage {
               std::shared_ptr<BlobFileCache> _file_cache, TitanStats* stats)
       : db_options_(_db_options),
         cf_options_(_cf_options),
+        blob_run_mode_(_cf_options.blob_run_mode),
         cf_id_(cf_id),
         levels_file_count_(_cf_options.num_levels, 0),
         blob_ranges_(InternalComparator(_cf_options.comparator)),
@@ -47,7 +48,11 @@ class BlobStorage {
 
   const TitanDBOptions& db_options() { return db_options_; }
 
-  const TitanCFOptions& cf_options() { return cf_options_; }
+  TitanCFOptions cf_options() {
+    auto cf_options = cf_options_;
+    cf_options.blob_run_mode = blob_run_mode_.load();
+    return cf_options;
+  }
 
   const std::vector<GCScore> gc_score() {
     MutexLock l(&mutex_);
@@ -138,6 +143,8 @@ class BlobStorage {
   void ExportBlobFiles(
       std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
+  void SetBlobRunMode(TitanBlobRunMode mode) { blob_run_mode_.store(mode); }
+
  private:
   friend class BlobFileSet;
   friend class VersionTest;
@@ -151,6 +158,7 @@ class BlobStorage {
 
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
+  std::atomic<TitanBlobRunMode> blob_run_mode_;
   uint32_t cf_id_;
 
   mutable port::Mutex mutex_;

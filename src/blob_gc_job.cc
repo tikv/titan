@@ -190,19 +190,13 @@ Status BlobGCJob::DoRunGC() {
     if (blob_gc_->titan_cf_options().blob_run_mode ==
         TitanBlobRunMode::kFallback) {
       auto* cfh = blob_gc_->column_family_handle();
-
-      ParsedInternalKey ikey;
-      s = ParseInternalKey(gc_iter->key(), &ikey, false /*log_err_key*/);
-      if (!s.ok()) {
-        break;
-      }
       // Store WriteBatch for rewriting new Key-Index pairs to LSM
-      GarbageCollectionWriteCallback callback(cfh, ikey.user_key.ToString(),
+      GarbageCollectionWriteCallback callback(cfh, gc_iter->key().ToString(),
                                               blob_index);
       rewrite_batches_.emplace_back(
           std::make_pair(WriteBatch(), std::move(callback)));
       auto& wb = rewrite_batches_.back().first;
-      s = WriteBatchInternal::Put(&wb, cfh->GetID(), ikey.user_key,
+      s = WriteBatchInternal::Put(&wb, cfh->GetID(), gc_iter->key(),
                                   gc_iter->value());
       if (!s.ok()) {
         break;
@@ -523,7 +517,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
       // so we should update the live_data_size here.
       auto& new_blob_index = write_batch.second.new_blob_index;
       if (new_blob_index.blob_handle.size > 0) {
-        dropped[blob_index.file_number] += blob_index.blob_handle.size;
+        dropped[new_blob_index.file_number] += new_blob_index.blob_handle.size;
       }
     } else {
       // We hit an error.
