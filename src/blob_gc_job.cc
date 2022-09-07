@@ -17,15 +17,14 @@ namespace titandb {
 class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
  public:
   GarbageCollectionWriteCallback(ColumnFamilyHandle* cfh, std::string&& _key,
-                                 BlobIndex blob_index)
+                                 BlobIndex blob_index, BlobIndex new_blob_index)
       : cfh_(cfh),
         key_(std::move(_key)),
         blob_index_(blob_index),
+        new_blob_index_(new_blob_index),
         read_bytes_(0) {
     assert(!key_.empty());
   }
-
-  BlobIndex new_blob_index;
 
   virtual Status Callback(DB* db) override {
     auto* db_impl = reinterpret_cast<DBImpl*>(db);
@@ -71,11 +70,15 @@ class BlobGCJob::GarbageCollectionWriteCallback : public WriteCallback {
 
   uint64_t blob_record_size() { return blob_index_.blob_handle.size; }
 
+  const BlobIndex& new_blob_index() { return new_blob_index_; }
+
  private:
   ColumnFamilyHandle* cfh_;
   // Key to check
   std::string key_;
   BlobIndex blob_index_;
+  // Empty means the new record is inlined.
+  BlobIndex new_blob_index_;
   uint64_t read_bytes_;
 };
 
@@ -209,7 +212,7 @@ Status BlobGCJob::DoRunGC() {
         TitanBlobRunMode::kFallback) {
       auto* cfh = blob_gc_->column_family_handle();
       GarbageCollectionWriteCallback callback(cfh, gc_iter->key().ToString(),
-                                              blob_index);
+                                              blob_index, BlobIndex());
       rewrite_batches_.emplace_back(
           std::make_pair(WriteBatch(), std::move(callback)));
       auto& wb = rewrite_batches_.back().first;
@@ -309,8 +312,7 @@ void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
     blob_index.EncodeTo(&index_entry);
     // Store WriteBatch for rewriting new Key-Index pairs to LSM
     GarbageCollectionWriteCallback callback(cfh, ikey.user_key.ToString(),
-                                            original_index);
-    callback.new_blob_index = blob_index;
+                                            original_index, blob_index);
     rewrite_batches_.emplace_back(
         std::make_pair(WriteBatch(), std::move(callback)));
     auto& wb = rewrite_batches_.back().first;
@@ -506,7 +508,7 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
       break;
     }
     s = db_impl->WriteWithCallback(wo, &write_batch.first, &write_batch.second);
-    auto& new_blob_index = write_batch.second.new_blob_index;
+    const auto& new_blob_index = write_batch.second.new_blob_index();
     if (s.ok()) {
       if (new_blob_index.blob_handle.size > 0) {
         // Rewritten as blob record.
