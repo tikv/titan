@@ -169,7 +169,7 @@ Status BlobGCJob::DoRunGC() {
   uint64_t file_size = 0;
 
   std::string last_key;
-  bool last_key_valid = false;
+  bool last_key_is_fresh = false;
   gc_iter->SeekToFirst();
   assert(gc_iter->Valid());
   for (; gc_iter->Valid(); gc_iter->Next()) {
@@ -181,14 +181,29 @@ Status BlobGCJob::DoRunGC() {
     // count read bytes for blob record of gc candidate files
     metrics_.gc_bytes_read += blob_index.blob_handle.size;
 
-    if (!last_key.empty() && !gc_iter->key().compare(last_key)) {
-      if (last_key_valid) {
+    if (!last_key.empty() && (gc_iter->key().compare(last_key) == 0)) {
+      if (last_key_is_fresh) {
+        // We only need to rewrite the newest version. Blob files containing
+        // the older versions will not be purged if there's a snapshot
+        // referencing them.
         continue;
       }
     } else {
       last_key = gc_iter->key().ToString();
-      last_key_valid = false;
+      last_key_is_fresh = false;
     }
+
+    bool discardable = false;
+    s = DiscardEntry(gc_iter->key(), blob_index, &discardable);
+    if (!s.ok()) {
+      break;
+    }
+    if (discardable) {
+      metrics_.gc_num_keys_overwritten++;
+      metrics_.gc_bytes_overwritten += blob_index.blob_handle.size;
+      continue;
+    }
+    last_key_is_fresh = true;
 
     if (blob_gc_->titan_cf_options().blob_run_mode ==
         TitanBlobRunMode::kFallback) {
@@ -206,19 +221,6 @@ Status BlobGCJob::DoRunGC() {
         continue;
       }
     }
-
-    bool discardable = false;
-    s = DiscardEntry(gc_iter->key(), blob_index, &discardable);
-    if (!s.ok()) {
-      break;
-    }
-    if (discardable) {
-      metrics_.gc_num_keys_overwritten++;
-      metrics_.gc_bytes_overwritten += blob_index.blob_handle.size;
-      continue;
-    }
-
-    last_key_valid = true;
 
     // Rewrite entry to new blob file
     if ((!blob_file_handle && !blob_file_builder) ||
