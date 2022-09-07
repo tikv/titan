@@ -1156,6 +1156,29 @@ TEST_F(TitanDBTest, FallbackModeEncounterMissingBlobFile) {
   VerifyDB({{"bar", "v1"}});
 }
 
+TEST_F(TitanDBTest, GCInFallbackMode) {
+  options_.disable_background_gc = true;
+  options_.blob_file_discardable_ratio = 0.01;
+  options_.min_blob_size = true;
+  Open();
+  ASSERT_OK(db_->Put(WriteOptions(), "foo", "v1"));
+  ASSERT_OK(db_->Put(WriteOptions(), "bar", "v1"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+  ASSERT_OK(db_->Delete(WriteOptions(), "foo"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+  uint32_t default_cf_id = db_->DefaultColumnFamily()->GetID();
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+  ASSERT_OK(db_->SetOptions({{"blob_run_mode", "kFallback"}}));
+  // GC the first blob file.
+  ASSERT_OK(db_impl_->TEST_StartGC(default_cf_id));
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+  ASSERT_EQ(0, GetBlobStorage().lock()->NumBlobFiles());
+  VerifyDB({{"bar", "v1"}});
+}
+
 TEST_F(TitanDBTest, BackgroundErrorHandling) {
   options_.listeners.emplace_back(std::make_shared<BGErrorListener>());
   Open();

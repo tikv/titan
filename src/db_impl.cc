@@ -1101,6 +1101,10 @@ Status TitanDBImpl::SetOptions(
       TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
       cf_info.titan_table_factory->SetBlobRunMode(blob_run_mode);
       cf_info.mutable_cf_options.blob_run_mode = blob_run_mode;
+      auto bs = blob_file_set_->GetBlobStorage(cf_id).lock();
+      if (bs != nullptr) {
+        bs->SetBlobRunMode(blob_run_mode);
+      }
     }
   }
   return Status::OK();
