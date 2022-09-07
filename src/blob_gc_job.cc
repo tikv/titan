@@ -507,16 +507,18 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
     }
     s = db_impl->WriteWithCallback(wo, &write_batch.first, &write_batch.second);
     auto& new_blob_index = write_batch.second.new_blob_index;
-    bool rewritten_as_blob = (new_blob_index.blob_handle.size > 0);
-    if (s.ok() && rewritten_as_blob) {
-      // count written bytes for new blob index.
-      metrics_.gc_bytes_written += write_batch.first.GetDataSize();
-      metrics_.gc_num_keys_relocated++;
-      metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
-      // Key is successfully written to LSM.
-    } else if (s.ok() && !rewritten_as_blob) {
-      metrics_.gc_num_keys_overwritten++;
-      metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
+    if (s.ok()) {
+      if (new_blob_index.blob_handle.size > 0) {
+        // Rewritten as blob record.
+        // count written bytes for new blob index.
+        metrics_.gc_bytes_written += write_batch.first.GetDataSize();
+        metrics_.gc_num_keys_relocated++;
+        metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
+      } else {
+        // Rewritten as inline value.
+        metrics_.gc_num_keys_overwritten++;
+        metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
+      }
     } else if (s.IsBusy()) {
       metrics_.gc_num_keys_overwritten++;
       metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
