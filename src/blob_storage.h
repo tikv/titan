@@ -49,9 +49,9 @@ class BlobStorage {
   const TitanDBOptions& db_options() { return db_options_; }
 
   TitanCFOptions cf_options() {
-    auto cf_options = cf_options_;
-    cf_options.blob_run_mode = blob_run_mode_.load();
-    return cf_options;
+    auto _cf_options = cf_options_;
+    _cf_options.blob_run_mode = blob_run_mode_.load();
+    return _cf_options;
   }
 
   const std::vector<GCScore> gc_score() {
