@@ -1408,6 +1408,7 @@ void TitanDBImpl::OnCompactionCompleted(
           // discardable size reached GC threshold
           if (file->NoLiveData()) {
             RecordTick(statistics(stats_.get()), TITAN_GC_NUM_FILES, 1);
+            // TODO: use another tick type instead of GC_SMALL_FILE
             RecordTick(statistics(stats_.get()), TITAN_GC_SMALL_FILE, 1);
             edit.DeleteBlobFile(file->file_number(),
                                 db_impl_->GetLatestSequenceNumber());
@@ -1415,6 +1416,7 @@ void TitanDBImpl::OnCompactionCompleted(
                          cf_options.num_levels - 2 &&
                      file->GetDiscardableRatio() >
                          cf_options.blob_file_discardable_ratio) {
+            // TODO: use another tick type instead of GC_DISCARDABLE
             RecordTick(statistics(stats_.get()), TITAN_GC_DISCARDABLE, 1);
             file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
           } else if (count_sorted_run) {
