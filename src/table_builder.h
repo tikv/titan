@@ -105,7 +105,7 @@ class TitanTableBuilder : public TableBuilder {
   // than target_level_ will be merged to new blob file
   int merge_level_;
   // whether level merge is performed for the new blob file
-  bool level_merge_performed_; 
+  bool level_merge_performed_;
 
   // counters
   uint64_t bytes_read_ = 0;
