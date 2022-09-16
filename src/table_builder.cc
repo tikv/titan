@@ -97,6 +97,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
       // If not ok, write original blob index as compaction output without
       // doing level merge.
       if (get_status.ok()) {
+        level_merge_performed_ = true;
         AddBlob(ikey, record.value);
         if (ok()) return;
       } else {
@@ -241,6 +242,10 @@ void TitanTableBuilder::FinishBlobFile() {
           blob_builder_->GetSmallestKey(), blob_builder_->GetLargestKey());
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
       finished_blobs_.push_back({file, std::move(blob_handle_)});
+      if (level_merge_performed_) {
+        RecordTick(statistics(stats_), TITAN_GC_NUM_NEW_FILES, 1);
+        level_merge_performed_ = false;
+      }
       blob_builder_.reset();
     } else {
       TITAN_LOG_WARN(

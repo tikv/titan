@@ -28,7 +28,8 @@ class TitanTableBuilder : public TableBuilder {
         blob_storage_(blob_storage),
         stats_(stats),
         target_level_(target_level),
-        merge_level_(merge_level) {}
+        merge_level_(merge_level),
+        level_merge_performed_(false) {}
 
   void Add(const Slice& key, const Slice& value) override;
 
@@ -103,6 +104,8 @@ class TitanTableBuilder : public TableBuilder {
   // equals to merge_level_, values belong to blob files which have lower level
   // than target_level_ will be merged to new blob file
   int merge_level_;
+  // whether level merge is performed for the new blob file
+  bool level_merge_performed_; 
 
   // counters
   uint64_t bytes_read_ = 0;

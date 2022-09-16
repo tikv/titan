@@ -951,32 +951,33 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     uint64_t file_number = file_size.first;
     int64_t delta = file_size.second;
     auto file = bs->FindFile(file_number).lock();
-    if (!file) {
+    if (!file || file->is_obsolete()) {
       // file has been gc out
       continue;
     }
-    if (!file->is_obsolete()) {
-      auto before = file->GetDiscardableRatioLevel();
-      bool ok = file->UpdateLiveDataSize(delta);
-      if (!ok) {
-        TITAN_LOG_WARN(db_options_.info_log,
-                       "During DeleteFilesInRanges: blob file %" PRIu64
-                       " live size below zero.",
-                       file_number);
-        assert(false);
-      }
-      auto after = file->GetDiscardableRatioLevel();
-      if (before != after) {
-        AddStats(stats_.get(), cf_id, after, 1);
-        SubStats(stats_.get(), cf_id, before, 1);
-      }
+    auto before = file->GetDiscardableRatioLevel();
+    bool ok = file->UpdateLiveDataSize(delta);
+    if (!ok) {
+      TITAN_LOG_WARN(db_options_.info_log,
+                     "During DeleteFilesInRanges: blob file %" PRIu64
+                     " live size below zero.",
+                     file_number);
+      assert(false);
+    }
+    auto after = file->GetDiscardableRatioLevel();
+    if (before != after) {
+      AddStats(stats_.get(), cf_id, after, 1);
+      SubStats(stats_.get(), cf_id, before, 1);
     }
     if (cf_options.level_merge) {
       if (file->NoLiveData()) {
+        RecordTick(statistics(stats_.get()), TITAN_GC_NUM_FILES, 1);
+        RecordTick(statistics(stats_.get()), TITAN_GC_SMALL_FILE, 1);
         edit.DeleteBlobFile(file->file_number(),
                             db_impl_->GetLatestSequenceNumber());
       } else if (file->GetDiscardableRatio() >
                  cf_options.blob_file_discardable_ratio) {
+        RecordTick(statistics(stats_.get()), TITAN_GC_DISCARDABLE, 1);
         file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
       }
     }
@@ -1034,6 +1035,7 @@ void TitanDBImpl::MarkFileIfNeedMerge(
       set.insert(end.first);
       if (set.size() > static_cast<size_t>(max_sorted_runs)) {
         for (auto file : set) {
+          RecordTick(statistics(stats_.get()), TITAN_GC_DISCARDABLE, 1);
           file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
         }
       }
@@ -1307,12 +1309,14 @@ void TitanDBImpl::OnCompactionCompleted(
                       compaction_job_info.job_id, compaction_job_info.cf_id);
       return;
     }
+
     VersionEdit edit;
     auto cf_options = bs->cf_options();
     std::vector<std::shared_ptr<BlobFileMeta>> to_merge_candidates;
     bool count_sorted_run =
         cf_options.level_merge && cf_options.range_merge &&
         cf_options.num_levels - 1 == compaction_job_info.output_level;
+
     for (const auto& file_diff : blob_file_size_diff) {
       uint64_t file_number = file_diff.first;
       int64_t delta = file_diff.second;
@@ -1356,21 +1360,26 @@ void TitanDBImpl::OnCompactionCompleted(
         if (file->live_data_size() != 0) {
           // It records the delta as a positive number if any later compaction
           // is trigger before previous `OnCompactionCompleted()` is called, so
-          // here subtract it
-          // from the total live data size.
+          // here subtract it from the total live data size.
           delta -= file->live_data_size();
         }
         file->set_live_data_size(static_cast<uint64_t>(delta));
         AddStats(stats_.get(), compaction_job_info.cf_id,
                  file->GetDiscardableRatioLevel(), 1);
         file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
+        if (file->NoLiveData()) {
+          RecordTick(statistics(stats_.get()), TITAN_GC_NUM_FILES, 1);
+          RecordTick(statistics(stats_.get()), TITAN_GC_SMALL_FILE, 1);
+          edit.DeleteBlobFile(file->file_number(),
+                              db_impl_->GetLatestSequenceNumber());
+        }
         to_merge_candidates.push_back(file);
         TITAN_LOG_INFO(
             db_options_.info_log,
             "OnCompactionCompleted[%d]: compaction output blob file %" PRIu64
-            ", live data size %" PRIu64 ".",
+            ", live data size %" PRIu64 ", discardable ratio %lf.",
             compaction_job_info.job_id, file->file_number(),
-            file->live_data_size());
+            file->live_data_size(), file->GetDiscardableRatio());
       } else if (file->file_state() == BlobFileMeta::FileState::kNormal ||
                  file->file_state() == BlobFileMeta::FileState::kToMerge) {
         if (delta > 0) {
@@ -1398,17 +1407,18 @@ void TitanDBImpl::OnCompactionCompleted(
           // Mark last two level blob files to merge in next compaction if
           // discardable size reached GC threshold
           if (file->NoLiveData()) {
+            RecordTick(statistics(stats_.get()), TITAN_GC_NUM_FILES, 1);
+            RecordTick(statistics(stats_.get()), TITAN_GC_SMALL_FILE, 1);
             edit.DeleteBlobFile(file->file_number(),
                                 db_impl_->GetLatestSequenceNumber());
           } else if (static_cast<int>(file->file_level()) >=
                          cf_options.num_levels - 2 &&
                      file->GetDiscardableRatio() >
                          cf_options.blob_file_discardable_ratio) {
+            RecordTick(statistics(stats_.get()), TITAN_GC_DISCARDABLE, 1);
             file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
-          } else {
-            if (count_sorted_run) {
-              to_merge_candidates.push_back(file);
-            }
+          } else if (count_sorted_run) {
+            to_merge_candidates.push_back(file);
           }
         }
       }

@@ -166,7 +166,6 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
 
   std::unique_ptr<BlobGC> blob_gc;
   std::unique_ptr<ColumnFamilyHandle> cfh;
-  Status s;
 
   std::shared_ptr<BlobStorage> blob_storage;
   // Skip CFs that have been dropped.
@@ -191,8 +190,8 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     }
   }
 
+  Status s;
   // TODO(@DorianZheng) Make sure enough room for GC
-
   if (UNLIKELY(!blob_gc)) {
     RecordTick(statistics(stats_.get()), TITAN_GC_NO_NEED, 1);
     // Nothing to do
@@ -226,16 +225,16 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
       // then put this cf to GC queue for next GC
       AddToGCQueue(blob_gc->column_family_handle()->GetID());
     }
-  }
 
-  if (s.ok()) {
-    RecordTick(statistics(stats_.get()), TITAN_GC_SUCCESS, 1);
-    // Done
-  } else {
-    SetBGError(s);
-    RecordTick(statistics(stats_.get()), TITAN_GC_FAILURE, 1);
-    TITAN_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
-                   s.ToString().c_str());
+    if (s.ok()) {
+      RecordTick(statistics(stats_.get()), TITAN_GC_SUCCESS, 1);
+      // Done
+    } else {
+      SetBGError(s);
+      RecordTick(statistics(stats_.get()), TITAN_GC_FAILURE, 1);
+      TITAN_LOG_WARN(db_options_.info_log, "Titan GC error: %s",
+                     s.ToString().c_str());
+    }
   }
 
   TEST_SYNC_POINT("TitanDBImpl::BackgroundGC:Finish");
