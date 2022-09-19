@@ -29,7 +29,6 @@ enum class InternalOpStatsType : int {
   IO_BYTES_WRITTEN,
   INPUT_FILE_NUM,
   OUTPUT_FILE_NUM,
-  GC_SAMPLING_MICROS,
   GC_READ_LSM_MICROS,
   // Update lsm and write callback
   GC_UPDATE_LSM_MICROS,

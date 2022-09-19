@@ -71,12 +71,10 @@ class BlobGCJob {
     uint64_t gc_bytes_overwritten = 0;
     uint64_t gc_num_keys_relocated = 0;
     uint64_t gc_bytes_relocated = 0;
+    uint64_t gc_num_keys_fallback = 0;
+    uint64_t gc_bytes_fallback = 0;
     uint64_t gc_num_new_files = 0;
     uint64_t gc_num_files = 0;
-    uint64_t gc_small_file = 0;
-    uint64_t gc_discardable = 0;
-    uint64_t gc_sample = 0;
-    uint64_t gc_sampling_micros = 0;
     uint64_t gc_read_lsm_micros = 0;
     uint64_t gc_update_lsm_micros = 0;
   } metrics_;

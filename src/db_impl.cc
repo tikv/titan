@@ -972,12 +972,12 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
     if (cf_options.level_merge) {
       if (file->NoLiveData()) {
         RecordTick(statistics(stats_.get()), TITAN_GC_NUM_FILES, 1);
-        RecordTick(statistics(stats_.get()), TITAN_GC_SMALL_FILE, 1);
+        RecordTick(statistics(stats_.get()), TITAN_GC_LEVEL_MERGE_DELETE, 1);
         edit.DeleteBlobFile(file->file_number(),
                             db_impl_->GetLatestSequenceNumber());
       } else if (file->GetDiscardableRatio() >
                  cf_options.blob_file_discardable_ratio) {
-        RecordTick(statistics(stats_.get()), TITAN_GC_DISCARDABLE, 1);
+        RecordTick(statistics(stats_.get()), TITAN_GC_LEVEL_MERGE_MARK, 1);
         file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
       }
     }
@@ -1035,7 +1035,7 @@ void TitanDBImpl::MarkFileIfNeedMerge(
       set.insert(end.first);
       if (set.size() > static_cast<size_t>(max_sorted_runs)) {
         for (auto file : set) {
-          RecordTick(statistics(stats_.get()), TITAN_GC_DISCARDABLE, 1);
+          RecordTick(statistics(stats_.get()), TITAN_GC_LEVEL_MERGE_MARK, 1);
           file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
         }
       }
@@ -1369,7 +1369,7 @@ void TitanDBImpl::OnCompactionCompleted(
         file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
         if (file->NoLiveData()) {
           RecordTick(statistics(stats_.get()), TITAN_GC_NUM_FILES, 1);
-          RecordTick(statistics(stats_.get()), TITAN_GC_SMALL_FILE, 1);
+          RecordTick(statistics(stats_.get()), TITAN_GC_LEVEL_MERGE_DELETE, 1);
           edit.DeleteBlobFile(file->file_number(),
                               db_impl_->GetLatestSequenceNumber());
         }
@@ -1408,16 +1408,15 @@ void TitanDBImpl::OnCompactionCompleted(
           // discardable size reached GC threshold
           if (file->NoLiveData()) {
             RecordTick(statistics(stats_.get()), TITAN_GC_NUM_FILES, 1);
-            // TODO: use another tick type instead of GC_SMALL_FILE
-            RecordTick(statistics(stats_.get()), TITAN_GC_SMALL_FILE, 1);
+            RecordTick(statistics(stats_.get()), TITAN_GC_LEVEL_MERGE_DELETE,
+                       1);
             edit.DeleteBlobFile(file->file_number(),
                                 db_impl_->GetLatestSequenceNumber());
           } else if (static_cast<int>(file->file_level()) >=
                          cf_options.num_levels - 2 &&
                      file->GetDiscardableRatio() >
                          cf_options.blob_file_discardable_ratio) {
-            // TODO: use another tick type instead of GC_DISCARDABLE
-            RecordTick(statistics(stats_.get()), TITAN_GC_DISCARDABLE, 1);
+            RecordTick(statistics(stats_.get()), TITAN_GC_LEVEL_MERGE_MARK, 1);
             file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
           } else if (count_sorted_run) {
             to_merge_candidates.push_back(file);

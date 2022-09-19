@@ -118,12 +118,13 @@ BlobGCJob::~BlobGCJob() {
              metrics_.gc_num_keys_relocated);
   RecordTick(statistics(stats_), TITAN_GC_BYTES_RELOCATED,
              metrics_.gc_bytes_relocated);
+  RecordTick(statistics(stats_), TITAN_GC_NUM_KEYS_FALLBACK,
+             metrics_.gc_num_keys_fallback);
+  RecordTick(statistics(stats_), TITAN_GC_BYTES_FALLBACK,
+             metrics_.gc_bytes_fallback);
   RecordTick(statistics(stats_), TITAN_GC_NUM_NEW_FILES,
              metrics_.gc_num_new_files);
   RecordTick(statistics(stats_), TITAN_GC_NUM_FILES, metrics_.gc_num_files);
-  RecordTick(statistics(stats_), TITAN_GC_DISCARDABLE, metrics_.gc_discardable);
-  RecordTick(statistics(stats_), TITAN_GC_SMALL_FILE, metrics_.gc_small_file);
-  RecordTick(statistics(stats_), TITAN_GC_SAMPLE, metrics_.gc_sample);
 }
 
 Status BlobGCJob::Prepare() {
@@ -517,9 +518,9 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
         metrics_.gc_num_keys_relocated++;
         metrics_.gc_bytes_relocated += write_batch.second.blob_record_size();
       } else {
-        // Rewritten as inline value.
-        metrics_.gc_num_keys_overwritten++;
-        metrics_.gc_bytes_overwritten += write_batch.second.blob_record_size();
+        // Rewritten as inline value due to fallback mode.
+        metrics_.gc_num_keys_fallback++;
+        metrics_.gc_bytes_fallback += write_batch.second.blob_record_size();
       }
     } else if (s.IsBusy()) {
       metrics_.gc_num_keys_overwritten++;
@@ -629,8 +630,6 @@ void BlobGCJob::UpdateInternalOpStats() {
            metrics_.gc_num_files);
   AddStats(internal_op_stats, InternalOpStatsType::OUTPUT_FILE_NUM,
            metrics_.gc_num_new_files);
-  AddStats(internal_op_stats, InternalOpStatsType::GC_SAMPLING_MICROS,
-           metrics_.gc_sampling_micros);
   AddStats(internal_op_stats, InternalOpStatsType::GC_READ_LSM_MICROS,
            metrics_.gc_read_lsm_micros);
   AddStats(internal_op_stats, InternalOpStatsType::GC_UPDATE_LSM_MICROS,
