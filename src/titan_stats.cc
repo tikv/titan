@@ -165,10 +165,9 @@ uint64_t TitanInternalStats::HandleNumBlobFilesAtLevel(Slice arg) const {
 void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
   constexpr double GB = 1.0 * 1024 * 1024 * 1024;
   constexpr double SECOND = 1.0 * 1000000;
-  LogToBuffer(
-      log_buffer,
-      "OP           COUNT READ(GB)  WRITE(GB) IO_READ(GB) IO_WRITE(GB) "
-      " FILE_IN FILE_OUT GC_SAMPLE(MICROS) GC_READ(MICROS) GC_UPDATE(MICROS)");
+  LogToBuffer(log_buffer,
+              "OP           COUNT READ(GB)  WRITE(GB) IO_READ(GB) IO_WRITE(GB) "
+              " FILE_IN FILE_OUT GC_READ(MICROS) GC_UPDATE(MICROS)");
   LogToBuffer(log_buffer,
               "----------------------------------------------------------------"
               "-----------------");
@@ -195,9 +194,6 @@ void TitanInternalStats::DumpAndResetInternalOpStats(LogBuffer* log_buffer) {
                          InternalOpStatsType::INPUT_FILE_NUM),
         GetAndResetStats(&internal_op_stats_[op],
                          InternalOpStatsType::OUTPUT_FILE_NUM),
-        GetAndResetStats(&internal_op_stats_[op],
-                         InternalOpStatsType::GC_SAMPLING_MICROS) /
-            SECOND,
         GetAndResetStats(&internal_op_stats_[op],
                          InternalOpStatsType::GC_READ_LSM_MICROS) /
             SECOND,

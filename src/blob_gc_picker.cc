@@ -42,6 +42,11 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     }
     if (!stop_picking) {
       blob_files.emplace_back(blob_file);
+      if (blob_file->file_size() <= cf_options_.merge_small_file_threshold) {
+        RecordTick(statistics(stats_), TITAN_GC_SMALL_FILE, 1);
+      } else {
+        RecordTick(statistics(stats_), TITAN_GC_DISCARDABLE, 1);
+      }
       batch_size += blob_file->file_size();
       estimate_output_size += blob_file->live_data_size();
       if (batch_size >= cf_options_.max_gc_batch_size ||

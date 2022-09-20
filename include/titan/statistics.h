@@ -21,25 +21,38 @@ enum TickerType : uint32_t {
 
   TITAN_GC_NUM_FILES,
   TITAN_GC_NUM_NEW_FILES,
+
+  // the number of keys overwritten by foreground within the span of GC
   TITAN_GC_NUM_KEYS_OVERWRITTEN,
+  // the number of keys relocated to new blob file by GC
   TITAN_GC_NUM_KEYS_RELOCATED,
+  // the number of keys rewritten to LSM tree due to fallback
+  TITAN_GC_NUM_KEYS_FALLBACK,
   TITAN_GC_BYTES_OVERWRITTEN,
   TITAN_GC_BYTES_RELOCATED,
+  TITAN_GC_BYTES_FALLBACK,
+
   TITAN_GC_BYTES_WRITTEN,
   TITAN_GC_BYTES_READ,
 
   TITAN_BLOB_CACHE_HIT,
   TITAN_BLOB_CACHE_MISS,
 
-  TITAN_GC_NO_NEED,
-  TITAN_GC_REMAIN,
-
+  // the count of blob file gced due to discardable ratio hit the threshold
   TITAN_GC_DISCARDABLE,
-  TITAN_GC_SAMPLE,
+  // the count of blob file gced due to small file size
   TITAN_GC_SMALL_FILE,
+  // the count of blob file marked to be merged by level merge
+  TITAN_GC_LEVEL_MERGE_MARK,
+  // the count of blob file deleted directly by level merge
+  TITAN_GC_LEVEL_MERGE_DELETE,
 
+  TITAN_GC_NO_NEED,
+  // the times of still has blob files remained to be gced after one round of gc
+  TITAN_GC_REMAIN,
   TITAN_GC_FAILURE,
   TITAN_GC_SUCCESS,
+  // the times of triggering next round of GC actively
   TITAN_GC_TRIGGER_NEXT,
 
   TITAN_TICKER_ENUM_MAX,
@@ -61,17 +74,18 @@ const std::vector<std::pair<TickerType, std::string>> TitanTickersNameMap = {
     {TITAN_GC_NUM_NEW_FILES, "titandb.gc.num.new.files"},
     {TITAN_GC_NUM_KEYS_OVERWRITTEN, "titandb.gc.num.keys.overwritten"},
     {TITAN_GC_NUM_KEYS_RELOCATED, "titandb.gc.num.keys.relocated"},
+    {TITAN_GC_NUM_KEYS_FALLBACK, "titandb.gc.num.keys.fallback"},
     {TITAN_GC_BYTES_OVERWRITTEN, "titandb.gc.bytes.overwritten"},
     {TITAN_GC_BYTES_RELOCATED, "titandb.gc.bytes.relocated"},
+    {TITAN_GC_BYTES_FALLBACK, "titandb.gc.bytes.fallback"},
     {TITAN_GC_BYTES_WRITTEN, "titandb.gc.bytes.written"},
     {TITAN_GC_BYTES_READ, "titandb.gc.bytes.read"},
     {TITAN_BLOB_CACHE_HIT, "titandb.blob.cache.hit"},
     {TITAN_BLOB_CACHE_MISS, "titandb.blob.cache.miss"},
+    {TITAN_GC_DISCARDABLE, "titandb.gc.discardable"},
+    {TITAN_GC_SMALL_FILE, "titandb.gc.small.file"},
     {TITAN_GC_NO_NEED, "titandb.gc.no.need"},
     {TITAN_GC_REMAIN, "titandb.gc.remain"},
-    {TITAN_GC_DISCARDABLE, "titandb.gc.discardable"},
-    {TITAN_GC_SAMPLE, "titandb.gc.sample"},
-    {TITAN_GC_SMALL_FILE, "titandb.gc.small.file"},
     {TITAN_GC_FAILURE, "titandb.gc.failure"},
     {TITAN_GC_SUCCESS, "titandb.gc.success"},
     {TITAN_GC_TRIGGER_NEXT, "titandb.gc.trigger.next"},
