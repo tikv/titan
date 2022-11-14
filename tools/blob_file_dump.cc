@@ -47,6 +47,7 @@ int blob_file_dump() {
       std::string value = iter->value().ToString(true);
       fprintf(stdout, "%s: %s\n", key.c_str(), value.c_str());
     }
+    iter->Next();
   }
   handle_error(iter->status(), "reading blob file");
   return 0;
