@@ -576,19 +576,17 @@ Status TitanDBImpl::Put(const rocksdb::WriteOptions& options,
 }
 
 Status TitanDBImpl::Write(const rocksdb::WriteOptions& options,
-                          rocksdb::WriteBatch* updates, uint64_t* seq,
+                          rocksdb::WriteBatch* updates,
                           PostWriteCallback* callback) {
-  return HasBGError() ? GetBGError()
-                      : db_->Write(options, updates, seq, callback);
+  return HasBGError() ? GetBGError() : db_->Write(options, updates, callback);
 }
 
 Status TitanDBImpl::MultiBatchWrite(const WriteOptions& options,
                                     std::vector<WriteBatch*>&& updates,
-                                    uint64_t* seq,
                                     PostWriteCallback* callback) {
   return HasBGError()
              ? GetBGError()
-             : db_->MultiBatchWrite(options, std::move(updates), seq, callback);
+             : db_->MultiBatchWrite(options, std::move(updates), callback);
 }
 
 Status TitanDBImpl::Delete(const rocksdb::WriteOptions& options,

@@ -62,12 +62,12 @@ class TitanDBImpl : public TitanDB {
              const Slice& key, const Slice& value) override;
 
   using TitanDB::Write;
-  Status Write(const WriteOptions& options, WriteBatch* updates, uint64_t* seq,
+  Status Write(const WriteOptions& options, WriteBatch* updates,
                PostWriteCallback* callback) override;
 
   using TitanDB::MultiBatchWrite;
   Status MultiBatchWrite(const WriteOptions& options,
-                         std::vector<WriteBatch*>&& updates, uint64_t* seq,
+                         std::vector<WriteBatch*>&& updates,
                          PostWriteCallback* callback) override;
 
   using TitanDB::Delete;
