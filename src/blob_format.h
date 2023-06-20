@@ -185,7 +185,7 @@ struct BlobIndex {
 //    +--------------------+--------------------+
 //
 // The blob file meta is stored in Titan's manifest for quick constructing of
-// meta infomations of all the blob files in memory.
+// meta informations of all the blob files in memory.
 //
 // Legacy format:
 //
@@ -198,21 +198,22 @@ struct BlobIndex {
 class BlobFileMeta {
  public:
   enum class FileEvent : int {
-    kInit,
+    kDbBeforeInit,
+    kDbAfterInit,
     kFlushCompleted,
     kCompactionCompleted,
     kGCCompleted,
     kGCBegin,
     kGCOutput,
     kFlushOrCompactionOutput,
-    kDbRestart,
     kDelete,
     kNeedMerge,
     kReset,  // reset file to normal for test
   };
 
   enum class FileState : int {
-    kInit,  // file never at this state
+    kInit,    // just after created
+    kUninit,  // file is not async initialized yet
     kNormal,
     kPendingLSM,  // waiting keys adding to LSM
     kBeingGC,     // being gced
@@ -253,16 +254,14 @@ class BlobFileMeta {
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
 
   void FileStateTransit(const FileEvent& event);
-  bool UpdateLiveDataSize(int64_t delta) {
-    int64_t result = static_cast<int64_t>(live_data_size_) + delta;
-    if (result < 0) {
-      live_data_size_ = 0;
+  void UpdateLiveDataSize(int64_t delta) { live_data_size_ += delta; }
+  bool NoLiveData() {
+    if (state_ == FileState::kUninit) {
+      // File is not initialized yet, so the live_data_size is not accurate now.
       return false;
     }
-    live_data_size_ = static_cast<uint64_t>(result);
-    return true;
+    return live_data_size_ == 0;
   }
-  bool NoLiveData() { return live_data_size_ == 0; }
   double GetDiscardableRatio() const {
     if (file_size_ == 0) {
       return 0;
@@ -299,7 +298,7 @@ class BlobFileMeta {
   // So when state_ == kPendingLSM, it uses this to record the delta as a
   // positive number if any later compaction is trigger before previous
   // `OnCompactionCompleted()` is called.
-  std::atomic<uint64_t> live_data_size_{0};
+  std::atomic<int64_t> live_data_size_{0};
   std::atomic<FileState> state_{FileState::kInit};
 };
 

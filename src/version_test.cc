@@ -50,17 +50,17 @@ class VersionTest : public testing::Test {
     DeleteDir(env_, db_options_.dirname);
     env_->CreateDirIfMissing(db_options_.dirname);
 
-    blob_file_set_.reset(new BlobFileSet(db_options_, nullptr));
+    blob_file_set_.reset(new BlobFileSet(db_options_, nullptr, nullptr));
     ASSERT_OK(blob_file_set_->Open({}));
     column_families_.clear();
     // Sets up some column families.
     for (uint32_t id = 0; id < 10; id++) {
       std::shared_ptr<BlobStorage> storage;
-      storage.reset(
-          new BlobStorage(db_options_, cf_options_, id, file_cache_, nullptr));
+      storage.reset(new BlobStorage(db_options_, cf_options_, id, file_cache_,
+                                    nullptr, nullptr));
       column_families_.emplace(id, storage);
-      storage.reset(
-          new BlobStorage(db_options_, cf_options_, id, file_cache_, nullptr));
+      storage.reset(new BlobStorage(db_options_, cf_options_, id, file_cache_,
+                                    nullptr, nullptr));
       blob_file_set_->column_families_.emplace(id, storage);
     }
   }

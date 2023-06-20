@@ -17,7 +17,7 @@ class TitanDBImpl;
 class TitanTableFactory : public TableFactory {
  public:
   TitanTableFactory(const TitanDBOptions& db_options,
-                    const TitanCFOptions& cf_options, TitanDBImpl* db_impl,
+                    const TitanCFOptions& cf_options,
                     std::shared_ptr<BlobFileManager> blob_manager,
                     port::Mutex* db_mutex, BlobFileSet* blob_file_set,
                     TitanStats* stats)
@@ -25,7 +25,6 @@ class TitanTableFactory : public TableFactory {
         cf_options_(cf_options),
         blob_run_mode_(cf_options.blob_run_mode),
         base_factory_(cf_options.table_factory),
-        db_impl_(db_impl),
         blob_manager_(blob_manager),
         db_mutex_(db_mutex),
         blob_file_set_(blob_file_set),
@@ -55,7 +54,6 @@ class TitanTableFactory : public TableFactory {
   const TitanCFOptions cf_options_;
   std::atomic<TitanBlobRunMode> blob_run_mode_;
   std::shared_ptr<TableFactory> base_factory_;
-  TitanDBImpl* db_impl_;
   std::shared_ptr<BlobFileManager> blob_manager_;
   port::Mutex* db_mutex_;
   BlobFileSet* blob_file_set_;

@@ -152,7 +152,9 @@ class TitanDBImpl : public TitanDB {
   bool GetIntProperty(ColumnFamilyHandle* column_family, const Slice& property,
                       uint64_t* value) override;
 
-  bool initialized() const { return initialized_; }
+  bool initialized() const {
+    return initialized_.load(std::memory_order_acquire);
+  }
 
   void OnFlushCompleted(const FlushJobInfo& flush_job_info);
 
@@ -207,7 +209,7 @@ class TitanDBImpl : public TitanDB {
                             ColumnFamilyHandle* handle,
                             std::shared_ptr<ManagedSnapshot> snapshot);
 
-  Status InitializeGC(const std::vector<ColumnFamilyHandle*>& cf_handles);
+  Status AsyncInitializeGC(const std::vector<ColumnFamilyHandle*>& cf_handles);
 
   Status ExtractGCStatsFromTableProperty(
       const std::shared_ptr<const TableProperties>& table_properties,
@@ -316,6 +318,8 @@ class TitanDBImpl : public TitanDB {
 
   // handle for dump internal stats at fixed intervals.
   std::unique_ptr<RepeatableThread> thread_dump_stats_;
+
+  std::unique_ptr<port::Thread> thread_initialize_gc_;
 
   std::unique_ptr<BlobFileSet> blob_file_set_;
   std::set<uint64_t> pending_outputs_;

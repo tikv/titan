@@ -347,7 +347,7 @@ TEST_F(TitanDBTest, Open) {
       "TitanDBImpl::OnCompactionCompleted:Begin",
       [&](void*) { background_job_started = true; });
   SyncPoint::GetInstance()->SetCallBack(
-      "TitanDBImpl::OpenImpl:BeforeInitialized", [&](void* arg) {
+      "TitanDBImpl::AsyncInitializeGC:BeforeSetInitialized", [&](void* arg) {
         checked_before_initialized = true;
         TitanDBImpl* db = reinterpret_cast<TitanDBImpl*>(arg);
         // Try to trigger flush and compaction. Listeners should not be call.
@@ -362,6 +362,35 @@ TEST_F(TitanDBTest, Open) {
   Open();
   ASSERT_TRUE(checked_before_initialized.load());
   ASSERT_FALSE(background_job_started.load());
+}
+
+TEST_F(TitanDBTest, AsyncInitializeGC) {
+  rocksdb::SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBTest::AsyncInitializeGC::ReleaseWait",
+        "TitanDBImpl::AsyncInitializeGC:Begin"}});
+  rocksdb::SyncPoint::GetInstance()->EnableProcessing();
+
+  options_.disable_background_gc = true;
+  options_.blob_file_discardable_ratio = 0.01;
+  options_.min_blob_size = true;
+  Open();
+  ASSERT_OK(db_->Put(WriteOptions(), "foo", "v1"));
+  ASSERT_OK(db_->Put(WriteOptions(), "bar", "v1"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+  ASSERT_OK(db_->Delete(WriteOptions(), "foo"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+  uint32_t default_cf_id = db_->DefaultColumnFamily()->GetID();
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+
+  TEST_SYNC_POINT("TitanDBTest::AsyncInitializeGC:ReleaseWait");
+  // GC the first blob file.
+  ASSERT_OK(db_impl_->TEST_StartGC(default_cf_id));
+  ASSERT_EQ(2, GetBlobStorage().lock()->NumBlobFiles());
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+  VerifyDB({{"bar", "v1"}});
 }
 
 TEST_F(TitanDBTest, Basic) {
@@ -1436,7 +1465,7 @@ TEST_F(TitanDBTest, GCAfterReopen) {
   // Sync point to verify GC stat recovered after reopen.
   std::atomic<int> num_gc_job{0};
   SyncPoint::GetInstance()->SetCallBack(
-      "TitanDBImpl::OpenImpl:BeforeInitialized", [&](void* arg) {
+      "TitanDBImpl::AsyncInitializeGC:BeforeSetInitialized", [&](void* arg) {
         TitanDBImpl* db_impl = reinterpret_cast<TitanDBImpl*>(arg);
         blob_storage =
             db_impl->TEST_GetBlobStorage(db_impl->DefaultColumnFamily());

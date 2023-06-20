@@ -55,7 +55,8 @@ class BlobStorage;
 class TitanInternalStats {
  public:
   enum StatsType {
-    LIVE_BLOB_SIZE = 0,
+    LIVE_BLOB_SIZE =
+        0,  // deprecated, it isn't accurate enough and hard to make it accurate
     NUM_LIVE_BLOB_FILE,
     NUM_OBSOLETE_BLOB_FILE,
     LIVE_BLOB_FILE_SIZE,
@@ -97,14 +98,13 @@ class TitanInternalStats {
     stats_[type].store(0, std::memory_order_relaxed);
   }
 
+  void SetStats(StatsType type, uint64_t value) {
+    stats_[type].store(value, std::memory_order_relaxed);
+  }
+
   void AddStats(StatsType type, uint64_t value) {
     auto& v = stats_[type];
     v.fetch_add(value, std::memory_order_relaxed);
-  }
-
-  void SubStats(StatsType type, uint64_t value) {
-    auto& v = stats_[type];
-    v.fetch_sub(value, std::memory_order_relaxed);
   }
 
   InternalOpStats* GetInternalOpStatsForType(InternalOpType type) {
@@ -183,22 +183,22 @@ inline void ResetStats(TitanStats* stats, uint32_t cf_id,
   }
 }
 
+inline void SetStats(TitanStats* stats, uint32_t cf_id,
+                     TitanInternalStats::StatsType type, uint64_t value) {
+  if (stats) {
+    auto p = stats->internal_stats(cf_id);
+    if (p) {
+      p->SetStats(type, value);
+    }
+  }
+}
+
 inline void AddStats(TitanStats* stats, uint32_t cf_id,
                      TitanInternalStats::StatsType type, uint64_t value) {
   if (stats) {
     auto p = stats->internal_stats(cf_id);
     if (p) {
       p->AddStats(type, value);
-    }
-  }
-}
-
-inline void SubStats(TitanStats* stats, uint32_t cf_id,
-                     TitanInternalStats::StatsType type, uint64_t value) {
-  if (stats) {
-    auto p = stats->internal_stats(cf_id);
-    if (p) {
-      p->SubStats(type, value);
     }
   }
 }
@@ -217,14 +217,6 @@ inline void AddStats(InternalOpStats* stats, InternalOpStatsType type,
                      uint64_t value = 1) {
   if (stats != nullptr) {
     (*stats)[static_cast<int>(type)].fetch_add(value,
-                                               std::memory_order_relaxed);
-  }
-}
-
-inline void SubStats(InternalOpStats* stats, InternalOpStatsType type,
-                     uint64_t value = 1) {
-  if (stats != nullptr) {
-    (*stats)[static_cast<int>(type)].fetch_sub(value,
                                                std::memory_order_relaxed);
   }
 }

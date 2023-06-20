@@ -51,7 +51,9 @@ TEST(BlobFormatTest, BlobFileFooter) {
 TEST(BlobFormatTest, BlobFileStateTransit) {
   BlobFileMeta blob_file;
   ASSERT_EQ(blob_file.file_state(), BlobFileMeta::FileState::kInit);
-  blob_file.FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
+  blob_file.FileStateTransit(BlobFileMeta::FileEvent::kDbBeforeInit);
+  ASSERT_EQ(blob_file.file_state(), BlobFileMeta::FileState::kUninit);
+  blob_file.FileStateTransit(BlobFileMeta::FileEvent::kDbAfterInit);
   ASSERT_EQ(blob_file.file_state(), BlobFileMeta::FileState::kNormal);
   blob_file.FileStateTransit(BlobFileMeta::FileEvent::kGCBegin);
   ASSERT_EQ(blob_file.file_state(), BlobFileMeta::FileState::kBeingGC);

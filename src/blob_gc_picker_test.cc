@@ -24,7 +24,7 @@ class BlobGCPickerTest : public testing::Test {
     auto blob_file_cache = std::make_shared<BlobFileCache>(
         titan_db_options, titan_cf_options, NewLRUCache(128), nullptr);
     blob_storage_.reset(new BlobStorage(titan_db_options, titan_cf_options, 0,
-                                        blob_file_cache, nullptr));
+                                        blob_file_cache, nullptr, nullptr));
     basic_blob_gc_picker_.reset(
         new BasicBlobGCPicker(titan_db_options, titan_cf_options, nullptr));
   }
@@ -35,7 +35,8 @@ class BlobGCPickerTest : public testing::Test {
         file_number, data_size + kBlobMaxHeaderSize + kBlobFooterSize, 0, 0, "",
         "");
     f->set_live_data_size(data_size - discardable_size);
-    f->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
+    f->FileStateTransit(BlobFileMeta::FileEvent::kDbBeforeInit);
+    f->FileStateTransit(BlobFileMeta::FileEvent::kDbAfterInit);
     if (being_gc) {
       f->FileStateTransit(BlobFileMeta::FileEvent::kGCBegin);
     }

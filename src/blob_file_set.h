@@ -33,7 +33,8 @@ struct LogReporter : public log::Reader::Reporter {
 // It records blob file meta in terms of column family.
 class BlobFileSet {
  public:
-  explicit BlobFileSet(const TitanDBOptions& options, TitanStats* stats);
+  explicit BlobFileSet(const TitanDBOptions& options, TitanStats* stats,
+                       std::atomic<bool>* initialized);
 
   // Sets up the storage specified in "options.dirname".
   // If the manifest doesn't exist, it will create one.
@@ -110,6 +111,7 @@ class BlobFileSet {
   std::shared_ptr<Cache> file_cache_;
 
   TitanStats* stats_;
+  std::atomic<bool>* initialized_;
 
   std::vector<std::string> obsolete_manifests_;
 
