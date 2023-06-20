@@ -80,10 +80,10 @@ class BlobStorage {
   // corruption if the file doesn't exist.
   std::weak_ptr<BlobFileMeta> FindFile(uint64_t file_number) const;
 
-  void UninitializeAllFiles() {
+  void StartInitializeAllFiles() {
     MutexLock l(&mutex_);
     for (auto& file : files_) {
-      file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbBeforeInit);
+      file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbStart);
     }
   }
 
@@ -91,7 +91,7 @@ class BlobStorage {
   void InitializeAllFiles() {
     MutexLock l(&mutex_);
     for (auto& file : files_) {
-      file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbAfterInit);
+      file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbInit);
     }
   }
 

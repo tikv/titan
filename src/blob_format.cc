@@ -213,12 +213,12 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
       assert(state_ == FileState::kInit);
       state_ = FileState::kPendingLSM;
       break;
-    case FileEvent::kDbBeforeInit:
+    case FileEvent::kDbStart:
       assert(state_ == FileState::kInit);
-      state_ = FileState::kUninit;
+      state_ = FileState::kPendingInit;
       break;
-    case FileEvent::kDbAfterInit:
-      assert(state_ == FileState::kUninit);
+    case FileEvent::kDbInit:
+      assert(state_ == FileState::kPendingInit);
       state_ = FileState::kNormal;
       break;
     case FileEvent::kDelete:

@@ -198,8 +198,8 @@ struct BlobIndex {
 class BlobFileMeta {
  public:
   enum class FileEvent : int {
-    kDbBeforeInit,
-    kDbAfterInit,
+    kDbStart,
+    kDbInit,
     kFlushCompleted,
     kCompactionCompleted,
     kGCCompleted,
@@ -212,8 +212,8 @@ class BlobFileMeta {
   };
 
   enum class FileState : int {
-    kInit,    // just after created
-    kUninit,  // file is not async initialized yet
+    kInit,         // just after created
+    kPendingInit,  // file is not async initialized yet
     kNormal,
     kPendingLSM,  // waiting keys adding to LSM
     kBeingGC,     // being gced
@@ -256,7 +256,7 @@ class BlobFileMeta {
   void FileStateTransit(const FileEvent& event);
   void UpdateLiveDataSize(int64_t delta) { live_data_size_ += delta; }
   bool NoLiveData() {
-    if (state_ == FileState::kUninit) {
+    if (state_ == FileState::kPendingInit) {
       // File is not initialized yet, so the live_data_size is not accurate now.
       return false;
     }

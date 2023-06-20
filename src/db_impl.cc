@@ -1215,7 +1215,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
         delta = 0;
       }
 
-      if (file->file_state() == BlobFileMeta::FileState::kUninit) {
+      if (file->file_state() == BlobFileMeta::FileState::kPendingInit) {
         // When uninitialized, only update the live data size.
         file->UpdateLiveDataSize(delta);
         continue;
@@ -1308,7 +1308,7 @@ void TitanDBImpl::OnCompactionCompleted(
         continue;
       }
 
-      if (file->file_state() == BlobFileMeta::FileState::kUninit) {
+      if (file->file_state() == BlobFileMeta::FileState::kPendingInit) {
         // When uninitialized, only update the live data size.
         file->UpdateLiveDataSize(delta);
         continue;

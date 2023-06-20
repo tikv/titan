@@ -57,7 +57,7 @@ Status TitanDBImpl::AsyncInitializeGC(
         blob_file_set_->GetBlobStorage(cf_handle->GetID()).lock();
     assert(blob_storage != nullptr);
     cfs.push_back(cf_handle->GetID());
-    blob_storage->UninitializeAllFiles();
+    blob_storage->StartInitializeAllFiles();
   }
 
   thread_initialize_gc_.reset(new port::Thread([=]() {

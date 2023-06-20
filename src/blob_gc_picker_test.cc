@@ -35,8 +35,8 @@ class BlobGCPickerTest : public testing::Test {
         file_number, data_size + kBlobMaxHeaderSize + kBlobFooterSize, 0, 0, "",
         "");
     f->set_live_data_size(data_size - discardable_size);
-    f->FileStateTransit(BlobFileMeta::FileEvent::kDbBeforeInit);
-    f->FileStateTransit(BlobFileMeta::FileEvent::kDbAfterInit);
+    f->FileStateTransit(BlobFileMeta::FileEvent::kDbStart);
+    f->FileStateTransit(BlobFileMeta::FileEvent::kDbInit);
     if (being_gc) {
       f->FileStateTransit(BlobFileMeta::FileEvent::kGCBegin);
     }
