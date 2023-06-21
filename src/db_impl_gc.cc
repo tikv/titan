@@ -1,5 +1,6 @@
 #include "test_util/sync_point.h"
 
+#include "db/version_set.h"
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc_job.h"
@@ -51,46 +52,65 @@ Status TitanDBImpl::ExtractGCStatsFromTableProperty(
 
 Status TitanDBImpl::AsyncInitializeGC(
     const std::vector<ColumnFamilyHandle*>& cf_handles) {
-  std::vector<uint32_t> cfs;
+  std::vector<std::pair<uint32_t, Version*>> cfs;
+  FlushOptions flush_opts;
+  flush_opts.wait = true;
   for (ColumnFamilyHandle* cf_handle : cf_handles) {
     std::shared_ptr<BlobStorage> blob_storage =
         blob_file_set_->GetBlobStorage(cf_handle->GetID()).lock();
     assert(blob_storage != nullptr);
-    cfs.push_back(cf_handle->GetID());
     blob_storage->StartInitializeAllFiles();
+
+    // Flush memtable to make sure keys written by GC are all in SSTs.
+    auto s = Flush(flush_opts, cf_handle);
+    if (!s.ok()) {
+      return s;
+    }
+
+    // Hold the version and increment the ref count
+    auto cfh = static_cast_with_check<ColumnFamilyHandleImpl>(cf_handle);
+    auto cfd = cfh->cfd();
+    db_impl_->mutex()->Lock();
+    auto version = cfd->current();
+    version->Ref();
+    db_impl_->mutex()->Unlock();
+
+    cfs.push_back(std::make_pair(cf_handle->GetID(), version));
   }
 
   thread_initialize_gc_.reset(new port::Thread([=]() {
     Status s;
-    FlushOptions flush_opts;
-    flush_opts.wait = true;
 
+    auto unref = [=](Version* version) {
+      db_impl_->mutex()->Lock();
+      version->Unref();
+      db_impl_->mutex()->Unlock();
+    };
+
+    TEST_SYNC_POINT_CALLBACK("TitanDBImpl::AsyncInitializeGC:Begin", this);
     for (auto cf : cfs) {
       if (shuting_down_.load(std::memory_order_acquire)) {
-        return;
+        unref(cf.second);
+        continue;
       }
-      TEST_SYNC_POINT_CALLBACK("TitanDBImpl::AsyncInitializeGC:Begin", this);
-      auto cf_handle = db_impl_->GetColumnFamilyHandleUnlocked(cf);
+      auto cf_handle = db_impl_->GetColumnFamilyHandleUnlocked(cf.first);
       if (!cf_handle) {
+        unref(cf.second);
         continue;
       }
       TITAN_LOG_INFO(db_options_.info_log,
                      "Titan begin async GC initialization on cf [%s]",
                      cf_handle->GetName().c_str());
-      // Flush memtable to make sure keys written by GC are all in SSTs.
-      s = Flush(flush_opts, cf_handle.get());
-      if (!s.ok()) {
-        MutexLock l(&mutex_);
-        this->SetBGError(s);
-        return;
-      }
       TablePropertiesCollection collection;
-      s = GetPropertiesOfAllTables(cf_handle.get(), &collection);
+      // this operation may be slow
+      s = cf.second->GetPropertiesOfAllTables(&collection);
+      unref(cf.second);
       if (!s.ok()) {
         MutexLock l(&mutex_);
         this->SetBGError(s);
         return;
       }
+
       std::map<uint64_t, int64_t> blob_file_size_diff;
       for (auto& file : collection) {
         s = ExtractGCStatsFromTableProperty(file.second, true /*to_add*/,
@@ -121,21 +141,24 @@ Status TitanDBImpl::AsyncInitializeGC(
                      cf_handle->GetName().c_str());
     }
 
-    // TODO: need to change
-    TEST_SYNC_POINT_CALLBACK(
-        "TitanDBImpl::AsyncInitializeGC:BeforeSetInitialized", this);
-    // Initialization done.
-    initialized_.store(true, std::memory_order_release);
-    {
-      MutexLock l(&mutex_);
-      for (auto cf : cfs) {
-        std::shared_ptr<BlobStorage> blob_storage =
-            blob_file_set_->GetBlobStorage(cf).lock();
-        blob_storage->ComputeGCScore();
-        AddToGCQueue(cf);
+    if (!shuting_down_.load(std::memory_order_acquire)) {
+      // TODO: need to change
+      TEST_SYNC_POINT_CALLBACK(
+          "TitanDBImpl::AsyncInitializeGC:BeforeSetInitialized", this);
+      // Initialization done.
+      initialized_.store(true, std::memory_order_release);
+      {
+        MutexLock l(&mutex_);
+        for (auto cf : cfs) {
+          std::shared_ptr<BlobStorage> blob_storage =
+              blob_file_set_->GetBlobStorage(cf.first).lock();
+          blob_storage->ComputeGCScore();
+          AddToGCQueue(cf.first);
+        }
+        MaybeScheduleGC();
       }
-      MaybeScheduleGC();
     }
+    TEST_SYNC_POINT_CALLBACK("TitanDBImpl::AsyncInitializeGC:End", this);
   }));
 
   return Status::OK();
