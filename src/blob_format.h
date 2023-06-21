@@ -248,7 +248,7 @@ class BlobFileMeta {
   const std::string& smallest_key() const { return smallest_key_; }
   const std::string& largest_key() const { return largest_key_; }
 
-  void set_live_data_size(uint64_t size) { live_data_size_ = size; }
+  void set_live_data_size(int64_t size) { live_data_size_ = size; }
   uint64_t file_entries() const { return file_entries_; }
   FileState file_state() const { return state_; }
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
@@ -256,13 +256,14 @@ class BlobFileMeta {
   void FileStateTransit(const FileEvent& event);
   void UpdateLiveDataSize(int64_t delta) { live_data_size_ += delta; }
   bool NoLiveData() {
-    if (state_ == FileState::kPendingInit) {
+    if (state_ == FileState::kPendingInit || state_ == FileState::kInit) {
       // File is not initialized yet, so the live_data_size is not accurate now.
       return false;
     }
     return live_data_size_ == 0;
   }
   double GetDiscardableRatio() const {
+    assert(state_ != FileState::kPendingInit);
     if (file_size_ == 0) {
       return 0;
     }

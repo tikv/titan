@@ -293,7 +293,7 @@ class TitanDBImpl : public TitanDB {
   std::string dirname_;
   Env* env_;
   EnvOptions env_options_;
-  DBImpl* db_impl_;
+  DBImpl* db_impl_;  // Base DB impl
   TitanDBOptions db_options_;
   std::unique_ptr<Directory> directory_;
 

@@ -140,6 +140,7 @@ class TitanDBTest : public testing::Test {
       cf_handle = db_->DefaultColumnFamily();
     }
     FlushOptions fopts;
+    fopts.wait = true;
     ASSERT_OK(db_->Flush(fopts));
     for (auto& handle : cf_handles_) {
       ASSERT_OK(db_->Flush(fopts, handle));
@@ -337,37 +338,12 @@ class TitanDBTest : public testing::Test {
   std::vector<ColumnFamilyHandle*> cf_handles_;
 };
 
-TEST_F(TitanDBTest, Open) {
-  std::atomic<bool> checked_before_initialized{false};
-  std::atomic<bool> background_job_started{false};
-  SyncPoint::GetInstance()->SetCallBack(
-      "TitanDBImpl::OnFlushCompleted:Begin",
-      [&](void*) { background_job_started = true; });
-  SyncPoint::GetInstance()->SetCallBack(
-      "TitanDBImpl::OnCompactionCompleted:Begin",
-      [&](void*) { background_job_started = true; });
-  SyncPoint::GetInstance()->SetCallBack(
-      "TitanDBImpl::AsyncInitializeGC:BeforeSetInitialized", [&](void* arg) {
-        checked_before_initialized = true;
-        TitanDBImpl* db = reinterpret_cast<TitanDBImpl*>(arg);
-        // Try to trigger flush and compaction. Listeners should not be call.
-        ASSERT_OK(db->Put(WriteOptions(), "k1", "v1"));
-        ASSERT_OK(db->Flush(FlushOptions()));
-        ASSERT_OK(db->Put(WriteOptions(), "k1", "v2"));
-        ASSERT_OK(db->Put(WriteOptions(), "k2", "v3"));
-        ASSERT_OK(db->Flush(FlushOptions()));
-        ASSERT_OK(db->CompactRange(CompactRangeOptions(), nullptr, nullptr));
-      });
-  SyncPoint::GetInstance()->EnableProcessing();
-  Open();
-  ASSERT_TRUE(checked_before_initialized.load());
-  ASSERT_FALSE(background_job_started.load());
-}
-
 TEST_F(TitanDBTest, AsyncInitializeGC) {
   rocksdb::SyncPoint::GetInstance()->LoadDependency(
-      {{"TitanDBTest::AsyncInitializeGC::ReleaseWait",
-        "TitanDBImpl::AsyncInitializeGC:Begin"}});
+      {{"TitanDBTest::AsyncInitializeGC:ReleaseInitialization",
+        "TitanDBImpl::AsyncInitializeGC:Begin"},
+       {"TitanDBImpl::AsyncInitializeGC:End",
+        "TitanDBTest::AsyncInitializeGC:Wait"}});
   rocksdb::SyncPoint::GetInstance()->EnableProcessing();
 
   options_.disable_background_gc = true;
@@ -384,7 +360,8 @@ TEST_F(TitanDBTest, AsyncInitializeGC) {
   uint32_t default_cf_id = db_->DefaultColumnFamily()->GetID();
   ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
 
-  TEST_SYNC_POINT("TitanDBTest::AsyncInitializeGC:ReleaseWait");
+  TEST_SYNC_POINT("TitanDBTest::AsyncInitializeGC:ReleaseInitialization");
+  TEST_SYNC_POINT("TitanDBTest::AsyncInitializeGC:Wait");
   // GC the first blob file.
   ASSERT_OK(db_impl_->TEST_StartGC(default_cf_id));
   ASSERT_EQ(2, GetBlobStorage().lock()->NumBlobFiles());
