@@ -91,7 +91,6 @@ Status BlobFileSet::Recover() {
     TITAN_LOG_INFO(db_options_.info_log,
                    "Next blob file number is %" PRIu64 ".", next_file_number);
   }
-
   auto new_manifest_file_number = NewFileNumber();
   s = OpenManifest(new_manifest_file_number);
   if (!s.ok()) return s;

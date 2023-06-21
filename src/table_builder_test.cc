@@ -172,7 +172,7 @@ class TableBuilderTest : public testing::Test {
     std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
     db_impl_.reset(new TitanDBImpl(db_options_, tmpdir_));
     db_impl_->TEST_set_initialized(true);
-    blob_file_set_->AddColumnFamilies(cfs);
+    blob_file_set_->Open(cfs);
     blob_manager_.reset(new FileManager(db_options_, blob_file_set_.get()));
     // Replace base table facotry.
     base_table_factory_ =

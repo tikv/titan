@@ -198,6 +198,7 @@ void BlobStorage::ComputeGCScore() {
       obsolete_blob_file_size += file.second->file_size();
       continue;
     }
+    assert(file.second->file_state() != BlobFileMeta::FileState::kPendingInit);
     num_live_blob_file += 1;
     live_blob_file_size += file.second->live_data_size();
     ratio_levels[static_cast<int>(file.second->GetDiscardableRatioLevel())] +=
@@ -228,10 +229,10 @@ void BlobStorage::ComputeGCScore() {
            obsolete_blob_file_size);
   SetStats(stats_, cf_id_, TitanInternalStats::NUM_OBSOLETE_BLOB_FILE,
            num_obsolete_blob_file);
-  for (auto ratio_level : ratio_levels) {
-    SetStats(stats_, cf_id_,
-             static_cast<TitanInternalStats::StatsType>(ratio_level.first),
-             ratio_level.second);
+  for (int i = TitanInternalStats::StatsType::NUM_DISCARDABLE_RATIO_LE0;
+       i <= TitanInternalStats::StatsType::NUM_DISCARDABLE_RATIO_LE100; i++) {
+    SetStats(stats_, cf_id_, static_cast<TitanInternalStats::StatsType>(i),
+             ratio_levels[i]);
   }
 
   std::sort(gc_score_.begin(), gc_score_.end(),

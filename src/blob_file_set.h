@@ -94,6 +94,8 @@ class BlobFileSet {
     return obsolete_columns_.count(cf_id) > 0;
   }
 
+  bool IsOpened() { return manifest_.get(); }
+
  private:
   friend class BlobFileSizeCollectorTest;
   friend class VersionTest;

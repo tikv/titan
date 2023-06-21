@@ -107,6 +107,11 @@ class TitanInternalStats {
     v.fetch_add(value, std::memory_order_relaxed);
   }
 
+  void SubStats(StatsType type, uint64_t value) {
+    auto& v = stats_[type];
+    v.fetch_sub(value, std::memory_order_relaxed);
+  }
+
   InternalOpStats* GetInternalOpStatsForType(InternalOpType type) {
     return &internal_op_stats_[static_cast<int>(type)];
   }
@@ -199,6 +204,16 @@ inline void AddStats(TitanStats* stats, uint32_t cf_id,
     auto p = stats->internal_stats(cf_id);
     if (p) {
       p->AddStats(type, value);
+    }
+  }
+}
+
+inline void SubStats(TitanStats* stats, uint32_t cf_id,
+                     TitanInternalStats::StatsType type, uint64_t value) {
+  if (stats) {
+    auto p = stats->internal_stats(cf_id);
+    if (p) {
+      p->SubStats(type, value);
     }
   }
 }

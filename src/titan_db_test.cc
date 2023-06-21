@@ -74,6 +74,8 @@ class TitanDBTest : public testing::Test {
     }
   }
 
+  void WaitGCInitialization() { db_impl_->thread_initialize_gc_->join(); }
+
   void Close() {
     if (!db_) return;
     for (auto& handle : cf_handles_) {
@@ -87,6 +89,7 @@ class TitanDBTest : public testing::Test {
   void Reopen() {
     Close();
     Open();
+    WaitGCInitialization();
   }
 
   void AddCF(const std::string& name) {
@@ -348,7 +351,7 @@ TEST_F(TitanDBTest, AsyncInitializeGC) {
 
   options_.disable_background_gc = true;
   options_.blob_file_discardable_ratio = 0.01;
-  options_.min_blob_size = true;
+  options_.min_blob_size = 0;
   Open();
   ASSERT_OK(db_->Put(WriteOptions(), "foo", "v1"));
   ASSERT_OK(db_->Put(WriteOptions(), "bar", "v1"));

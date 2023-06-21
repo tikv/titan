@@ -20,6 +20,12 @@ TableBuilder *TitanTableFactory::NewTableBuilder(
     const TableBuilderOptions &options, WritableFileWriter *file) const {
   std::unique_ptr<TableBuilder> base_builder(
       base_factory_->NewTableBuilder(options, file));
+  // When opening base DB, it may trigger flush L0. But blob_file_set_ is not
+  // opened yet, then it would write to the uninitialized manifest writer. So do
+  // not enable titan table builder now.
+  if (!blob_file_set_->IsOpened()) {
+    return base_builder.release();
+  }
   TitanCFOptions cf_options = cf_options_;
   cf_options.blob_run_mode = blob_run_mode_.load();
   std::weak_ptr<BlobStorage> blob_storage;
