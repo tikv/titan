@@ -206,15 +206,15 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
       state_ = FileState::kBeingGC;
       break;
     case FileEvent::kGCOutput:
-      assert(state_ == FileState::kInit);
+      assert(state_ == FileState::kNone);
       state_ = FileState::kPendingGC;
       break;
     case FileEvent::kFlushOrCompactionOutput:
-      assert(state_ == FileState::kInit);
+      assert(state_ == FileState::kNone);
       state_ = FileState::kPendingLSM;
       break;
     case FileEvent::kDbStart:
-      assert(state_ == FileState::kInit);
+      assert(state_ == FileState::kNone);
       state_ = FileState::kPendingInit;
       break;
     case FileEvent::kDbInit:

@@ -212,7 +212,7 @@ class BlobFileMeta {
   };
 
   enum class FileState : int {
-    kInit,         // just after created
+    kNone,         // just after created
     kPendingInit,  // file is not async initialized yet
     kNormal,
     kPendingLSM,  // waiting keys adding to LSM
@@ -256,7 +256,7 @@ class BlobFileMeta {
   void FileStateTransit(const FileEvent& event);
   void UpdateLiveDataSize(int64_t delta) { live_data_size_ += delta; }
   bool NoLiveData() {
-    if (state_ == FileState::kPendingInit || state_ == FileState::kInit) {
+    if (state_ == FileState::kPendingInit || state_ == FileState::kNone) {
       // File is not initialized yet, so the live_data_size is not accurate now.
       return false;
     }
@@ -300,7 +300,7 @@ class BlobFileMeta {
   // positive number if any later compaction is trigger before previous
   // `OnCompactionCompleted()` is called.
   std::atomic<int64_t> live_data_size_{0};
-  std::atomic<FileState> state_{FileState::kInit};
+  std::atomic<FileState> state_{FileState::kNone};
 };
 
 // Format of blob file header for version 1 (8 bytes):
