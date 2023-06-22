@@ -1223,7 +1223,6 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
 
       if (file->file_state() == BlobFileMeta::FileState::kPendingInit) {
         // When uninitialized, only update the live data size.
-        file->UpdateLiveDataSize(delta);
         continue;
       }
 
@@ -1233,16 +1232,17 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
                        "OnFlushCompleted[%d]: ignore GC output file %" PRIu64
                        ".",
                        flush_job_info.job_id, file->file_number());
-        continue;
+      } else {
+        // No need to set live data size here, because it's already set in table
+        // builder
+        file->FileStateTransit(BlobFileMeta::FileEvent::kFlushCompleted);
+        TITAN_LOG_INFO(db_options_.info_log,
+                       "OnFlushCompleted[%d]: output blob file %" PRIu64
+                       ","
+                       " live data size %" PRIu64 ".",
+                       flush_job_info.job_id, file->file_number(),
+                       file->live_data_size());
       }
-
-      file->FileStateTransit(BlobFileMeta::FileEvent::kFlushCompleted);
-      TITAN_LOG_INFO(db_options_.info_log,
-                     "OnFlushCompleted[%d]: output blob file %" PRIu64
-                     ","
-                     " live data size %" PRIu64 ".",
-                     flush_job_info.job_id, file->file_number(),
-                     file->live_data_size());
     }
   }
   TEST_SYNC_POINT("TitanDBImpl::OnFlushCompleted:Finished");

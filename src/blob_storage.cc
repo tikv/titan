@@ -177,47 +177,30 @@ void BlobStorage::GetAllFiles(std::vector<std::string>* files) {
   }
 }
 
-void BlobStorage::ComputeGCScore() {
-  if (initialized_ && !initialized_->load(std::memory_order_acquire)) {
-    return;
-  }
-  // TODO: no need to recompute all everytime
+void BlobStorage::UpdateStats() {
   MutexLock l(&mutex_);
 
-  gc_score_.clear();
   levels_file_count_.clear();
-
   uint64_t live_blob_file_size = 0, num_live_blob_file = 0;
   uint64_t obsolete_blob_file_size = 0, num_obsolete_blob_file = 0;
   std::unordered_map<int, uint64_t> ratio_levels;
 
+  // collect metrics
   for (auto& file : files_) {
-    // collect metrics
     if (file.second->is_obsolete()) {
       num_obsolete_blob_file += 1;
       obsolete_blob_file_size += file.second->file_size();
       continue;
     }
-    assert(file.second->file_state() != BlobFileMeta::FileState::kPendingInit);
     num_live_blob_file += 1;
-    live_blob_file_size += file.second->live_data_size();
-    ratio_levels[static_cast<int>(file.second->GetDiscardableRatioLevel())] +=
-        1;
     levels_file_count_[file.second->file_level()]++;
 
-    double score;
-    if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
-      // for the small file or file with gc mark (usually the file that just
-      // recovered) we want gc these file but more hope to gc other file with
-      // more invalid data
-      score = cf_options_.blob_file_discardable_ratio;
-    } else {
-      score = file.second->GetDiscardableRatio();
+    // If the file is initialized yet, skip it
+    if (file.second->file_state() != BlobFileMeta::FileState::kPendingInit) {
+      live_blob_file_size += file.second->live_data_size();
+      ratio_levels[static_cast<int>(file.second->GetDiscardableRatioLevel())] +=
+          1;
     }
-    gc_score_.emplace_back(GCScore{
-        .file_number = file.first,
-        .score = score,
-    });
   }
 
   // update metrics
@@ -233,6 +216,35 @@ void BlobStorage::ComputeGCScore() {
        i <= TitanInternalStats::StatsType::NUM_DISCARDABLE_RATIO_LE100; i++) {
     SetStats(stats_, cf_id_, static_cast<TitanInternalStats::StatsType>(i),
              ratio_levels[i]);
+  }
+}
+void BlobStorage::ComputeGCScore() {
+  UpdateStats();
+  if (initialized_ && !initialized_->load(std::memory_order_acquire)) {
+    return;
+  }
+
+  MutexLock l(&mutex_);
+  gc_score_.clear();
+
+  for (auto& file : files_) {
+    if (file.second->is_obsolete()) {
+      continue;
+    }
+
+    double score;
+    if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
+      // for the small file or file with gc mark (usually the file that just
+      // recovered) we want gc these file but more hope to gc other file with
+      // more invalid data
+      score = cf_options_.blob_file_discardable_ratio;
+    } else {
+      score = file.second->GetDiscardableRatio();
+    }
+    gc_score_.emplace_back(GCScore{
+        .file_number = file.first,
+        .score = score,
+    });
   }
 
   std::sort(gc_score_.begin(), gc_score_.end(),

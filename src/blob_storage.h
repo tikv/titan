@@ -111,6 +111,9 @@ class BlobStorage {
   // Computes GC score.
   void ComputeGCScore();
 
+  // Collects and updates statistics.
+  void UpdateStats();
+
   // Add a new blob file to this blob storage.
   void AddBlobFile(std::shared_ptr<BlobFileMeta>& file);
 
