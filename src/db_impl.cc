@@ -1222,7 +1222,6 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
       }
 
       if (file->file_state() == BlobFileMeta::FileState::kPendingInit) {
-        // When uninitialized, only update the live data size.
         continue;
       }
 

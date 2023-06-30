@@ -142,7 +142,6 @@ Status TitanDBImpl::AsyncInitializeGC(
     }
 
     if (!shuting_down_.load(std::memory_order_acquire)) {
-      // TODO: need to change
       TEST_SYNC_POINT_CALLBACK(
           "TitanDBImpl::AsyncInitializeGC:BeforeSetInitialized", this);
       // Initialization done.
