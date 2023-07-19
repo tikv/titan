@@ -1,10 +1,10 @@
 #include "test_util/sync_point.h"
 
-#include "db/version_set.h"
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc_job.h"
 #include "blob_gc_picker.h"
+#include "db/version_set.h"
 #include "db_impl.h"
 #include "titan_logging.h"
 #include "util.h"
