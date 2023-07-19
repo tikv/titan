@@ -354,9 +354,9 @@ TEST_F(TableBuilderTest, DictCompress) {
   cf_options_.blob_file_compression_options = compression_opts;
   cf_options_.blob_file_compression = kZSTD;
 
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
 
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
@@ -423,9 +423,9 @@ TEST_F(TableBuilderTest, DictCompressOptions) {
   cf_options_.blob_file_compression_options = compression_opts;
   cf_options_.blob_file_compression = kZSTD;
 
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
 
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
@@ -458,9 +458,9 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
   cf_options_.blob_file_compression_options = compression_opts;
   cf_options_.blob_file_compression = kZSTD;
 
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
 
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
@@ -750,9 +750,9 @@ TEST_F(TableBuilderTest, LevelMerge) {
 TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
 #if ZSTD_VERSION_NUMBER >= 10103
   cf_options_.level_merge = true;
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
 
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
