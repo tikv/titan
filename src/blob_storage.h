@@ -137,7 +137,7 @@ class BlobStorage {
     return files_.size();
   }
 
-  int NumBlobFilesAtLevel(int level) const {
+  uint64_t NumBlobFilesAtLevel(int level) const {
     MutexLock l(&mutex_);
     if (level >= static_cast<int>(levels_file_count_.size())) {
       return 0;
@@ -179,7 +179,7 @@ class BlobStorage {
   // Only BlobStorage OWNS BlobFileMeta
   // file_number -> file_meta
   std::unordered_map<uint64_t, std::shared_ptr<BlobFileMeta>> files_;
-  std::vector<int> levels_file_count_;
+  std::vector<uint64_t> levels_file_count_;
 
   class InternalComparator {
    public:
