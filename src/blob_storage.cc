@@ -181,6 +181,7 @@ void BlobStorage::UpdateStats() {
   MutexLock l(&mutex_);
 
   levels_file_count_.clear();
+  levels_file_count_.assign(cf_options_.num_levels, 0);
   uint64_t live_blob_file_size = 0, num_live_blob_file = 0;
   uint64_t obsolete_blob_file_size = 0, num_obsolete_blob_file = 0;
   std::unordered_map<int, uint64_t> ratio_levels;
