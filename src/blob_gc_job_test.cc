@@ -79,6 +79,8 @@ class BlobGCJobTest : public testing::Test {
     Open();
   }
 
+  void WaitGCInitialization() { tdb_->thread_initialize_gc_->join(); }
+
   void Open() {
     ASSERT_OK(TitanDB::Open(options_, dbname_, &db_));
     tdb_ = reinterpret_cast<TitanDBImpl*>(db_);
@@ -90,6 +92,7 @@ class BlobGCJobTest : public testing::Test {
   void Reopen() {
     Close();
     Open();
+    WaitGCInitialization();
   }
 
   void ScheduleRangeMerge(

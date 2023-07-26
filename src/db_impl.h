@@ -187,6 +187,7 @@ class TitanDBImpl : public TitanDB {
   friend class BaseDbListener;
   friend class TitanDBTest;
   friend class TitanThreadSafetyTest;
+  friend class TitanGCStatsTest;
   friend class TitanCompactionFilterFactory;
   friend class TitanCompactionFilter;
 

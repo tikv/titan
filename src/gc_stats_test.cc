@@ -54,6 +54,8 @@ class TitanGCStatsTest : public testing::Test {
     return s;
   }
 
+  void WaitGCInitialization() { db_impl_->thread_initialize_gc_->join(); }
+
   Status Close() {
     if (db_ == nullptr) {
       return Status::OK();
@@ -68,6 +70,7 @@ class TitanGCStatsTest : public testing::Test {
     Status s = Close();
     if (s.ok()) {
       s = Open();
+      WaitGCInitialization();
     }
     return s;
   }
