@@ -13,12 +13,16 @@ BaseDbListener::~BaseDbListener() {}
 
 void BaseDbListener::OnFlushCompleted(DB* /*db*/,
                                       const FlushJobInfo& flush_job_info) {
-  db_impl_->OnFlushCompleted(flush_job_info);
+  if (db_impl_->blob_file_set_->IsOpened()) {
+    db_impl_->OnFlushCompleted(flush_job_info);
+  }
 }
 
 void BaseDbListener::OnCompactionCompleted(
     DB* /* db */, const CompactionJobInfo& compaction_job_info) {
-  db_impl_->OnCompactionCompleted(compaction_job_info);
+  if (db_impl_->blob_file_set_->IsOpened()) {
+    db_impl_->OnCompactionCompleted(compaction_job_info);
+  }
 }
 
 }  // namespace titandb

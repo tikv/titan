@@ -94,7 +94,7 @@ class BlobFileSet {
     return obsolete_columns_.count(cf_id) > 0;
   }
 
-  bool IsOpened() { return manifest_.get(); }
+  bool IsOpened() { return opened_.load(std::memory_order_acquire); }
 
  private:
   friend class BlobFileSizeCollectorTest;
@@ -113,7 +113,12 @@ class BlobFileSet {
   std::shared_ptr<Cache> file_cache_;
 
   TitanStats* stats_;
+  port::Mutex* mutex_;
+
+  // Indicate whether the gc initialization is finished.
   std::atomic<bool>* initialized_;
+  // Indicate whether the blob file set Open is called.
+  std::atomic<bool> opened_{false};
 
   std::vector<std::string> obsolete_manifests_;
 

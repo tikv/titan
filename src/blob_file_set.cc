@@ -172,6 +172,8 @@ Status BlobFileSet::OpenManifest(uint64_t file_number) {
     manifest_.reset();
     manifest_file_number_ = old_manifest_file_number;
     obsolete_manifests_.emplace_back(file_name);
+  } else {
+    opened_.store(true, std::memory_order_release);
   }
   return s;
 }

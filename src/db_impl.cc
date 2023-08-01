@@ -276,6 +276,8 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   for (auto& desc : descs) {
     base_descs.emplace_back(desc.name, desc.options);
     ColumnFamilyOptions& cf_opts = base_descs.back().options;
+    // Disable compactions before blob file set is initialized.
+    cf_opts.disable_auto_compactions = true;
     cf_opts.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
     titan_table_factories.push_back(std::make_shared<TitanTableFactory>(
@@ -326,6 +328,7 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
       cf_with_compaction.push_back((*handles)[i]);
     }
   }
+  TEST_SYNC_POINT_CALLBACK("TitanDBImpl::OpenImpl:BeforeOpenBlobFileSet", this);
   s = blob_file_set_->Open(column_families);
   if (!s.ok()) {
     return s;
@@ -334,6 +337,8 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   if (!s.ok()) {
     return s;
   }
+  // Enable compaction and background tasks after blob file set is opened.
+  db_->EnableAutoCompaction(cf_with_compaction);
   StartBackgroundTasks();
   // Dump options.
   TITAN_LOG_INFO(db_options_.info_log, "Titan DB open.");
