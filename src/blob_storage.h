@@ -25,11 +25,13 @@ class BlobStorage {
     this->cf_options_ = bs.cf_options_;
     this->cf_id_ = bs.cf_id_;
     this->stats_ = bs.stats_;
+    this->initialized_ = bs.initialized_;
   }
 
   BlobStorage(const TitanDBOptions& _db_options,
               const TitanCFOptions& _cf_options, uint32_t cf_id,
-              std::shared_ptr<BlobFileCache> _file_cache, TitanStats* stats)
+              std::shared_ptr<BlobFileCache> _file_cache, TitanStats* stats,
+              std::atomic<bool>* initialized)
       : db_options_(_db_options),
         cf_options_(_cf_options),
         blob_run_mode_(_cf_options.blob_run_mode),
@@ -38,7 +40,8 @@ class BlobStorage {
         blob_ranges_(InternalComparator(_cf_options.comparator)),
         file_cache_(_file_cache),
         destroyed_(false),
-        stats_(stats) {}
+        stats_(stats),
+        initialized_(initialized) {}
 
   ~BlobStorage() {
     for (auto& file : files_) {
@@ -77,12 +80,19 @@ class BlobStorage {
   // corruption if the file doesn't exist.
   std::weak_ptr<BlobFileMeta> FindFile(uint64_t file_number) const;
 
+  void StartInitializeAllFiles() {
+    MutexLock l(&mutex_);
+    for (auto& file : files_) {
+      file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbStart);
+    }
+  }
+
   // Must call before TitanDBImpl initialized.
   void InitializeAllFiles() {
+    MutexLock l(&mutex_);
     for (auto& file : files_) {
-      file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbRestart);
+      file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbInit);
     }
-    ComputeGCScore();
   }
 
   // The corresponding column family is dropped, so mark destroyed and we can
@@ -100,6 +110,9 @@ class BlobStorage {
 
   // Computes GC score.
   void ComputeGCScore();
+
+  // Collects and updates statistics.
+  void UpdateStats();
 
   // Add a new blob file to this blob storage.
   void AddBlobFile(std::shared_ptr<BlobFileMeta>& file);
@@ -124,7 +137,7 @@ class BlobStorage {
     return files_.size();
   }
 
-  int NumBlobFilesAtLevel(int level) const {
+  uint64_t NumBlobFilesAtLevel(int level) const {
     MutexLock l(&mutex_);
     if (level >= static_cast<int>(levels_file_count_.size())) {
       return 0;
@@ -166,7 +179,7 @@ class BlobStorage {
   // Only BlobStorage OWNS BlobFileMeta
   // file_number -> file_meta
   std::unordered_map<uint64_t, std::shared_ptr<BlobFileMeta>> files_;
-  std::vector<int> levels_file_count_;
+  std::vector<uint64_t> levels_file_count_;
 
   class InternalComparator {
    public:
@@ -198,6 +211,9 @@ class BlobStorage {
   bool destroyed_;
 
   TitanStats* stats_;
+
+  // Indicates whether the files' live data size is initialized.
+  std::atomic<bool>* initialized_;
 };
 
 }  // namespace titandb

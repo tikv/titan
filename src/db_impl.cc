@@ -266,7 +266,8 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   // Note that info log is initialized after `CreateLoggerFromOptions`,
   // so new `BlobFileSet` here but not in constructor is to get a proper info
   // log.
-  blob_file_set_.reset(new BlobFileSet(db_options_, stats_.get()));
+  blob_file_set_.reset(
+      new BlobFileSet(db_options_, stats_.get(), &initialized_));
   // Setup options.
   db_options_.listeners.emplace_back(std::make_shared<BaseDbListener>(this));
   // Descriptors for actually open DB.
@@ -275,13 +276,13 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   for (auto& desc : descs) {
     base_descs.emplace_back(desc.name, desc.options);
     ColumnFamilyOptions& cf_opts = base_descs.back().options;
-    // Disable compactions before everything is initialized.
+    // Disable compactions before blob file set is initialized.
     cf_opts.disable_auto_compactions = true;
     cf_opts.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
     titan_table_factories.push_back(std::make_shared<TitanTableFactory>(
-        db_options_, desc.options, this, blob_manager_, &mutex_,
-        blob_file_set_.get(), stats_.get()));
+        db_options_, desc.options, blob_manager_, &mutex_, blob_file_set_.get(),
+        stats_.get()));
     cf_opts.table_factory = titan_table_factories.back();
     if (cf_opts.compaction_filter != nullptr ||
         cf_opts.compaction_filter_factory != nullptr) {
@@ -327,19 +328,17 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
       cf_with_compaction.push_back((*handles)[i]);
     }
   }
+  TEST_SYNC_POINT_CALLBACK("TitanDBImpl::OpenImpl:BeforeOpenBlobFileSet", this);
   s = blob_file_set_->Open(column_families);
   if (!s.ok()) {
     return s;
   }
-  s = InitializeGC(*handles);
-  TEST_SYNC_POINT_CALLBACK("TitanDBImpl::OpenImpl:BeforeInitialized", this);
-  // Initialization done.
-  initialized_ = true;
-  // Enable compaction and background tasks after initilization.
-  s = db_->EnableAutoCompaction(cf_with_compaction);
+  s = AsyncInitializeGC(*handles);
   if (!s.ok()) {
     return s;
   }
+  // Enable compaction and background tasks after blob file set is opened.
+  db_->EnableAutoCompaction(cf_with_compaction);
   StartBackgroundTasks();
   // Dump options.
   TITAN_LOG_INFO(db_options_.info_log, "Titan DB open.");
@@ -402,6 +401,22 @@ Status TitanDBImpl::CloseImpl() {
     mutex_.Unlock();
   }
 
+  if (thread_dump_stats_ != nullptr) {
+    thread_dump_stats_->cancel();
+    mutex_.Lock();
+    thread_dump_stats_.reset();
+    mutex_.Unlock();
+  }
+
+  if (thread_initialize_gc_ != nullptr) {
+    if (thread_initialize_gc_->joinable()) {
+      thread_initialize_gc_->join();
+    }
+    mutex_.Lock();
+    thread_initialize_gc_.reset();
+    mutex_.Unlock();
+  }
+
   return Status::OK();
 }
 
@@ -416,8 +431,8 @@ Status TitanDBImpl::CreateColumnFamilies(
     // Replaces the provided table factory with TitanTableFactory.
     base_table_factory.emplace_back(options.table_factory);
     titan_table_factory.emplace_back(std::make_shared<TitanTableFactory>(
-        db_options_, desc.options, this, blob_manager_, &mutex_,
-        blob_file_set_.get(), stats_.get()));
+        db_options_, desc.options, blob_manager_, &mutex_, blob_file_set_.get(),
+        stats_.get()));
     options.table_factory = titan_table_factory.back();
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
@@ -957,19 +972,10 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
       // file has been gc out
       continue;
     }
-    auto before = file->GetDiscardableRatioLevel();
-    bool ok = file->UpdateLiveDataSize(delta);
-    if (!ok) {
-      TITAN_LOG_WARN(db_options_.info_log,
-                     "During DeleteFilesInRanges: blob file %" PRIu64
-                     " live size below zero.",
-                     file_number);
-      assert(false);
-    }
-    auto after = file->GetDiscardableRatioLevel();
-    if (before != after) {
-      AddStats(stats_.get(), cf_id, after, 1);
-      SubStats(stats_.get(), cf_id, before, 1);
+    file->UpdateLiveDataSize(delta);
+    if (file->file_state() == BlobFileMeta::FileState::kPendingInit) {
+      // When uninitialized, only update the live data size.
+      continue;
     }
     if (cf_options.level_merge) {
       if (file->NoLiveData()) {
@@ -983,7 +989,6 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
         file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
       }
     }
-    SubStats(stats_.get(), cf_id, TitanInternalStats::LIVE_BLOB_SIZE, -delta);
   }
   if (cf_options.level_merge) {
     blob_file_set_->LogAndApply(edit);
@@ -1178,10 +1183,6 @@ bool TitanDBImpl::GetIntProperty(ColumnFamilyHandle* column_family,
 void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
   TEST_SYNC_POINT("TitanDBImpl::OnFlushCompleted:Begin1");
   TEST_SYNC_POINT("TitanDBImpl::OnFlushCompleted:Begin");
-  if (!initialized()) {
-    assert(false);
-    return;
-  }
   std::map<uint64_t, int64_t> blob_file_size_diff;
   Status s = ExtractGCStatsFromTableProperty(
       flush_job_info.table_properties, true /*to_add*/, &blob_file_size_diff);
@@ -1214,14 +1215,7 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
       if (file == nullptr) {
         continue;
       }
-      if (file->file_state() != BlobFileMeta::FileState::kPendingLSM) {
-        // This file may be output of a GC job.
-        TITAN_LOG_INFO(db_options_.info_log,
-                       "OnFlushCompleted[%d]: ignore GC output file %" PRIu64
-                       ".",
-                       flush_job_info.job_id, file->file_number());
-        continue;
-      }
+
       if (delta < 0) {
         // Cannot happen..
         TITAN_LOG_WARN(db_options_.info_log,
@@ -1232,28 +1226,27 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
         delta = 0;
       }
 
-      if (file->live_data_size() != 0) {
-        // Because the flushed SST is added to superversion before
-        // `OnFlushCompleted()` is called, so if there is a concurrent
-        // compaction, `OnCompactionCompleted()` maybe called before
-        // `OnFlushCompleted()` is called.
-        // In this case, the state of the blob file generated by the flush is
-        // still `kPendingLSM`, while the blob file size delta is for the
-        // compaction event. So it is possible that delta is negative.
-        // It records the delta as a positive number if any, so here subtract it
-        // from the total live data size.
-        delta -= file->live_data_size();
+      if (file->file_state() == BlobFileMeta::FileState::kPendingInit) {
+        continue;
       }
-      file->set_live_data_size(static_cast<uint64_t>(delta));
-      AddStats(stats_.get(), flush_job_info.cf_id,
-               file->GetDiscardableRatioLevel(), 1);
-      file->FileStateTransit(BlobFileMeta::FileEvent::kFlushCompleted);
-      TITAN_LOG_INFO(db_options_.info_log,
-                     "OnFlushCompleted[%d]: output blob file %" PRIu64
-                     ","
-                     " live data size %" PRIu64 ".",
-                     flush_job_info.job_id, file->file_number(),
-                     file->live_data_size());
+
+      if (file->file_state() != BlobFileMeta::FileState::kPendingLSM) {
+        // This file may be output of a GC job.
+        TITAN_LOG_INFO(db_options_.info_log,
+                       "OnFlushCompleted[%d]: ignore GC output file %" PRIu64
+                       ".",
+                       flush_job_info.job_id, file->file_number());
+      } else {
+        // No need to set live data size here, because it's already set in table
+        // builder
+        file->FileStateTransit(BlobFileMeta::FileEvent::kFlushCompleted);
+        TITAN_LOG_INFO(db_options_.info_log,
+                       "OnFlushCompleted[%d]: output blob file %" PRIu64
+                       ","
+                       " live data size %" PRIu64 ".",
+                       flush_job_info.job_id, file->file_number(),
+                       file->live_data_size());
+      }
     }
   }
   TEST_SYNC_POINT("TitanDBImpl::OnFlushCompleted:Finished");
@@ -1262,10 +1255,6 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
 void TitanDBImpl::OnCompactionCompleted(
     const CompactionJobInfo& compaction_job_info) {
   TEST_SYNC_POINT("TitanDBImpl::OnCompactionCompleted:Begin");
-  if (!initialized()) {
-    assert(false);
-    return;
-  }
   if (!compaction_job_info.status.ok()) {
     // TODO: Clean up blob file generated by the failed compaction.
     return;
@@ -1327,47 +1316,29 @@ void TitanDBImpl::OnCompactionCompleted(
         // File has been GC out.
         continue;
       }
+
+      if (file->file_state() == BlobFileMeta::FileState::kPendingInit) {
+        // When uninitialized, only update the live data size.
+        file->UpdateLiveDataSize(delta);
+        continue;
+      }
+
       if (file->file_state() == BlobFileMeta::FileState::kPendingLSM) {
-        if (delta <= 0) {
-          // Because the new generated SST is added to superversion before
-          // `OnFlushCompleted()`/`OnCompactionCompleted()` is called, so if
-          // there is a later compaction trigger by the new generated SST, the
-          // later `OnCompactionCompleted()` maybe called before the previous
-          // events' `OnFlushCompleted()`/`OnCompactionCompleted()` is called.
-          // In this case, the state of the blob file generated by the
-          // flush/compaction is still `kPendingLSM`, while the blob file size
-          // delta is for the later compaction event. So it is possible that
-          // delta is negative.
-          // To make the live data size accurate, here records the delta as a
-          // positive number. And the delta will be subtracted with total live
-          // data size in the previous
-          // `OnFlushCompleted()`/`OnCompactionCompleted()`.
-          bool ok = file->UpdateLiveDataSize(static_cast<uint64_t>(-delta));
-          if (!ok) {
-            // Cannot happen
-            TITAN_LOG_WARN(
-                db_options_.info_log,
-                "OnCompactionCompleted[%d]: pendingLSM Blob file %" PRIu64
-                " live size below zero.",
-                compaction_job_info.job_id, file_number);
-            assert(false);
-          }
-          TITAN_LOG_INFO(db_options_.info_log,
-                         "OnCompactionCompleted[%d]: Get blob file %" PRIu64
-                         " live size being negative, maybe due to "
-                         "OnFlushCompleted() is called yet",
-                         compaction_job_info.job_id, file_number);
-          continue;
+        // Because the new generated SST is added to superversion before
+        // `OnFlushCompleted()`/`OnCompactionCompleted()` is called, so if
+        // there is a later compaction trigger by the new generated SST, the
+        // later `OnCompactionCompleted()` maybe called before the previous
+        // events' `OnFlushCompleted()`/`OnCompactionCompleted()` is called.
+        // In this case, the state of the blob file generated by the
+        // flush/compaction is still `kPendingLSM`, while the blob file size
+        // delta is for the later compaction event, and it is possible that
+        // delta is negative.
+        // If the delta is positive, it means the blob file is the output of the
+        // compaction and the live data size is already in table builder. So
+        // here only update live data size when negative.
+        if (delta < 0) {
+          file->UpdateLiveDataSize(delta);
         }
-        if (file->live_data_size() != 0) {
-          // It records the delta as a positive number if any later compaction
-          // is trigger before previous `OnCompactionCompleted()` is called, so
-          // here subtract it from the total live data size.
-          delta -= file->live_data_size();
-        }
-        file->set_live_data_size(static_cast<uint64_t>(delta));
-        AddStats(stats_.get(), compaction_job_info.cf_id,
-                 file->GetDiscardableRatioLevel(), 1);
         file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
         if (file->NoLiveData()) {
           RecordTick(statistics(stats_.get()), TITAN_GC_NUM_FILES, 1);
@@ -1391,18 +1362,7 @@ void TitanDBImpl::OnCompactionCompleted(
                          " live size increase after compaction.",
                          compaction_job_info.job_id, file_number);
         }
-        auto before = file->GetDiscardableRatioLevel();
-        SubStats(stats_.get(), compaction_job_info.cf_id, before, 1);
-        bool ok = file->UpdateLiveDataSize(delta);
-        if (!ok) {
-          TITAN_LOG_WARN(db_options_.info_log,
-                         "OnCompactionCompleted[%d]: Blob file %" PRIu64
-                         " live size below zero.",
-                         compaction_job_info.job_id, file_number);
-          assert(false);
-        }
-        SubStats(stats_.get(), compaction_job_info.cf_id,
-                 TitanInternalStats::LIVE_BLOB_SIZE, delta);
+        file->UpdateLiveDataSize(delta);
         if (cf_options.level_merge) {
           // After level merge, most entries of merged blob files are written to
           // new blob files. Delete blob files which have no live data.
@@ -1424,11 +1384,6 @@ void TitanDBImpl::OnCompactionCompleted(
             to_merge_candidates.push_back(file);
           }
         }
-      }
-      if (file->file_state() == BlobFileMeta::FileState::kNormal ||
-          file->file_state() == BlobFileMeta::FileState::kToMerge) {
-        auto after = file->GetDiscardableRatioLevel();
-        AddStats(stats_.get(), compaction_job_info.cf_id, after, 1);
       }
     }
     // If level merge is enabled, blob files will be deleted by live

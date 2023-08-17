@@ -185,7 +185,7 @@ struct BlobIndex {
 //    +--------------------+--------------------+
 //
 // The blob file meta is stored in Titan's manifest for quick constructing of
-// meta infomations of all the blob files in memory.
+// meta informations of all the blob files in memory.
 //
 // Legacy format:
 //
@@ -198,21 +198,22 @@ struct BlobIndex {
 class BlobFileMeta {
  public:
   enum class FileEvent : int {
-    kInit,
+    kDbStart,
+    kDbInit,
     kFlushCompleted,
     kCompactionCompleted,
     kGCCompleted,
     kGCBegin,
     kGCOutput,
     kFlushOrCompactionOutput,
-    kDbRestart,
     kDelete,
     kNeedMerge,
     kReset,  // reset file to normal for test
   };
 
   enum class FileState : int {
-    kInit,  // file never at this state
+    kNone,         // just after created
+    kPendingInit,  // file is not async initialized yet
     kNormal,
     kPendingLSM,  // waiting keys adding to LSM
     kBeingGC,     // being gced
@@ -247,23 +248,22 @@ class BlobFileMeta {
   const std::string& smallest_key() const { return smallest_key_; }
   const std::string& largest_key() const { return largest_key_; }
 
-  void set_live_data_size(uint64_t size) { live_data_size_ = size; }
+  void set_live_data_size(int64_t size) { live_data_size_ = size; }
   uint64_t file_entries() const { return file_entries_; }
   FileState file_state() const { return state_; }
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
 
   void FileStateTransit(const FileEvent& event);
-  bool UpdateLiveDataSize(int64_t delta) {
-    int64_t result = static_cast<int64_t>(live_data_size_) + delta;
-    if (result < 0) {
-      live_data_size_ = 0;
+  void UpdateLiveDataSize(int64_t delta) { live_data_size_ += delta; }
+  bool NoLiveData() {
+    if (state_ == FileState::kPendingInit || state_ == FileState::kNone) {
+      // File is not initialized yet, so the live_data_size is not accurate now.
       return false;
     }
-    live_data_size_ = static_cast<uint64_t>(result);
-    return true;
+    return live_data_size_ == 0;
   }
-  bool NoLiveData() { return live_data_size_ == 0; }
   double GetDiscardableRatio() const {
+    assert(state_ != FileState::kPendingInit);
     if (file_size_ == 0) {
       return 0;
     }
@@ -299,8 +299,8 @@ class BlobFileMeta {
   // So when state_ == kPendingLSM, it uses this to record the delta as a
   // positive number if any later compaction is trigger before previous
   // `OnCompactionCompleted()` is called.
-  std::atomic<uint64_t> live_data_size_{0};
-  std::atomic<FileState> state_{FileState::kInit};
+  std::atomic<int64_t> live_data_size_{0};
+  std::atomic<FileState> state_{FileState::kNone};
 };
 
 // Format of blob file header for version 1 (8 bytes):

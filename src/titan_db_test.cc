@@ -74,6 +74,8 @@ class TitanDBTest : public testing::Test {
     }
   }
 
+  void WaitGCInitialization() { db_impl_->thread_initialize_gc_->join(); }
+
   void Close() {
     if (!db_) return;
     for (auto& handle : cf_handles_) {
@@ -87,6 +89,7 @@ class TitanDBTest : public testing::Test {
   void Reopen() {
     Close();
     Open();
+    WaitGCInitialization();
   }
 
   void AddCF(const std::string& name) {
@@ -140,6 +143,7 @@ class TitanDBTest : public testing::Test {
       cf_handle = db_->DefaultColumnFamily();
     }
     FlushOptions fopts;
+    fopts.wait = true;
     ASSERT_OK(db_->Flush(fopts));
     for (auto& handle : cf_handles_) {
       ASSERT_OK(db_->Flush(fopts, handle));
@@ -338,17 +342,21 @@ class TitanDBTest : public testing::Test {
 };
 
 TEST_F(TitanDBTest, Open) {
-  std::atomic<bool> checked_before_initialized{false};
+  std::atomic<bool> checked_before_blob_file_set{false};
   std::atomic<bool> background_job_started{false};
+  SyncPoint::GetInstance()->SetCallBack("TitanDBImpl::OnFlushCompleted:Begin",
+                                        [&](void*) {
+                                          background_job_started = true;
+                                          assert(false);
+                                        });
   SyncPoint::GetInstance()->SetCallBack(
-      "TitanDBImpl::OnFlushCompleted:Begin",
-      [&](void*) { background_job_started = true; });
+      "TitanDBImpl::OnCompactionCompleted:Begin", [&](void*) {
+        background_job_started = true;
+        assert(false);
+      });
   SyncPoint::GetInstance()->SetCallBack(
-      "TitanDBImpl::OnCompactionCompleted:Begin",
-      [&](void*) { background_job_started = true; });
-  SyncPoint::GetInstance()->SetCallBack(
-      "TitanDBImpl::OpenImpl:BeforeInitialized", [&](void* arg) {
-        checked_before_initialized = true;
+      "TitanDBImpl::OpenImpl:BeforeOpenBlobFileSet", [&](void* arg) {
+        checked_before_blob_file_set = true;
         TitanDBImpl* db = reinterpret_cast<TitanDBImpl*>(arg);
         // Try to trigger flush and compaction. Listeners should not be call.
         ASSERT_OK(db->Put(WriteOptions(), "k1", "v1"));
@@ -360,8 +368,40 @@ TEST_F(TitanDBTest, Open) {
       });
   SyncPoint::GetInstance()->EnableProcessing();
   Open();
-  ASSERT_TRUE(checked_before_initialized.load());
+  ASSERT_TRUE(checked_before_blob_file_set.load());
   ASSERT_FALSE(background_job_started.load());
+}
+
+TEST_F(TitanDBTest, AsyncInitializeGC) {
+  rocksdb::SyncPoint::GetInstance()->LoadDependency(
+      {{"TitanDBTest::AsyncInitializeGC:ReleaseInitialization",
+        "TitanDBImpl::AsyncInitializeGC:Begin"},
+       {"TitanDBImpl::AsyncInitializeGC:End",
+        "TitanDBTest::AsyncInitializeGC:Wait"}});
+  rocksdb::SyncPoint::GetInstance()->EnableProcessing();
+
+  options_.disable_background_gc = true;
+  options_.blob_file_discardable_ratio = 0.01;
+  options_.min_blob_size = 0;
+  Open();
+  ASSERT_OK(db_->Put(WriteOptions(), "foo", "v1"));
+  ASSERT_OK(db_->Put(WriteOptions(), "bar", "v1"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+  ASSERT_OK(db_->Delete(WriteOptions(), "foo"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
+  uint32_t default_cf_id = db_->DefaultColumnFamily()->GetID();
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+
+  TEST_SYNC_POINT("TitanDBTest::AsyncInitializeGC:ReleaseInitialization");
+  TEST_SYNC_POINT("TitanDBTest::AsyncInitializeGC:Wait");
+  // GC the first blob file.
+  ASSERT_OK(db_impl_->TEST_StartGC(default_cf_id));
+  ASSERT_EQ(2, GetBlobStorage().lock()->NumBlobFiles());
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+  ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
+  VerifyDB({{"bar", "v1"}});
 }
 
 TEST_F(TitanDBTest, Basic) {
@@ -1436,7 +1476,7 @@ TEST_F(TitanDBTest, GCAfterReopen) {
   // Sync point to verify GC stat recovered after reopen.
   std::atomic<int> num_gc_job{0};
   SyncPoint::GetInstance()->SetCallBack(
-      "TitanDBImpl::OpenImpl:BeforeInitialized", [&](void* arg) {
+      "TitanDBImpl::AsyncInitializeGC:BeforeSetInitialized", [&](void* arg) {
         TitanDBImpl* db_impl = reinterpret_cast<TitanDBImpl*>(arg);
         blob_storage =
             db_impl->TEST_GetBlobStorage(db_impl->DefaultColumnFamily());

@@ -168,20 +168,20 @@ class TableBuilderTest : public testing::Test {
     cf_moptions_ = MutableCFOptions(cf_options_);
     cf_ioptions_ = ImmutableCFOptions(cf_options_);
     ioptions_ = ImmutableOptions(db_ioptions_, cf_ioptions_);
-    blob_file_set_.reset(new BlobFileSet(db_options_, nullptr));
+    blob_file_set_.reset(new BlobFileSet(db_options_, nullptr, nullptr));
     std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
     db_impl_.reset(new TitanDBImpl(db_options_, tmpdir_));
     db_impl_->TEST_set_initialized(true);
-    blob_file_set_->AddColumnFamilies(cfs);
+    blob_file_set_->Open(cfs);
     blob_manager_.reset(new FileManager(db_options_, blob_file_set_.get()));
     // Replace base table facotry.
     base_table_factory_ =
         std::make_shared<TestTableFactory>(cf_options_.table_factory);
     cf_options_.table_factory = base_table_factory_;
     cf_ioptions_.table_factory = base_table_factory_;
-    table_factory_.reset(new TitanTableFactory(
-        db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-        blob_file_set_.get(), nullptr));
+    table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                               blob_manager_, &mutex_,
+                                               blob_file_set_.get(), nullptr));
   }
 
   void BlobFileExists(bool exists) {
@@ -288,32 +288,6 @@ class TableBuilderTest : public testing::Test {
   std::unique_ptr<BlobFileSet> blob_file_set_;
 };
 
-// Before TitanDBImpl initialized, table factory should return base table
-// builder.
-TEST_F(TableBuilderTest, BeforeDBInitialized) {
-  CompressionOptions compression_opts;
-  TableBuilderOptions opts(
-      ioptions_, cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
-      kNoCompression, compression_opts, 0 /*column_family_id*/,
-      kDefaultColumnFamilyName, 0 /*target_level*/);
-
-  db_impl_->TEST_set_initialized(false);
-  std::unique_ptr<WritableFileWriter> file1;
-  NewBaseFileWriter(&file1);
-  std::unique_ptr<TableBuilder> builder1(
-      table_factory_->NewTableBuilder(opts, file1.get()));
-  ASSERT_EQ(builder1.get(), base_table_factory_->latest_table_builder());
-  builder1->Abandon();
-
-  db_impl_->TEST_set_initialized(true);
-  std::unique_ptr<WritableFileWriter> file2;
-  NewBaseFileWriter(&file2);
-  std::unique_ptr<TableBuilder> builder2(
-      table_factory_->NewTableBuilder(opts, file2.get()));
-  ASSERT_NE(builder2.get(), base_table_factory_->latest_table_builder());
-  builder2->Abandon();
-}
-
 TEST_F(TableBuilderTest, Basic) {
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
@@ -380,9 +354,9 @@ TEST_F(TableBuilderTest, DictCompress) {
   cf_options_.blob_file_compression_options = compression_opts;
   cf_options_.blob_file_compression = kZSTD;
 
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
 
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
@@ -449,9 +423,9 @@ TEST_F(TableBuilderTest, DictCompressOptions) {
   cf_options_.blob_file_compression_options = compression_opts;
   cf_options_.blob_file_compression = kZSTD;
 
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
 
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
@@ -484,9 +458,9 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
   cf_options_.blob_file_compression_options = compression_opts;
   cf_options_.blob_file_compression = kZSTD;
 
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
 
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
@@ -651,9 +625,9 @@ TEST_F(TableBuilderTest, NumEntries) {
 // To test size of each blob file is around blob_file_target_size after building
 TEST_F(TableBuilderTest, TargetSize) {
   cf_options_.blob_file_target_size = kTargetBlobFileSize;
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);
   std::unique_ptr<TableBuilder> table_builder;
@@ -776,9 +750,9 @@ TEST_F(TableBuilderTest, LevelMerge) {
 TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
 #if ZSTD_VERSION_NUMBER >= 10103
   cf_options_.level_merge = true;
-  table_factory_.reset(new TitanTableFactory(
-      db_options_, cf_options_, db_impl_.get(), blob_manager_, &mutex_,
-      blob_file_set_.get(), nullptr));
+  table_factory_.reset(new TitanTableFactory(db_options_, cf_options_,
+                                             blob_manager_, &mutex_,
+                                             blob_file_set_.get(), nullptr));
 
   std::unique_ptr<WritableFileWriter> base_file;
   NewBaseFileWriter(&base_file);

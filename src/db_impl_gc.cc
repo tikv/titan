@@ -4,6 +4,7 @@
 #include "blob_file_size_collector.h"
 #include "blob_gc_job.h"
 #include "blob_gc_picker.h"
+#include "db/version_set.h"
 #include "db_impl.h"
 #include "titan_logging.h"
 #include "util.h"
@@ -49,61 +50,125 @@ Status TitanDBImpl::ExtractGCStatsFromTableProperty(
   return Status::OK();
 }
 
-Status TitanDBImpl::InitializeGC(
+Status TitanDBImpl::AsyncInitializeGC(
     const std::vector<ColumnFamilyHandle*>& cf_handles) {
-  assert(!initialized());
-  Status s;
+  std::vector<std::pair<uint32_t, Version*>> cfs;
   FlushOptions flush_opts;
   flush_opts.wait = true;
   for (ColumnFamilyHandle* cf_handle : cf_handles) {
-    // Flush memtable to make sure keys written by GC are all in SSTs.
-    s = Flush(flush_opts, cf_handle);
-    if (!s.ok()) {
-      return s;
-    }
-    TablePropertiesCollection collection;
-    s = GetPropertiesOfAllTables(cf_handle, &collection);
-    if (!s.ok()) {
-      return s;
-    }
-    std::map<uint64_t, int64_t> blob_file_size_diff;
-    for (auto& file : collection) {
-      s = ExtractGCStatsFromTableProperty(file.second, true /*to_add*/,
-                                          &blob_file_size_diff);
-      if (!s.ok()) {
-        return s;
-      }
-    }
     std::shared_ptr<BlobStorage> blob_storage =
         blob_file_set_->GetBlobStorage(cf_handle->GetID()).lock();
     assert(blob_storage != nullptr);
-    for (auto& file_size : blob_file_size_diff) {
-      assert(file_size.second >= 0);
-      std::shared_ptr<BlobFileMeta> file =
-          blob_storage->FindFile(file_size.first).lock();
-      if (file != nullptr) {
-        assert(file->live_data_size() == 0);
-        file->set_live_data_size(static_cast<uint64_t>(file_size.second));
-        AddStats(stats_.get(), cf_handle->GetID(),
-                 file->GetDiscardableRatioLevel(), 1);
+    blob_storage->StartInitializeAllFiles();
+
+    // Flush memtable to make sure keys written by GC are all in SSTs.
+    auto s = Flush(flush_opts, cf_handle);
+    if (!s.ok()) {
+      return s;
+    }
+
+    // Hold the version and increment the ref count
+    auto cfh = static_cast_with_check<ColumnFamilyHandleImpl>(cf_handle);
+    auto cfd = cfh->cfd();
+    db_impl_->mutex()->Lock();
+    auto version = cfd->current();
+    version->Ref();
+    db_impl_->mutex()->Unlock();
+
+    cfs.push_back(std::make_pair(cf_handle->GetID(), version));
+  }
+
+  thread_initialize_gc_.reset(new port::Thread([=]() {
+    Status s;
+
+    auto unref = [=](Version* version) {
+      db_impl_->mutex()->Lock();
+      version->Unref();
+      db_impl_->mutex()->Unlock();
+    };
+
+    TEST_SYNC_POINT_CALLBACK("TitanDBImpl::AsyncInitializeGC:Begin", this);
+    for (auto cf : cfs) {
+      if (shuting_down_.load(std::memory_order_acquire)) {
+        unref(cf.second);
+        continue;
+      }
+      auto cf_handle = db_impl_->GetColumnFamilyHandleUnlocked(cf.first);
+      if (!cf_handle) {
+        unref(cf.second);
+        continue;
+      }
+      TITAN_LOG_INFO(db_options_.info_log,
+                     "Titan begin async GC initialization on cf [%s]",
+                     cf_handle->GetName().c_str());
+      TablePropertiesCollection collection;
+      // this operation may be slow
+      s = cf.second->GetPropertiesOfAllTables(&collection);
+      unref(cf.second);
+      if (!s.ok()) {
+        MutexLock l(&mutex_);
+        this->SetBGError(s);
+        return;
+      }
+
+      std::map<uint64_t, int64_t> blob_file_size_diff;
+      for (auto& file : collection) {
+        s = ExtractGCStatsFromTableProperty(file.second, true /*to_add*/,
+                                            &blob_file_size_diff);
+        if (!s.ok()) {
+          MutexLock l(&mutex_);
+          this->SetBGError(s);
+          return;
+        }
+      }
+
+      mutex_.Lock();
+      std::shared_ptr<BlobStorage> blob_storage =
+          blob_file_set_->GetBlobStorage(cf_handle->GetID()).lock();
+      mutex_.Unlock();
+      assert(blob_storage != nullptr);
+      for (auto& file_size : blob_file_size_diff) {
+        assert(file_size.second >= 0);
+        std::shared_ptr<BlobFileMeta> file =
+            blob_storage->FindFile(file_size.first).lock();
+        if (file != nullptr) {
+          file->UpdateLiveDataSize(file_size.second);
+        }
+      }
+      blob_storage->InitializeAllFiles();
+      TITAN_LOG_INFO(db_options_.info_log,
+                     "Titan finish async GC initialization on cf [%s]",
+                     cf_handle->GetName().c_str());
+    }
+
+    if (!shuting_down_.load(std::memory_order_acquire)) {
+      TEST_SYNC_POINT_CALLBACK(
+          "TitanDBImpl::AsyncInitializeGC:BeforeSetInitialized", this);
+      // Initialization done.
+      initialized_.store(true, std::memory_order_release);
+      {
+        MutexLock l(&mutex_);
+        for (auto cf : cfs) {
+          std::shared_ptr<BlobStorage> blob_storage =
+              blob_file_set_->GetBlobStorage(cf.first).lock();
+          blob_storage->ComputeGCScore();
+          AddToGCQueue(cf.first);
+        }
+        MaybeScheduleGC();
       }
     }
-    blob_storage->InitializeAllFiles();
-  }
-  {
-    MutexLock l(&mutex_);
-    for (ColumnFamilyHandle* cf_handle : cf_handles) {
-      AddToGCQueue(cf_handle->GetID());
-    }
-    MaybeScheduleGC();
-  }
-  return s;
+    TEST_SYNC_POINT_CALLBACK("TitanDBImpl::AsyncInitializeGC:End", this);
+  }));
+
+  return Status::OK();
 }
 
 void TitanDBImpl::MaybeScheduleGC() {
   mutex_.AssertHeld();
 
   if (db_options_.disable_background_gc) return;
+
+  if (!initialized_.load(std::memory_order_acquire)) return;
 
   if (shuting_down_.load(std::memory_order_acquire)) return;
 

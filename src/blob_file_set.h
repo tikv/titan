@@ -33,7 +33,8 @@ struct LogReporter : public log::Reader::Reporter {
 // It records blob file meta in terms of column family.
 class BlobFileSet {
  public:
-  explicit BlobFileSet(const TitanDBOptions& options, TitanStats* stats);
+  explicit BlobFileSet(const TitanDBOptions& options, TitanStats* stats,
+                       std::atomic<bool>* initialized);
 
   // Sets up the storage specified in "options.dirname".
   // If the manifest doesn't exist, it will create one.
@@ -93,6 +94,8 @@ class BlobFileSet {
     return obsolete_columns_.count(cf_id) > 0;
   }
 
+  bool IsOpened() { return opened_.load(std::memory_order_acquire); }
+
  private:
   friend class BlobFileSizeCollectorTest;
   friend class VersionTest;
@@ -110,6 +113,12 @@ class BlobFileSet {
   std::shared_ptr<Cache> file_cache_;
 
   TitanStats* stats_;
+  port::Mutex* mutex_;
+
+  // Indicate whether the gc initialization is finished.
+  std::atomic<bool>* initialized_;
+  // Indicate whether the blob file set Open is called.
+  std::atomic<bool> opened_{false};
 
   std::vector<std::string> obsolete_manifests_;
 

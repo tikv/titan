@@ -10,12 +10,14 @@ namespace titandb {
 
 const size_t kMaxFileCacheSize = 1024 * 1024;
 
-BlobFileSet::BlobFileSet(const TitanDBOptions& options, TitanStats* stats)
+BlobFileSet::BlobFileSet(const TitanDBOptions& options, TitanStats* stats,
+                         std::atomic<bool>* initialized)
     : dirname_(options.dirname),
       env_(options.env),
       env_options_(options),
       db_options_(options),
-      stats_(stats) {
+      stats_(stats),
+      initialized_(initialized) {
   auto file_cache_size = db_options_.max_open_files;
   if (file_cache_size < 0) {
     file_cache_size = kMaxFileCacheSize;
@@ -77,6 +79,7 @@ Status BlobFileSet::Recover() {
       s = collector.AddEdit(edit);
       if (!s.ok()) return s;
     }
+    if (!s.ok()) return s;
     s = collector.Seal(*this);
     if (!s.ok()) return s;
     s = collector.Apply(*this);
@@ -89,7 +92,6 @@ Status BlobFileSet::Recover() {
     TITAN_LOG_INFO(db_options_.info_log,
                    "Next blob file number is %" PRIu64 ".", next_file_number);
   }
-
   auto new_manifest_file_number = NewFileNumber();
   s = OpenManifest(new_manifest_file_number);
   if (!s.ok()) return s;
@@ -171,6 +173,8 @@ Status BlobFileSet::OpenManifest(uint64_t file_number) {
     manifest_.reset();
     manifest_file_number_ = old_manifest_file_number;
     obsolete_manifests_.emplace_back(file_name);
+  } else {
+    opened_.store(true, std::memory_order_release);
   }
   return s;
 }
@@ -232,7 +236,7 @@ void BlobFileSet::AddColumnFamilies(
     auto file_cache = std::make_shared<BlobFileCache>(db_options_, cf.second,
                                                       file_cache_, stats_);
     auto blob_storage = std::make_shared<BlobStorage>(
-        db_options_, cf.second, cf.first, file_cache, stats_);
+        db_options_, cf.second, cf.first, file_cache, stats_, initialized_);
     if (stats_ != nullptr) {
       stats_->InitializeCF(cf.first, blob_storage);
     }

@@ -543,9 +543,13 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
 
   mutex_->Lock();
   auto cf_id = blob_gc_->column_family_handle()->GetID();
-  for (auto blob_file : dropped) {
-    auto blob_storage = blob_file_set_->GetBlobStorage(cf_id).lock();
-    if (blob_storage) {
+  auto blob_storage = blob_file_set_->GetBlobStorage(cf_id).lock();
+  mutex_->Unlock();
+  if (!blob_storage) {
+    TITAN_LOG_ERROR(db_options_.info_log,
+                    "Column family id:%" PRIu32 " not found when GC.", cf_id);
+  } else {
+    for (auto blob_file : dropped) {
       auto file = blob_storage->FindFile(blob_file.first).lock();
       if (!file) {
         TITAN_LOG_ERROR(db_options_.info_log,
@@ -553,17 +557,10 @@ Status BlobGCJob::RewriteValidKeyToLSM() {
                         blob_file.first);
         continue;
       }
-      SubStats(stats_, cf_id, file->GetDiscardableRatioLevel(), 1);
       file->UpdateLiveDataSize(-blob_file.second);
-      AddStats(stats_, cf_id, file->GetDiscardableRatioLevel(), 1);
-
-      blob_storage->ComputeGCScore();
-    } else {
-      TITAN_LOG_ERROR(db_options_.info_log,
-                      "Column family id:%" PRIu32 " not Found when GC.", cf_id);
     }
+    blob_storage->ComputeGCScore();
   }
-  mutex_->Unlock();
 
   if (s.ok()) {
     // Flush and sync WAL.

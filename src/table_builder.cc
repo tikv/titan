@@ -168,8 +168,6 @@ void TitanTableBuilder::AddBlob(const ParsedInternalKey& ikey,
   RecordTick(statistics(stats_), TITAN_BLOB_FILE_NUM_KEYS_WRITTEN);
   RecordInHistogram(statistics(stats_), TITAN_KEY_SIZE, record.key.size());
   RecordInHistogram(statistics(stats_), TITAN_VALUE_SIZE, record.value.size());
-  AddStats(stats_, cf_id_, TitanInternalStats::LIVE_BLOB_SIZE,
-           record.value.size());
   bytes_written_ += record.key.size() + record.value.size();
 
   std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
@@ -241,6 +239,7 @@ void TitanTableBuilder::FinishBlobFile() {
           blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(),
           blob_builder_->NumEntries(), target_level_,
           blob_builder_->GetSmallestKey(), blob_builder_->GetLargestKey());
+      file->set_live_data_size(blob_builder_->live_data_size());
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
       finished_blobs_.push_back({file, std::move(blob_handle_)});
       // level merge is performed
