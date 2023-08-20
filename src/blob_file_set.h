@@ -33,7 +33,8 @@ struct LogReporter : public log::Reader::Reporter {
 // It records blob file meta in terms of column family.
 class BlobFileSet {
  public:
-  explicit BlobFileSet(const TitanDBOptions& options, TitanStats* stats);
+  explicit BlobFileSet(const TitanDBOptions& options, TitanStats* stats,
+                       port::Mutex* mutex);
 
   // Sets up the storage specified in "options.dirname".
   // If the manifest doesn't exist, it will create one.
@@ -94,6 +95,8 @@ class BlobFileSet {
   }
 
  private:
+  struct ManifestWriter;
+
   friend class BlobFileSizeCollectorTest;
   friend class VersionTest;
 
@@ -110,6 +113,7 @@ class BlobFileSet {
   std::shared_ptr<Cache> file_cache_;
 
   TitanStats* stats_;
+  port::Mutex* mutex_;
 
   std::vector<std::string> obsolete_manifests_;
 
@@ -125,6 +129,8 @@ class BlobFileSet {
   std::unique_ptr<log::Writer> manifest_;
   std::atomic<uint64_t> next_file_number_{1};
   uint64_t manifest_file_number_;
+
+  std::deque<ManifestWriter*> manifest_writers_;
 };
 
 }  // namespace titandb

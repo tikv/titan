@@ -10,12 +10,14 @@ namespace titandb {
 
 const size_t kMaxFileCacheSize = 1024 * 1024;
 
-BlobFileSet::BlobFileSet(const TitanDBOptions& options, TitanStats* stats)
+BlobFileSet::BlobFileSet(const TitanDBOptions& options, TitanStats* stats,
+                         port::Mutex* mutex)
     : dirname_(options.dirname),
       env_(options.env),
       env_options_(options),
       db_options_(options),
-      stats_(stats) {
+      stats_(stats),
+      mutex_(mutex) {
   auto file_cache_size = db_options_.max_open_files;
   if (file_cache_size < 0) {
     file_cache_size = kMaxFileCacheSize;
@@ -206,8 +208,8 @@ Status BlobFileSet::WriteSnapshot(log::Writer* log) {
 }
 
 Status BlobFileSet::LogAndApply(VersionEdit& edit) {
+  mutex_->AssertHeld();
   TEST_SYNC_POINT("BlobFileSet::LogAndApply");
-  // TODO(@huachao): write manifest file unlocked
   std::string record;
   edit.SetNextFileNumber(next_file_number_.load());
   edit.EncodeTo(&record);
@@ -220,9 +222,12 @@ Status BlobFileSet::LogAndApply(VersionEdit& edit) {
   s = manifest_->AddRecord(record);
   if (!s.ok()) return s;
 
+  mutex_->Unlock();
   ImmutableDBOptions ioptions(db_options_);
   s = SyncTitanManifest(stats_, &ioptions, manifest_->file());
+  mutex_->Lock();
   if (!s.ok()) return s;
+
   return collector.Apply(*this);
 }
 

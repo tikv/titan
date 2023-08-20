@@ -110,6 +110,7 @@ class TitanDBTest : public testing::Test {
   }
 
   Status LogAndApply(VersionEdit& edit) {
+    MutexLock l(&db_impl_->mutex_);
     return db_impl_->blob_file_set_->LogAndApply(edit);
   }
 
