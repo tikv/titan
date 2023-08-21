@@ -208,6 +208,7 @@ Status BlobFileSet::WriteSnapshot(log::Writer* log) {
   return s;
 }
 
+// A helper class to collect all the information needed for manifest write.
 struct BlobFileSet::ManifestWriter {
   Status status;
   bool done;
@@ -234,11 +235,14 @@ Status BlobFileSet::LogAndApply(VersionEdit& edit) {
   ManifestWriter writer(mutex_, collector, edit);
   manifest_writers_.push_back(&writer);
 
+  // The head of queue is the writer that is responsible for writing manifest
+  // for the group. Thw write group makes sure only one thread is writing to the
+  // manifest, otherwise the manifest will be corrupted.
   while (!writer.done && &writer != manifest_writers_.front()) {
     writer.cv.Wait();
   }
   if (writer.done) {
-    // the writer is handled by other writers, just return here
+    // The writer is handled by the head of queue's writer, just return here
     return writer.status;
   }
 
@@ -273,13 +277,14 @@ Status BlobFileSet::LogAndApply(VersionEdit& edit) {
 
   if (s.ok()) {
     for (auto& c : collectors) {
+      // Apply the version edit to blob file set
       s = c->Apply(*this);
       if (!s.ok()) {
         break;
       }
     }
   }
-  // wake up all the waiting writers
+  // Wake up all the waiting writers
   while (true) {
     ManifestWriter* ready = manifest_writers_.front();
     manifest_writers_.pop_front();
