@@ -46,11 +46,21 @@ class TitanThreadSafetyTest : public testing::Test {
     db_impl_ = reinterpret_cast<TitanDBImpl*>(db_);
   }
 
+  void Reopen() {
+    Close();
+    Open();
+  }
+
   void Close() {
     if (!db_) return;
     ASSERT_OK(db_->Close());
     delete db_;
     db_ = nullptr;
+  }
+
+  void LogAndApply(VersionEdit& edit) {
+    MutexLock l(&db_impl_->mutex_);
+    ASSERT_OK(db_impl_->blob_file_set_->LogAndApply(edit));
   }
 
   void GC(ColumnFamilyHandle* handle) {
@@ -277,6 +287,55 @@ TEST_F(TitanThreadSafetyTest, InsertAndDelete) {
              ASSERT_TRUE(handle != nullptr);
              GC(handle);
            }});
+}
+
+TEST_F(TitanThreadSafetyTest, LogAndApply) {
+  Open();
+
+  std::vector<port::Thread> threads;
+  for (uint32_t i = 0; i < param_.repeat; i++) {
+    threads.emplace_back([&, i] {
+      auto cf_id = db_->DefaultColumnFamily()->GetID();
+      for (int j = 0; j < 100; j++) {
+        auto file_number = i * 100 + j;
+        if (file_number == 0) {
+          continue;
+        }
+        VersionEdit edit;
+        edit.SetColumnFamilyID(0);
+        edit.AddBlobFile(
+            std::make_shared<BlobFileMeta>(file_number, 1, 0, 0, "", ""));
+        LogAndApply(edit);
+
+        if (j % 2 == 0) {
+          VersionEdit edit1;
+          edit1.SetColumnFamilyID(cf_id);
+          edit1.DeleteBlobFile(file_number, 0);
+          LogAndApply(edit1);
+        }
+      }
+    });
+  }
+  std::for_each(threads.begin(), threads.end(),
+                std::mem_fn(&port::Thread::join));
+
+  db_impl_->TEST_PurgeObsoleteFiles();
+  auto verify = [&]() {
+    std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+    std::shared_ptr<BlobStorage> blob_storage =
+        db_impl_->TEST_GetBlobStorage(db_->DefaultColumnFamily());
+    blob_storage->ExportBlobFiles(blob_files);
+
+    auto count = 0;
+    for (auto& file : blob_files) {
+      ASSERT_EQ(file.first, count * 2 + 1);
+      count++;
+    }
+    ASSERT_EQ(count, param_.repeat * 50);
+  };
+  verify();
+  Reopen();
+  verify();
 }
 
 }  // namespace titandb

@@ -210,28 +210,95 @@ Status BlobFileSet::WriteSnapshot(log::Writer* log) {
   return s;
 }
 
+struct BlobFileSet::ManifestWriter {
+  Status status;
+  bool done;
+  port::CondVar cv;
+  EditCollector& collector;
+  VersionEdit& edit;
+
+  explicit ManifestWriter(port::Mutex* mu, EditCollector& collector,
+                          VersionEdit& edit)
+      : done(false), cv(mu), collector(collector), edit(edit) {}
+};
+
 Status BlobFileSet::LogAndApply(VersionEdit& edit) {
   mutex_->AssertHeld();
   TEST_SYNC_POINT("BlobFileSet::LogAndApply");
-  std::string record;
   edit.SetNextFileNumber(next_file_number_.load());
-  edit.EncodeTo(&record);
 
   EditCollector collector;
   Status s = collector.AddEdit(edit);
   if (!s.ok()) return s;
   s = collector.Seal(*this);
   if (!s.ok()) return s;
-  s = manifest_->AddRecord(record);
-  if (!s.ok()) return s;
 
-  mutex_->Unlock();
-  ImmutableDBOptions ioptions(db_options_);
-  s = SyncTitanManifest(stats_, &ioptions, manifest_->file());
-  mutex_->Lock();
-  if (!s.ok()) return s;
+  ManifestWriter writer(mutex_, collector, edit);
+  manifest_writers_.push_back(&writer);
 
-  return collector.Apply(*this);
+  while (!writer.done && &writer != manifest_writers_.front()) {
+    writer.cv.Wait();
+  }
+  if (writer.done) {
+    // the writer is handled by other writers, just return here
+    return writer.status;
+  }
+
+  std::vector<VersionEdit*> batch_edits;
+  std::vector<EditCollector*> collectors;
+  ManifestWriter* last_writer = nullptr;
+  auto it = manifest_writers_.cbegin();
+  while (it != manifest_writers_.cend()) {
+    last_writer = *(it++);
+    assert(last_writer != nullptr);
+    batch_edits.push_back(&last_writer->edit);
+    collectors.push_back(&last_writer->collector);
+  }
+
+  {
+    // Perform IO out of lock
+    mutex_->Unlock();
+    for (auto& e : batch_edits) {
+      std::string record;
+      e->EncodeTo(&record);
+      s = manifest_->AddRecord(record);
+      if (!s.ok()) {
+        break;
+      }
+    }
+    if (s.ok()) {
+      ImmutableDBOptions ioptions(db_options_);
+      s = SyncTitanManifest(stats_, &ioptions, manifest_->file());
+    }
+    mutex_->Lock();
+  }
+
+  if (s.ok()) {
+    for (auto& c : collectors) {
+      s = c->Apply(*this);
+      if (!s.ok()) {
+        break;
+      }
+    }
+  }
+  // wake up all the waiting writers
+  while (true) {
+    ManifestWriter* ready = manifest_writers_.front();
+    manifest_writers_.pop_front();
+    ready->status = s;
+    ready->done = true;
+    if (ready != &writer) {
+      ready->cv.Signal();
+    }
+    if (ready == last_writer) {
+      break;
+    }
+  }
+  if (!manifest_writers_.empty()) {
+    manifest_writers_.front()->cv.Signal();
+  }
+
+  return s;
 }
 
 void BlobFileSet::AddColumnFamilies(
