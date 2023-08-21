@@ -241,7 +241,7 @@ class EditCollector {
   };
 
   Status status_{Status::OK()};
-  //
+
   bool sealed_{false};
   bool has_next_file_number_{false};
   uint64_t next_file_number_{0};
