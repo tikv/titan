@@ -79,6 +79,7 @@ Status BlobFileSet::Recover() {
       s = collector.AddEdit(edit);
       if (!s.ok()) return s;
     }
+    if (!s.ok()) return s;
     s = collector.Seal(*this);
     if (!s.ok()) return s;
     s = collector.Apply(*this);
