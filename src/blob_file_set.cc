@@ -217,9 +217,9 @@ struct BlobFileSet::ManifestWriter {
   EditCollector& collector;
   VersionEdit& edit;
 
-  explicit ManifestWriter(port::Mutex* mu, EditCollector& collector,
-                          VersionEdit& edit)
-      : done(false), cv(mu), collector(collector), edit(edit) {}
+  explicit ManifestWriter(port::Mutex* mu, EditCollector& _collector,
+                          VersionEdit& _edit)
+      : done(false), cv(mu), collector(_collector), edit(_edit) {}
 };
 
 Status BlobFileSet::LogAndApply(VersionEdit& edit) {
