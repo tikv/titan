@@ -266,7 +266,7 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
   // Note that info log is initialized after `CreateLoggerFromOptions`,
   // so new `BlobFileSet` here but not in constructor is to get a proper info
   // log.
-  blob_file_set_.reset(new BlobFileSet(db_options_, stats_.get()));
+  blob_file_set_.reset(new BlobFileSet(db_options_, stats_.get(), &mutex_));
   // Setup options.
   db_options_.listeners.emplace_back(std::make_shared<BaseDbListener>(this));
   // Descriptors for actually open DB.
