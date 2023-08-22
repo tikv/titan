@@ -168,9 +168,10 @@ class TableBuilderTest : public testing::Test {
     cf_moptions_ = MutableCFOptions(cf_options_);
     cf_ioptions_ = ImmutableCFOptions(cf_options_);
     ioptions_ = ImmutableOptions(db_ioptions_, cf_ioptions_);
-    blob_file_set_.reset(new BlobFileSet(db_options_, nullptr));
-    std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
     db_impl_.reset(new TitanDBImpl(db_options_, tmpdir_));
+    blob_file_set_.reset(
+        new BlobFileSet(db_options_, nullptr, &db_impl_->mutex_));
+    std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
     db_impl_->TEST_set_initialized(true);
     blob_file_set_->AddColumnFamilies(cfs);
     blob_manager_.reset(new FileManager(db_options_, blob_file_set_.get()));

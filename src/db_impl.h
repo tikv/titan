@@ -186,6 +186,8 @@ class TitanDBImpl : public TitanDB {
   friend class TitanThreadSafetyTest;
   friend class TitanCompactionFilterFactory;
   friend class TitanCompactionFilter;
+  friend class TableBuilderTest;
+  friend class TitanThreadSafetyTest;
 
   Status OpenImpl(const std::vector<TitanCFDescriptor>& descs,
                   std::vector<ColumnFamilyHandle*>* handles);
