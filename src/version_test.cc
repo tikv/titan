@@ -50,7 +50,8 @@ class VersionTest : public testing::Test {
     DeleteDir(env_, db_options_.dirname);
     env_->CreateDirIfMissing(db_options_.dirname);
 
-    blob_file_set_.reset(new BlobFileSet(db_options_, nullptr, nullptr));
+    blob_file_set_.reset(
+        new BlobFileSet(db_options_, nullptr, nullptr, &mutex_));
     ASSERT_OK(blob_file_set_->Open({}));
     column_families_.clear();
     // Sets up some column families.
@@ -270,7 +271,10 @@ TEST_F(VersionTest, ObsoleteFiles) {
   ASSERT_EQ(of.size(), 1);
 
   std::vector<uint32_t> cfs = {1};
-  ASSERT_OK(blob_file_set_->DropColumnFamilies(cfs, 0));
+  {
+    MutexLock l(&mutex_);
+    ASSERT_OK(blob_file_set_->DropColumnFamilies(cfs, 0));
+  }
   blob_file_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
   ASSERT_EQ(of.size(), 1);
   CheckColumnFamiliesSize(10);
@@ -328,14 +332,20 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
   RangePtr range(&begin, &end);
   auto blob = blob_file_set_->GetBlobStorage(1).lock();
 
-  blob_file_set_->DeleteBlobFilesInRanges(1, &range, 1, false /* include_end */,
-                                          0);
+  {
+    MutexLock l(&mutex_);
+    blob_file_set_->DeleteBlobFilesInRanges(1, &range, 1,
+                                            false /* include_end */, 0);
+  }
   ASSERT_EQ(blob->NumBlobFiles(), metas.size());
   // obsolete files: 6, 8, 10
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 3);
 
-  blob_file_set_->DeleteBlobFilesInRanges(1, &range, 1, true /* include_end */,
-                                          0);
+  {
+    MutexLock l(&mutex_);
+    blob_file_set_->DeleteBlobFilesInRanges(1, &range, 1,
+                                            true /* include_end */, 0);
+  }
   ASSERT_EQ(blob->NumBlobFiles(), metas.size());
   // obsolete file: 6, 8, 9, 10, 13
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 5);
@@ -348,14 +358,20 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
   Slice end1 = Slice("99");
   RangePtr range1(&begin1, &end1);
 
-  blob_file_set_->DeleteBlobFilesInRanges(1, &range1, 1,
-                                          false /* include_end */, 0);
+  {
+    MutexLock l(&mutex_);
+    blob_file_set_->DeleteBlobFilesInRanges(1, &range1, 1,
+                                            false /* include_end */, 0);
+  }
   // obsolete file: 2, 3, 4, 5, 11, 12
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 6);
 
-  RangePtr range2(nullptr, nullptr);
-  blob_file_set_->DeleteBlobFilesInRanges(1, &range2, 1, true /* include_end */,
-                                          0);
+  {
+    MutexLock l(&mutex_);
+    RangePtr range2(nullptr, nullptr);
+    blob_file_set_->DeleteBlobFilesInRanges(1, &range2, 1,
+                                            true /* include_end */, 0);
+  }
   // obsolete file: 1, 2, 3, 4, 5, 7, 11, 12, 14
   ASSERT_EQ(blob->NumObsoleteBlobFiles(), 9);
 

@@ -11,12 +11,13 @@ namespace titandb {
 const size_t kMaxFileCacheSize = 1024 * 1024;
 
 BlobFileSet::BlobFileSet(const TitanDBOptions& options, TitanStats* stats,
-                         std::atomic<bool>* initialized)
+                         std::atomic<bool>* initialized, port::Mutex* mutex)
     : dirname_(options.dirname),
       env_(options.env),
       env_options_(options),
       db_options_(options),
       stats_(stats),
+      mutex_(mutex),
       initialized_(initialized) {
   auto file_cache_size = db_options_.max_open_files;
   if (file_cache_size < 0) {
@@ -209,25 +210,100 @@ Status BlobFileSet::WriteSnapshot(log::Writer* log) {
   return s;
 }
 
+// A helper class to collect all the information needed for manifest write.
+struct BlobFileSet::ManifestWriter {
+  Status status;
+  bool done;
+  port::CondVar cv;
+  EditCollector& collector;
+  VersionEdit& edit;
+
+  explicit ManifestWriter(port::Mutex* mu, EditCollector& _collector,
+                          VersionEdit& _edit)
+      : done(false), cv(mu), collector(_collector), edit(_edit) {}
+};
+
 Status BlobFileSet::LogAndApply(VersionEdit& edit) {
+  mutex_->AssertHeld();
   TEST_SYNC_POINT("BlobFileSet::LogAndApply");
-  // TODO(@huachao): write manifest file unlocked
-  std::string record;
   edit.SetNextFileNumber(next_file_number_.load());
-  edit.EncodeTo(&record);
 
   EditCollector collector;
   Status s = collector.AddEdit(edit);
   if (!s.ok()) return s;
   s = collector.Seal(*this);
   if (!s.ok()) return s;
-  s = manifest_->AddRecord(record);
-  if (!s.ok()) return s;
 
-  ImmutableDBOptions ioptions(db_options_);
-  s = SyncTitanManifest(stats_, &ioptions, manifest_->file());
-  if (!s.ok()) return s;
-  return collector.Apply(*this);
+  ManifestWriter writer(mutex_, collector, edit);
+  manifest_writers_.push_back(&writer);
+
+  // The head of queue is the writer that is responsible for writing manifest
+  // for the group. Thw write group makes sure only one thread is writing to the
+  // manifest, otherwise the manifest will be corrupted.
+  while (!writer.done && &writer != manifest_writers_.front()) {
+    writer.cv.Wait();
+  }
+  if (writer.done) {
+    // The writer is handled by the head of queue's writer, just return here
+    return writer.status;
+  }
+
+  std::vector<VersionEdit*> batch_edits;
+  std::vector<EditCollector*> collectors;
+  ManifestWriter* last_writer = nullptr;
+  auto it = manifest_writers_.cbegin();
+  while (it != manifest_writers_.cend()) {
+    last_writer = *(it++);
+    assert(last_writer != nullptr);
+    batch_edits.push_back(&last_writer->edit);
+    collectors.push_back(&last_writer->collector);
+  }
+
+  {
+    // Perform IO out of lock
+    mutex_->Unlock();
+    for (auto& e : batch_edits) {
+      std::string record;
+      e->EncodeTo(&record);
+      s = manifest_->AddRecord(record);
+      if (!s.ok()) {
+        break;
+      }
+    }
+    if (s.ok()) {
+      ImmutableDBOptions ioptions(db_options_);
+      s = SyncTitanManifest(stats_, &ioptions, manifest_->file());
+    }
+    mutex_->Lock();
+  }
+
+  if (s.ok()) {
+    for (auto& c : collectors) {
+      // Apply the version edit to blob file set
+      s = c->Apply(*this);
+      if (!s.ok()) {
+        break;
+      }
+    }
+  }
+  // Wake up all the waiting writers
+  while (true) {
+    ManifestWriter* ready = manifest_writers_.front();
+    manifest_writers_.pop_front();
+    ready->status = s;
+    ready->done = true;
+    if (ready != &writer) {
+      ready->cv.Signal();
+    }
+    if (ready == last_writer) {
+      break;
+    }
+  }
+  if (!manifest_writers_.empty()) {
+    manifest_writers_.front()->cv.Signal();
+  }
+
+  return s;
 }
 
 void BlobFileSet::AddColumnFamilies(
