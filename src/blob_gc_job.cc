@@ -164,11 +164,6 @@ Status BlobGCJob::DoRunGC() {
   std::unique_ptr<BlobFileHandle> blob_file_handle;
   std::unique_ptr<BlobFileBuilder> blob_file_builder;
 
-  //  uint64_t drop_entry_num = 0;
-  //  uint64_t drop_entry_size = 0;
-  //  uint64_t total_entry_num = 0;
-  //  uint64_t total_entry_size = 0;
-
   uint64_t file_size = 0;
 
   std::string last_key;
@@ -408,6 +403,7 @@ Status BlobGCJob::Finish() {
   }
 
   if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
+    TEST_SYNC_POINT("BlobGCJob::Finish::BeforeDeleteInputBlobFiles");
     s = DeleteInputBlobFiles();
   }
   TEST_SYNC_POINT("BlobGCJob::Finish::AfterRewriteValidKeyToLSM");

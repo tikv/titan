@@ -81,7 +81,7 @@ class VersionTest : public testing::Test {
   }
 
   void BuildAndCheck(std::vector<VersionEdit> edits) {
-    EditCollector collector;
+    EditCollector collector(nullptr, true);
     for (auto& edit : edits) {
       ASSERT_OK(collector.AddEdit(edit));
     }
@@ -162,7 +162,7 @@ TEST_F(VersionTest, InvalidEdit) {
   // init state
   {
     auto add1_0_4 = AddBlobFilesEdit(1, 0, 4);
-    EditCollector collector;
+    EditCollector collector(nullptr, true);
     ASSERT_OK(collector.AddEdit(add1_0_4));
     ASSERT_OK(collector.Seal(*blob_file_set_.get()));
     ASSERT_OK(collector.Apply(*blob_file_set_.get()));
@@ -171,7 +171,7 @@ TEST_F(VersionTest, InvalidEdit) {
   // delete nonexistent blobs
   {
     auto del1_4_6 = DeleteBlobFilesEdit(1, 4, 6);
-    EditCollector collector;
+    EditCollector collector(nullptr, true);
     ASSERT_OK(collector.AddEdit(del1_4_6));
     ASSERT_NOK(collector.Seal(*blob_file_set_.get()));
     ASSERT_NOK(collector.Apply(*blob_file_set_.get()));
@@ -180,7 +180,7 @@ TEST_F(VersionTest, InvalidEdit) {
   // add already existing blobs
   {
     auto add1_1_3 = AddBlobFilesEdit(1, 1, 3);
-    EditCollector collector;
+    EditCollector collector(nullptr, true);
     ASSERT_OK(collector.AddEdit(add1_1_3));
     ASSERT_NOK(collector.Seal(*blob_file_set_.get()));
     ASSERT_NOK(collector.Apply(*blob_file_set_.get()));
@@ -190,7 +190,7 @@ TEST_F(VersionTest, InvalidEdit) {
   {
     auto add1_4_5_1 = AddBlobFilesEdit(1, 4, 5);
     auto add1_4_5_2 = AddBlobFilesEdit(1, 4, 5);
-    EditCollector collector;
+    EditCollector collector(nullptr, true);
     ASSERT_OK(collector.AddEdit(add1_4_5_1));
     ASSERT_NOK(collector.AddEdit(add1_4_5_2));
     ASSERT_NOK(collector.Seal(*blob_file_set_.get()));
@@ -201,7 +201,7 @@ TEST_F(VersionTest, InvalidEdit) {
   {
     auto del1_3_4_1 = DeleteBlobFilesEdit(1, 3, 4);
     auto del1_3_4_2 = DeleteBlobFilesEdit(1, 3, 4);
-    EditCollector collector;
+    EditCollector collector(nullptr, true);
     ASSERT_OK(collector.AddEdit(del1_3_4_1));
     ASSERT_NOK(collector.AddEdit(del1_3_4_2));
     ASSERT_NOK(collector.Seal(*blob_file_set_.get()));
@@ -257,6 +257,7 @@ TEST_F(VersionTest, ObsoleteFiles) {
     auto add1_1_5 = AddBlobFilesEdit(1, 1, 5);
     MutexLock l(&mutex_);
     blob_file_set_->LogAndApply(add1_1_5);
+    blob_file_set_->GetBlobStorage(1).lock()->InitializeAllFiles();
   }
   std::vector<std::string> of;
   blob_file_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
@@ -321,7 +322,7 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
                                                std::move(metas[i].second));
     edit.AddBlobFile(file);
   }
-  EditCollector collector;
+  EditCollector collector(nullptr, true);
   ASSERT_OK(collector.AddEdit(edit));
   ASSERT_OK(collector.Seal(*blob_file_set_.get()));
   ASSERT_OK(collector.Apply(*blob_file_set_.get()));
@@ -330,6 +331,7 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
   Slice end = Slice("80");
   RangePtr range(&begin, &end);
   auto blob = blob_file_set_->GetBlobStorage(1).lock();
+  blob->InitializeAllFiles();
 
   {
     MutexLock l(&mutex_);

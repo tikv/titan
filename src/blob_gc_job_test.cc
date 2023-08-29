@@ -459,6 +459,55 @@ TEST_F(BlobGCJobTest, PurgeBlobs) {
   CheckBlobNumber(1);
 }
 
+TEST_F(BlobGCJobTest, GCWhileDeleteFilesInRange) {
+  NewDB();
+
+  for (int i = 0; i < MAX_KEY_NUM; i++) {
+    db_->Put(WriteOptions(), GenKey(i), GenValue(i));
+  }
+  Flush();
+  std::string result;
+  for (int i = 0; i < MAX_KEY_NUM; i++) {
+    db_->Delete(WriteOptions(), GenKey(i));
+  }
+  Flush();
+  CompactAll();
+
+  rocksdb::SyncPoint::GetInstance()->LoadDependency({
+      {"BlobGCJob::Finish::BeforeDeleteInputBlobFiles",
+       "BlobGCJobTest::GCWhileDeleteFilesInRange:Wait"},
+      {"BlobFileSet::LogAndApply::Wait",
+       "BlobGCJobTest::GCWhileDeleteFilesInRange:1"},
+      {"BlobGCJobTest::GCWhileDeleteFilesInRange:2",
+       "BlobFileSet::LogAndApply::AfterSyncTitanManifest"},
+  });
+  rocksdb::SyncPoint::GetInstance()->EnableProcessing();
+
+  rocksdb::port::Thread t1([&]() { RunGC(true); });
+  rocksdb::port::Thread t2([&]() {
+    TEST_SYNC_POINT("BlobGCJobTest::GCWhileDeleteFilesInRange:Wait");
+    RangePtr range(nullptr, nullptr);
+    ASSERT_OK(
+        db_->DeleteBlobFilesInRanges(db_->DefaultColumnFamily(), &range, 1));
+  });
+
+  // Wait until both `RunGC` and `DeleteBlobFilesInRanges` are processing in
+  // `LogAndApply`
+  TEST_SYNC_POINT("BlobGCJobTest::GCWhileDeleteFilesInRange:1");
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  TEST_SYNC_POINT("BlobGCJobTest::GCWhileDeleteFilesInRange:2");
+  t1.join();
+  t2.join();
+
+  Reopen();
+
+  TitanReadOptions opts;
+  auto* iter = db_->NewIterator(opts, db_->DefaultColumnFamily());
+  iter->SeekToFirst();
+  ASSERT_FALSE(iter->Valid());
+  delete iter;
+}
+
 TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   NewDB();
 
