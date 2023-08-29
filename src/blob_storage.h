@@ -70,8 +70,9 @@ class BlobStorage {
                        std::unique_ptr<BlobFilePrefetcher>* result);
 
   // Get all the blob files within the ranges.
-  Status GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
-                              bool include_end, std::vector<uint64_t>* files);
+  Status GetBlobFilesInRanges(
+      const RangePtr* ranges, size_t n, bool include_end,
+      std::vector<std::shared_ptr<BlobFileMeta>>* files);
 
   // Finds the blob file meta for the specified file number. It is a
   // corruption if the file doesn't exist.

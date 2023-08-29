@@ -108,7 +108,7 @@ class TitanGCStatsTest : public testing::Test {
 
   std::string gen_key(uint32_t key) const {
     char buf[kKeySize + 1];
-    sprintf(buf, "%010u", key);
+    snprintf(buf, sizeof(buf), "%010u", key);
     return std::string(buf);
   }
 
