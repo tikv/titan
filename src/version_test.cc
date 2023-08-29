@@ -258,6 +258,7 @@ TEST_F(VersionTest, ObsoleteFiles) {
     auto add1_1_5 = AddBlobFilesEdit(1, 1, 5);
     MutexLock l(&mutex_);
     blob_file_set_->LogAndApply(add1_1_5);
+    blob_file_set_->GetBlobStorage(1).lock()->InitializeAllFiles();
   }
   std::vector<std::string> of;
   blob_file_set_->GetObsoleteFiles(&of, kMaxSequenceNumber);
@@ -331,6 +332,7 @@ TEST_F(VersionTest, DeleteBlobsInRange) {
   Slice end = Slice("80");
   RangePtr range(&begin, &end);
   auto blob = blob_file_set_->GetBlobStorage(1).lock();
+  blob->InitializeAllFiles();
 
   {
     MutexLock l(&mutex_);
