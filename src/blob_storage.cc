@@ -42,8 +42,10 @@ Status BlobStorage::GetBlobFilesInRanges(
          it != ((end != nullptr) ? blob_ranges_.upper_bound(*end)
                                  : blob_ranges_.end());
          it++) {
-      // The file is obsolete or being GCed, so just skip.
-      if (it->second->file_state() != BlobFileMeta::FileState::kNormal) {
+      // The file is obsolete or being processed(such as GC), for safety just
+      // skip.
+      if (it->second->file_state() != BlobFileMeta::FileState::kNormal &&
+          it->second->file_state() != BlobFileMeta::FileState::kToMerge) {
         continue;
       }
 
