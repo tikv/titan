@@ -26,9 +26,9 @@ Status BlobStorage::NewPrefetcher(uint64_t file_number,
                                     result);
 }
 
-Status BlobStorage::GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
-                                         bool include_end,
-                                         std::vector<uint64_t>* files) {
+Status BlobStorage::GetBlobFilesInRanges(
+    const RangePtr* ranges, size_t n, bool include_end,
+    std::vector<std::shared_ptr<BlobFileMeta>>* files) {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < n; i++) {
     const Slice* begin = ranges[i].start;
@@ -42,8 +42,13 @@ Status BlobStorage::GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
          it != ((end != nullptr) ? blob_ranges_.upper_bound(*end)
                                  : blob_ranges_.end());
          it++) {
-      // Obsolete files are to be deleted, so just skip.
-      if (it->second->is_obsolete()) continue;
+      // The file is obsolete or being processed(such as GC), for safety just
+      // skip.
+      if (it->second->file_state() != BlobFileMeta::FileState::kNormal &&
+          it->second->file_state() != BlobFileMeta::FileState::kToMerge) {
+        continue;
+      }
+
       // The smallest and largest key of blob file meta of the old version are
       // empty, so skip.
       if (it->second->largest_key().empty() && end) continue;
@@ -51,7 +56,7 @@ Status BlobStorage::GetBlobFilesInRanges(const RangePtr* ranges, size_t n,
       if ((end == nullptr) ||
           (include_end && cmp->Compare(it->second->largest_key(), *end) <= 0) ||
           (!include_end && cmp->Compare(it->second->largest_key(), *end) < 0)) {
-        files->push_back(it->second->file_number());
+        files->push_back(it->second);
         if (!tmp.empty()) {
           tmp.append(" ");
         }
