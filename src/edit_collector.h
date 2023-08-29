@@ -19,6 +19,9 @@ namespace titandb {
 //    AddEdit() -> Seal() -> Apply()
 class EditCollector {
  public:
+  EditCollector(Logger* logger, bool _paranoid_check)
+      : paranoid_check_(_paranoid_check), info_log_(logger) {}
+
   // Add the edit into the batch.
   Status AddEdit(const VersionEdit& edit) {
     if (sealed_)
@@ -26,7 +29,11 @@ class EditCollector {
           "Should be not called after Sealed() is called");
 
     auto cf_id = edit.column_family_id_;
-    auto& collector = column_families_[cf_id];
+    if (column_families_.find(cf_id) == column_families_.end()) {
+      column_families_.emplace(cf_id,
+                               CFEditCollector(info_log_, paranoid_check_));
+    }
+    auto& collector = column_families_.at(cf_id);
 
     for (auto& file : edit.added_files_) {
       status_ = collector.AddFile(file);
@@ -121,11 +128,21 @@ class EditCollector {
  private:
   class CFEditCollector {
    public:
+    CFEditCollector(Logger* logger, bool _paranoid_check)
+        : paranoid_check_(_paranoid_check), info_log_(logger) {}
+
     Status AddFile(const std::shared_ptr<BlobFileMeta>& file) {
       auto number = file->file_number();
       if (added_files_.count(number) > 0) {
-        return Status::Corruption("Blob file " + ToString(number) +
-                                  " has been added twice");
+        TITAN_LOG_ERROR(info_log_,
+                        "blob file %" PRIu64 " has been deleted twice\n",
+                        number);
+        if (paranoid_check_) {
+          return Status::Corruption("Blob file " + ToString(number) +
+                                    " has been added twice");
+        } else {
+          return Status::OK();
+        }
       }
       added_files_.emplace(number, file);
       return Status::OK();
@@ -133,8 +150,15 @@ class EditCollector {
 
     Status DeleteFile(uint64_t number, SequenceNumber obsolete_sequence) {
       if (deleted_files_.count(number) > 0) {
-        return Status::Corruption("Blob file " + ToString(number) +
-                                  " has been deleted twice");
+        TITAN_LOG_ERROR(info_log_,
+                        "blob file %" PRIu64 " has been deleted twice\n",
+                        number);
+        if (paranoid_check_) {
+          return Status::Corruption("Blob file " + ToString(number) +
+                                    " has been deleted twice");
+        } else {
+          return Status::OK();
+        }
       }
       deleted_files_.emplace(number, obsolete_sequence);
       return Status::OK();
@@ -155,6 +179,7 @@ class EditCollector {
             TITAN_LOG_ERROR(storage->db_options().info_log,
                             "blob file %" PRIu64 " has been added before\n",
                             number);
+
             return Status::Corruption("Blob file " + ToString(number) +
                                       " has been added before");
           }
@@ -177,8 +202,10 @@ class EditCollector {
           TITAN_LOG_ERROR(storage->db_options().info_log,
                           "blob file %" PRIu64 " has been deleted already\n",
                           number);
-          return Status::Corruption("Blob file " + ToString(number) +
-                                    " has been deleted already");
+          if (paranoid_check_) {
+            return Status::Corruption("Blob file " + ToString(number) +
+                                      " has been deleted already");
+          }
         }
       }
 
@@ -236,11 +263,17 @@ class EditCollector {
     }
 
    private:
+    bool paranoid_check_{false};
+    Logger* info_log_{nullptr};
     std::unordered_map<uint64_t, std::shared_ptr<BlobFileMeta>> added_files_;
     std::unordered_map<uint64_t, SequenceNumber> deleted_files_;
   };
 
   Status status_{Status::OK()};
+
+  // Paranoid check would not pass if a blob file is deleted or added twice.
+  bool paranoid_check_{false};
+  Logger* info_log_{nullptr};
 
   bool sealed_{false};
   bool has_next_file_number_{false};

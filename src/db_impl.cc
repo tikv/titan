@@ -65,6 +65,8 @@ class TitanDBImpl::FileManager : public BlobFileManager {
                                   std::unique_ptr<BlobFileHandle>>>& files)
       override {
     Status s;
+    if (files.empty()) return s;
+
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
     for (auto& file : files) {
