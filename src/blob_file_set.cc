@@ -337,10 +337,14 @@ Status BlobFileSet::DropColumnFamilies(
           TITAN_LOG_INFO(db_options_.info_log,
                          "Titan add obsolete file [%" PRIu64 "]",
                          file.second->file_number());
+          file.second->FileStateTransit(BlobFileMeta::FileEvent::kGCBegin);
           edit.DeleteBlobFile(file.first, obsolete_sequence);
         }
       }
       s = LogAndApply(edit);
+      for (auto& file : it->second->files_) {
+        file.second->FileStateTransit(BlobFileMeta::FileEvent::kGCCompleted);
+      }
       if (!s.ok()) return s;
     } else {
       TITAN_LOG_ERROR(db_options_.info_log, "column %u not found for drop\n",
