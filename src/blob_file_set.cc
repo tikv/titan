@@ -72,7 +72,8 @@ Status BlobFileSet::Recover() {
                        0 /*log_num*/);
     Slice record;
     std::string scratch;
-    EditCollector collector;
+    EditCollector collector(db_options_.info_log.get(),
+                            false);  // TODO: make paranoid check configurable
     while (reader.ReadRecord(&record, &scratch) && s.ok()) {
       VersionEdit edit;
       s = DecodeInto(record, &edit);
@@ -225,10 +226,10 @@ struct BlobFileSet::ManifestWriter {
 
 Status BlobFileSet::LogAndApply(VersionEdit& edit) {
   mutex_->AssertHeld();
-  TEST_SYNC_POINT("BlobFileSet::LogAndApply");
+  TEST_SYNC_POINT("BlobFileSet::LogAndApply::Begin");
   edit.SetNextFileNumber(next_file_number_.load());
 
-  EditCollector collector;
+  EditCollector collector(db_options_.info_log.get(), false);
   Status s = collector.AddEdit(edit);
   if (!s.ok()) return s;
   s = collector.Seal(*this);
@@ -241,6 +242,7 @@ Status BlobFileSet::LogAndApply(VersionEdit& edit) {
   // for the group. Thw write group makes sure only one thread is writing to the
   // manifest, otherwise the manifest will be corrupted.
   while (!writer.done && &writer != manifest_writers_.front()) {
+    TEST_SYNC_POINT("BlobFileSet::LogAndApply::Wait");
     writer.cv.Wait();
   }
   if (writer.done) {
@@ -273,6 +275,7 @@ Status BlobFileSet::LogAndApply(VersionEdit& edit) {
     if (s.ok()) {
       ImmutableDBOptions ioptions(db_options_);
       s = SyncTitanManifest(stats_, &ioptions, manifest_->file());
+      TEST_SYNC_POINT("BlobFileSet::LogAndApply::AfterSyncTitanManifest");
     }
     mutex_->Lock();
   }
@@ -368,18 +371,30 @@ Status BlobFileSet::DeleteBlobFilesInRanges(uint32_t cf_id,
                                             const RangePtr* ranges, size_t n,
                                             bool include_end,
                                             SequenceNumber obsolete_sequence) {
+  mutex_->AssertHeld();
+  TEST_SYNC_POINT("BlobFileSet::DeleteBlobFilesInRanges");
   auto it = column_families_.find(cf_id);
   if (it != column_families_.end()) {
     VersionEdit edit;
     edit.SetColumnFamilyID(cf_id);
 
-    std::vector<uint64_t> files;
+    std::vector<std::shared_ptr<BlobFileMeta>> files;
     Status s = it->second->GetBlobFilesInRanges(ranges, n, include_end, &files);
     if (!s.ok()) return s;
-    for (auto file_number : files) {
-      edit.DeleteBlobFile(file_number, obsolete_sequence);
+
+    for (auto file : files) {
+      // Mark files being deleted, so GC won't pick them up causing deleting the
+      // blob file twice.
+      file->FileStateTransit(BlobFileMeta::FileEvent::kGCBegin);
+      TITAN_LOG_INFO(db_options_.info_log,
+                     "Titan add obsolete file [%" PRIu64 "]",
+                     file->file_number());
+      edit.DeleteBlobFile(file->file_number(), obsolete_sequence);
     }
     s = LogAndApply(edit);
+    for (auto file : files) {
+      file->FileStateTransit(BlobFileMeta::FileEvent::kGCCompleted);
+    }
     return s;
   }
   TITAN_LOG_ERROR(db_options_.info_log,
