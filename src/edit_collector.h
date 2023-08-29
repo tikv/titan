@@ -33,14 +33,14 @@ class EditCollector {
       column_families_.emplace(cf_id,
                                CFEditCollector(info_log_, paranoid_check_));
     }
-    auto collector = column_families_.find(cf_id);
+    auto& collector = column_families_.at(cf_id);
 
     for (auto& file : edit.added_files_) {
-      status_ = collector->second.AddFile(file);
+      status_ = collector.AddFile(file);
       if (!status_.ok()) return status_;
     }
     for (auto& file : edit.deleted_files_) {
-      status_ = collector->second.DeleteFile(file.first, file.second);
+      status_ = collector.DeleteFile(file.first, file.second);
       if (!status_.ok()) return status_;
     }
 
@@ -140,6 +140,8 @@ class EditCollector {
         if (paranoid_check_) {
           return Status::Corruption("Blob file " + ToString(number) +
                                     " has been added twice");
+        } else {
+          return Status::OK();
         }
       }
       added_files_.emplace(number, file);
@@ -154,6 +156,8 @@ class EditCollector {
         if (paranoid_check_) {
           return Status::Corruption("Blob file " + ToString(number) +
                                     " has been deleted twice");
+        } else {
+          return Status::OK();
         }
       }
       deleted_files_.emplace(number, obsolete_sequence);
@@ -175,6 +179,7 @@ class EditCollector {
             TITAN_LOG_ERROR(storage->db_options().info_log,
                             "blob file %" PRIu64 " has been added before\n",
                             number);
+
             return Status::Corruption("Blob file " + ToString(number) +
                                       " has been added before");
           }
@@ -197,8 +202,10 @@ class EditCollector {
           TITAN_LOG_ERROR(storage->db_options().info_log,
                           "blob file %" PRIu64 " has been deleted already\n",
                           number);
-          return Status::Corruption("Blob file " + ToString(number) +
-                                    " has been deleted already");
+          if (paranoid_check_) {
+            return Status::Corruption("Blob file " + ToString(number) +
+                                      " has been deleted already");
+          }
         }
       }
 

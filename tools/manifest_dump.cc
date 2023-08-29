@@ -60,7 +60,7 @@ int manifest_dump() {
   std::string scratch;
 
   // Loop through log records.
-  EditCollector edit_collector;
+  EditCollector edit_collector(stdout, true);
   while (log_reader.ReadRecord(&record, &scratch) && s.ok()) {
     VersionEdit edit;
     s = DecodeInto(record, &edit);

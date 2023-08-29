@@ -229,7 +229,7 @@ Status BlobFileSet::LogAndApply(VersionEdit& edit) {
   TEST_SYNC_POINT("BlobFileSet::LogAndApply::Begin");
   edit.SetNextFileNumber(next_file_number_.load());
 
-  EditCollector collector(db_options_.info_log.get(), false);
+  EditCollector collector(db_options_.info_log.get(), true);
   Status s = collector.AddEdit(edit);
   if (!s.ok()) return s;
   s = collector.Seal(*this);
