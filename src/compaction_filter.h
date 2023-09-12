@@ -44,7 +44,7 @@ class TitanCompactionFilter final : public CompactionFilter {
     Slice user_key = key;
     if (value_type == kBlobIndex) {
       ParsedInternalKey ikey;
-      s = ParseInternalKey(key, &ikey, true);
+      s = ParseInternalKey(key, &ikey, false /*log_err_key*/);
       if(s.ok()) {
         user_key = ikey.user_key;
       } else {
