@@ -44,7 +44,7 @@ class TitanCompactionFilter final : public CompactionFilter {
     if (value_type == kBlobIndex) {
       ParsedInternalKey ikey;
       s = ParseInternalKey(key, &ikey, false /*log_err_key*/);
-      if(s.ok()) {
+      if (s.ok()) {
         user_key = ikey.user_key;
       } else {
         TITAN_LOG_ERROR(db_->db_options_.info_log,
