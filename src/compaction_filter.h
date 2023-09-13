@@ -37,8 +37,8 @@ class TitanCompactionFilter final : public CompactionFilter {
 
   Decision FilterV3(int level, const Slice &key, SequenceNumber seqno,
                     ValueType value_type, const Slice &value,
-                    std::string *new_value,
-                    std::string *skip_until) const override {
+                    std::string *new_value, std::string *skip_until) const
+      override {
     Status s;
     Slice user_key = key;
     if (value_type == kBlobIndex) {
@@ -48,7 +48,7 @@ class TitanCompactionFilter final : public CompactionFilter {
         user_key = ikey.user_key;
       } else {
         TITAN_LOG_ERROR(db_->db_options_.info_log,
-                      "[%s] Unable to parse internal key", cf_name_.c_str());
+                        "[%s] Unable to parse internal key", cf_name_.c_str());
         {
           MutexLock l(&db_->mutex_);
           db_->SetBGError(s);
@@ -58,12 +58,12 @@ class TitanCompactionFilter final : public CompactionFilter {
     }
 
     if (skip_value_) {
-      return original_filter_->FilterV3(level, user_key, seqno, value_type, Slice(),
-                                        new_value, skip_until);
+      return original_filter_->FilterV3(level, user_key, seqno, value_type,
+                                        Slice(), new_value, skip_until);
     }
     if (value_type != kBlobIndex) {
-      return original_filter_->FilterV3(level, user_key, seqno, value_type, value,
-                                        new_value, skip_until);
+      return original_filter_->FilterV3(level, user_key, seqno, value_type,
+                                        value, new_value, skip_until);
     }
 
     BlobIndex blob_index;
@@ -159,9 +159,9 @@ class TitanCompactionFilterFactory final : public CompactionFilterFactory {
     std::shared_ptr<BlobStorage> blob_storage;
     {
       MutexLock l(&titan_db_impl_->mutex_);
-      blob_storage = titan_db_impl_->blob_file_set_
-                         ->GetBlobStorage(context.column_family_id)
-                         .lock();
+      blob_storage =
+          titan_db_impl_->blob_file_set_->GetBlobStorage(
+                                              context.column_family_id).lock();
     }
     if (blob_storage == nullptr) {
       assert(false);
