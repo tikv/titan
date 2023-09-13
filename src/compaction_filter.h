@@ -39,7 +39,6 @@ class TitanCompactionFilter final : public CompactionFilter {
                     ValueType value_type, const Slice &value,
                     std::string *new_value,
                     std::string *skip_until) const override {
-    
     Status s;
     Slice user_key = key;
     if (value_type == kBlobIndex) {
