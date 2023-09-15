@@ -1,6 +1,5 @@
-#include "test_util/testharness.h"
-
 #include "db_impl.h"
+#include "test_util/testharness.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -13,8 +12,8 @@ class TestCompactionFilter : public CompactionFilter {
   const char *Name() const override { return "DeleteCompactionFilter"; }
 
   bool Filter(int level, const Slice &key, const Slice &value,
-              std::string * /*&new_value*/, bool * /*value_changed*/) const
-      override {
+              std::string * /*&new_value*/,
+              bool * /*value_changed*/) const override {
     AssertValue(key, value);
     return !value.starts_with("remain");
   }
