@@ -41,6 +41,10 @@ class TitanCompactionFilter final : public CompactionFilter {
       override {
     Status s;
     Slice user_key = key;
+
+    // Since IsStackedBlobDbInternalCompactionFilter was implemented as true,
+    // the key is an internal key when value_type is kBlobIndex, which is caused
+    // by a hack in RocksDB.
     if (value_type == kBlobIndex) {
       ParsedInternalKey ikey;
       s = ParseInternalKey(key, &ikey, false /*log_err_key*/);
