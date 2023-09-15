@@ -27,6 +27,9 @@ class TestCompactionFilter : public CompactionFilter {
     if (key.ToString() == "bigkey") {
       ASSERT_EQ(value.ToString(), std::string(min_blob_size_ + 1, 'v'));
     }
+    if (key.starts_with("bigkey100")) {
+      ASSERT_EQ(key.size(), 100);
+    }
     if (key.starts_with("skip")) {
       ASSERT_EQ(value, Slice());
     }
@@ -135,6 +138,14 @@ TEST_F(TitanCompactionFilterTest, CompactBlobValue) {
   s = Get("bigkey", &value1);
   ASSERT_OK(s);
   ASSERT_EQ(value1, value);
+
+  char keybuf[1024] = {'\0'};
+  for (int i = 0; i < 1000; i++) {
+    memset(keybuf, 0, 1024);
+    snprintf(keybuf, 1024, "bigkey100_%090d", i);
+    s = Put(keybuf, value);
+    ASSERT_OK(s);
+  }
 
   CompactAll();
 
