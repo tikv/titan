@@ -203,7 +203,7 @@ void BlobStorage::UpdateStats() {
 
     // If the file is initialized yet, skip it
     if (file.second->file_state() != BlobFileMeta::FileState::kPendingInit) {
-      live_blob_file_size += file.second->live_data_size();
+      live_blob_file_size += file.second->file_size();
       ratio_levels[static_cast<int>(file.second->GetDiscardableRatioLevel())] +=
           1;
     }
