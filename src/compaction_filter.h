@@ -34,10 +34,10 @@ class TitanCompactionFilter final : public CompactionFilter {
 
   bool IsStackedBlobDbInternalCompactionFilter() const override { return true; }
 
-  Decision FilterV3(int level, const Slice &key, SequenceNumber seqno,
-                    ValueType value_type, const Slice &value,
-                    std::string *new_value,
-                    std::string *skip_until) const override {
+  Decision UnsafeFilter(int level, const Slice &key, SequenceNumber seqno,
+                        ValueType value_type, const Slice &value,
+                        std::string *new_value,
+                        std::string *skip_until) const override {
     Status s;
     Slice user_key = key;
 
@@ -61,12 +61,12 @@ class TitanCompactionFilter final : public CompactionFilter {
     }
 
     if (skip_value_) {
-      return original_filter_->FilterV3(level, user_key, seqno, value_type,
-                                        Slice(), new_value, skip_until);
+      return original_filter_->UnsafeFilter(level, user_key, seqno, value_type,
+                                            Slice(), new_value, skip_until);
     }
     if (value_type != kBlobIndex) {
-      return original_filter_->FilterV3(level, user_key, seqno, value_type,
-                                        value, new_value, skip_until);
+      return original_filter_->UnsafeFilter(level, user_key, seqno, value_type,
+                                            value, new_value, skip_until);
     }
 
     BlobIndex blob_index;
@@ -95,7 +95,7 @@ class TitanCompactionFilter final : public CompactionFilter {
       // TODO(yiwu): Tell the two cases apart.
       return Decision::kKeep;
     } else if (s.ok()) {
-      auto decision = original_filter_->FilterV3(
+      auto decision = original_filter_->UnsafeFilter(
           level, user_key, seqno, kValue, record.value, new_value, skip_until);
 
       // It would be a problem if it change the value whereas the value_type
