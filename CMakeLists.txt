@@ -9,7 +9,7 @@ if (NOT ROCKSDB_GIT_REPO)
 endif()
 
 if (NOT ROCKSDB_GIT_BRANCH)
-  set(ROCKSDB_GIT_BRANCH "6.29.tikv")
+  set(ROCKSDB_GIT_BRANCH "6.29.tikv") # should newer than commit de47e8ece9abf001af74a9e60f66b9c8494240e1
 endif()
 
 if (NOT DEFINED ROCKSDB_DIR)
