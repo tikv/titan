@@ -28,8 +28,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   bool stop_picking = false;
   bool maybe_continue_next_time = false;
   uint64_t next_gc_size = 0;
-  bool in_fallback =
-      blob_storage->cf_options().blob_run_mode == TitanBlobRunMode::kFallback;
+  bool in_fallback = cf_options_.blob_run_mode == TitanBlobRunMode::kFallback;
+
   for (auto& gc_score : blob_storage->gc_score()) {
     if (gc_score.score < cf_options_.blob_file_discardable_ratio) {
       break;
