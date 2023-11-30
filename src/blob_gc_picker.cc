@@ -28,6 +28,8 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   bool stop_picking = false;
   bool maybe_continue_next_time = false;
   uint64_t next_gc_size = 0;
+  bool in_fallback =
+      blob_storage->cf_options().blob_run_mode == TitanBlobRunMode::kFallback;
   for (auto& gc_score : blob_storage->gc_score()) {
     if (gc_score.score < cf_options_.blob_file_discardable_ratio) {
       break;
@@ -57,7 +59,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
       }
     } else {
       next_gc_size += blob_file->file_size();
-      if (next_gc_size > cf_options_.min_gc_batch_size) {
+      if (next_gc_size > cf_options_.min_gc_batch_size || in_fallback) {
         maybe_continue_next_time = true;
         RecordTick(statistics(stats_), TITAN_GC_REMAIN, 1);
         TITAN_LOG_INFO(db_options_.info_log,
@@ -72,17 +74,23 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
                   "got batch size %" PRIu64 ", estimate output %" PRIu64
                   " bytes",
                   batch_size, estimate_output_size);
-  if (blob_files.empty() ||
-      (batch_size < cf_options_.min_gc_batch_size &&
-       estimate_output_size < cf_options_.blob_file_target_size)) {
-    return nullptr;
-  }
-  // if there is only one small file to merge, no need to perform
-  if (blob_files.size() == 1 &&
-      blob_files[0]->file_size() <= cf_options_.merge_small_file_threshold &&
-      blob_files[0]->GetDiscardableRatio() <
-          cf_options_.blob_file_discardable_ratio) {
-    return nullptr;
+
+  if (blob_files.empty()) return nullptr;
+
+  // Skip these checks if in fallback mode, we need to gc all files in fallback
+  // mode
+  if (!in_fallback) {
+    if (batch_size < cf_options_.min_gc_batch_size &&
+        estimate_output_size < cf_options_.blob_file_target_size) {
+      return nullptr;
+    }
+    // if there is only one small file to merge, no need to perform
+    if (blob_files.size() == 1 &&
+        blob_files[0]->file_size() <= cf_options_.merge_small_file_threshold &&
+        blob_files[0]->GetDiscardableRatio() <
+            cf_options_.blob_file_discardable_ratio) {
+      return nullptr;
+    }
   }
 
   return std::unique_ptr<BlobGC>(new BlobGC(
