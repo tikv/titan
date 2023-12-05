@@ -165,8 +165,8 @@ Status BlobFileReader::Get(const ReadOptions& /*options*/,
       buffer->PinSlice(*blob, UnrefCacheHandle, cache_.get(), cache_handle);
       return DecodeInto(*blob, record);
     }
+    RecordTick(statistics(stats_), TITAN_BLOB_CACHE_MISS);
   }
-  RecordTick(statistics(stats_), TITAN_BLOB_CACHE_MISS);
 
   OwnedSlice blob;
   Status s = ReadRecord(handle, record, &blob);
