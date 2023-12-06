@@ -34,6 +34,12 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
     if (gc_score.score < cf_options_.blob_file_discardable_ratio) {
       break;
     }
+    // in fallback mode, only gc files that all blobs are discarded
+    if (in_fallback && std::abs(1.0 - gc_score.score) >
+                           std::numeric_limits<double>::epsilon()) {
+      break;
+    }
+
     auto blob_file = blob_storage->FindFile(gc_score.file_number).lock();
     if (!CheckBlobFile(blob_file.get())) {
       // Skip this file id this file is being GCed
