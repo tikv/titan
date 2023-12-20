@@ -54,58 +54,34 @@ class TitanDBIterator : public Iterator {
 
   void SeekToFirst() override {
     iter_->SeekToFirst();
-    if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
-      GetBlobValue();
-      RecordTick(statistics(stats_), TITAN_NUM_SEEK);
-    }
+    type_ = TITAN_NUM_SEEK;
   }
 
   void SeekToLast() override {
     iter_->SeekToLast();
-    if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
-      GetBlobValue();
-      RecordTick(statistics(stats_), TITAN_NUM_SEEK);
-    }
+    type_ = TITAN_NUM_SEEK;
   }
 
   void Seek(const Slice &target) override {
     iter_->Seek(target);
-    if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
-      GetBlobValue();
-      RecordTick(statistics(stats_), TITAN_NUM_SEEK);
-    }
+    type_ = TITAN_NUM_SEEK;
   }
 
   void SeekForPrev(const Slice &target) override {
     iter_->SeekForPrev(target);
-    if (ShouldGetBlobValue()) {
-      StopWatch seek_sw(clock_, statistics(stats_), TITAN_SEEK_MICROS);
-      GetBlobValue();
-      RecordTick(statistics(stats_), TITAN_NUM_SEEK);
-    }
+    type_ = TITAN_NUM_SEEK;
   }
 
   void Next() override {
     assert(Valid());
     iter_->Next();
-    if (ShouldGetBlobValue()) {
-      StopWatch next_sw(clock_, statistics(stats_), TITAN_NEXT_MICROS);
-      GetBlobValue();
-      RecordTick(statistics(stats_), TITAN_NUM_NEXT);
-    }
+    type_ = TITAN_NUM_NEXT;
   }
 
   void Prev() override {
     assert(Valid());
     iter_->Prev();
-    if (ShouldGetBlobValue()) {
-      StopWatch prev_sw(clock_, statistics(stats_), TITAN_PREV_MICROS);
-      GetBlobValue();
-      RecordTick(statistics(stats_), TITAN_NUM_PREV);
-    }
+    type_ = TITAN_NUM_PREV;
   }
 
   Slice key() const override {
@@ -117,6 +93,24 @@ class TitanDBIterator : public Iterator {
     assert(Valid() && !options_.key_only);
     if (options_.key_only) return Slice();
     if (!iter_->IsBlob()) return iter_->value();
+
+    HistogramType hist_type;
+    switch (type_) {
+      case TITAN_NUM_SEEK:
+        hist_type = TITAN_SEEK_MICROS;
+        break;
+      case TITAN_NUM_NEXT:
+        hist_type = TITAN_NEXT_MICROS;
+        break;
+      case TITAN_NUM_PREV:
+        hist_type = TITAN_PREV_MICROS;
+        break;
+      default:
+        assert(false);
+    };
+    StopWatch sw(clock_, statistics(stats_), hist_type);
+    GetBlobValue();
+    RecordTick(statistics(stats_), type_);
     return record_.value;
   }
 
@@ -125,15 +119,7 @@ class TitanDBIterator : public Iterator {
   }
 
  private:
-  bool ShouldGetBlobValue() {
-    if (!iter_->Valid() || !iter_->IsBlob() || options_.key_only) {
-      status_ = iter_->status();
-      return false;
-    }
-    return true;
-  }
-
-  void GetBlobValue() {
+  void GetBlobValue() const {
     assert(iter_->status().ok());
 
     BlobIndex index;
@@ -174,15 +160,17 @@ class TitanDBIterator : public Iterator {
     return;
   }
 
-  Status status_;
-  BlobRecord record_;
-  PinnableSlice buffer_;
+  mutable Status status_;
+  mutable BlobRecord record_;
+  mutable PinnableSlice buffer_;
+  TickerType type_;
 
   TitanReadOptions options_;
   BlobStorage *storage_;
   std::shared_ptr<ManagedSnapshot> snap_;
   std::unique_ptr<ArenaWrappedDBIter> iter_;
-  std::unordered_map<uint64_t, std::unique_ptr<BlobFilePrefetcher>> files_;
+  mutable std::unordered_map<uint64_t, std::unique_ptr<BlobFilePrefetcher>>
+      files_;
 
   SystemClock *clock_;
   TitanStats *stats_;
