@@ -106,6 +106,7 @@ class TitanDBIterator : public Iterator {
         hist_type = TITAN_PREV_MICROS;
         break;
       default:
+        hist_type = TITAN_SEEK_MICROS;
         assert(false);
     };
     StopWatch sw(clock_, statistics(stats_), hist_type);
