@@ -97,7 +97,6 @@ class TitanDBIterator : public Iterator {
       RecordTick(statistics(stats_), TITAN_NUM_NEXT);
     }
   }
-  
 
   void Prev() override {
     assert(Valid());
