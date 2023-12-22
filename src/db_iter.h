@@ -112,6 +112,9 @@ class TitanDBIterator : public Iterator {
     StopWatch sw(clock_, statistics(stats_), hist_type);
     GetBlobValue();
     RecordTick(statistics(stats_), type_);
+    if (!Valid()) {
+      return Slice();
+    }
     return record_.value;
   }
 
