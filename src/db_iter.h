@@ -110,9 +110,9 @@ class TitanDBIterator : public Iterator {
         assert(false);
     };
     StopWatch sw(clock_, statistics(stats_), hist_type);
-    GetBlobValue();
     RecordTick(statistics(stats_), type_);
-    if (!Valid()) {
+    status_ = GetBlobValue();
+    if (!status_.ok()) {
       return Slice();
     }
     return record_.value;
@@ -123,45 +123,48 @@ class TitanDBIterator : public Iterator {
   }
 
  private:
-  void GetBlobValue() const {
+  Status GetBlobValue() const {
     assert(iter_->status().ok());
 
+    Status s;
     BlobIndex index;
-    status_ = DecodeInto(iter_->value(), &index);
-    if (!status_.ok()) {
-      TITAN_LOG_ERROR(info_log_,
-                      "Titan iterator: failed to decode blob index %s: %s",
-                      iter_->value().ToString(true /*hex*/).c_str(),
-                      status_.ToString().c_str());
-      return;
+    s = DecodeInto(iter_->value(), &index);
+    if (!s.ok()) {
+      TITAN_LOG_ERROR(
+          info_log_, "Titan iterator: failed to decode blob index %s: %s",
+          iter_->value().ToString(true /*hex*/).c_str(), s.ToString().c_str());
+      if (options_.abort_on_failure) std::abort();
+      return s;
     }
 
     auto it = files_.find(index.file_number);
     if (it == files_.end()) {
       std::unique_ptr<BlobFilePrefetcher> prefetcher;
-      status_ = storage_->NewPrefetcher(index.file_number, &prefetcher);
-      if (!status_.ok()) {
+      s = storage_->NewPrefetcher(index.file_number, &prefetcher);
+      if (!s.ok()) {
         TITAN_LOG_ERROR(
             info_log_,
             "Titan iterator: failed to create prefetcher for blob file %" PRIu64
             ": %s",
-            index.file_number, status_.ToString().c_str());
-        return;
+            index.file_number, s.ToString().c_str());
+        if (options_.abort_on_failure) std::abort();
+        return s;
       }
       it = files_.emplace(index.file_number, std::move(prefetcher)).first;
     }
 
     buffer_.Reset();
-    status_ = it->second->Get(options_, index.blob_handle, &record_, &buffer_);
-    if (!status_.ok()) {
+    s = it->second->Get(options_, index.blob_handle, &record_, &buffer_);
+    if (!s.ok()) {
       TITAN_LOG_ERROR(
           info_log_,
           "Titan iterator: failed to read blob value from file %" PRIu64
           ", offset %" PRIu64 ", size %" PRIu64 ": %s\n",
           index.file_number, index.blob_handle.offset, index.blob_handle.size,
-          status_.ToString().c_str());
+          s.ToString().c_str());
+      if (options_.abort_on_failure) std::abort();
     }
-    return;
+    return s;
   }
 
   mutable Status status_;
