@@ -249,8 +249,10 @@ struct TitanReadOptions : public ReadOptions {
   // Default: false
   bool key_only{false};
 
-  // If true, it will not abort when getting value from blob files failed and
+  // If false, it will not abort when failed to get value from blob files and
   // return an empty value.
+  //
+  // Default: true
   bool abort_on_failure{true};
 
   TitanReadOptions() = default;
