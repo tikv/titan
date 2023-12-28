@@ -326,14 +326,25 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
                           descs[i].options.table_factory /*base_table_factory*/,
                           titan_table_factories[i]}));
     column_families[(*handles)[i]->GetID()] = descs[i].options;
-    if (!descs[i].options.disable_auto_compactions) {
-      cf_with_compaction.push_back((*handles)[i]);
-    }
   }
-  TEST_SYNC_POINT_CALLBACK("TitanDBImpl::OpenImpl:BeforeOpenBlobFileSet", this);
   s = blob_file_set_->Open(column_families);
   if (!s.ok()) {
     return s;
+  }
+  for (size_t i = 0; i < handles->size(); i++) {
+    auto rocks_cf_handle =
+        static_cast_with_check<rocksdb::ColumnFamilyHandleImpl>((*handles)[i]);
+    auto titan_handle = new TitanColumnFamilyHandle(
+        *rocks_cf_handle,
+        blob_file_set_->GetBlobStorage(rocks_cf_handle->GetID()).lock());
+    (*handles)[i] = titan_handle;
+    delete rocks_cf_handle;
+    if ((*handles)[i]->GetName() == kDefaultColumnFamilyName) {
+      default_cf_handle_ = titan_handle;
+    }
+    if (!descs[i].options.disable_auto_compactions) {
+      cf_with_compaction.push_back(titan_handle);
+    }
   }
   s = AsyncInitializeGC(*handles);
   if (!s.ok()) {
@@ -359,6 +370,9 @@ Status TitanDBImpl::Close() {
   Status s;
   CloseImpl();
   if (db_) {
+    if (default_cf_handle_ != nullptr) {
+      delete default_cf_handle_;
+    }
     s = db_->Close();
     delete db_;
     db_ = nullptr;
@@ -470,6 +484,16 @@ Status TitanDBImpl::CreateColumnFamilies(
                  titan_table_factory[i]}));
       }
       blob_file_set_->AddColumnFamilies(column_families);
+      for (size_t i = 0; i < handles->size(); i++) {
+        auto rocks_cf_handle =
+            static_cast_with_check<rocksdb::ColumnFamilyHandleImpl>(
+                (*handles)[i]);
+        auto titan_handle = new TitanColumnFamilyHandle(
+            *rocks_cf_handle,
+            blob_file_set_->GetBlobStorage(rocks_cf_handle->GetID()).lock());
+        (*handles)[i] = titan_handle;
+        delete rocks_cf_handle;
+      }
     }
   }
   if (s.ok()) {
@@ -538,8 +562,13 @@ Status TitanDBImpl::DestroyColumnFamilyHandle(
   if (column_family == nullptr) {
     return Status::InvalidArgument("Column family handle is nullptr.");
   }
+
   auto cf_id = column_family->GetID();
   std::string cf_name = column_family->GetName();
+  if (cf_name == kDefaultColumnFamilyName) {
+    return Status::InvalidArgument(
+        "Default column family handle is not destroyable.");
+  }
   Status s = db_impl_->DestroyColumnFamilyHandle(column_family);
 
   if (s.ok()) {
@@ -669,10 +698,8 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   BlobRecord record;
   PinnableSlice buffer;
 
-  mutex_.Lock();
-  auto storage = blob_file_set_->GetBlobStorage(handle->GetID()).lock();
-  mutex_.Unlock();
-
+  auto storage =
+      static_cast_with_check<TitanColumnFamilyHandle>(handle)->GetBlobStorage();
   if (storage) {
     StopWatch read_sw(env_->GetSystemClock().get(), statistics(stats_.get()),
                       TITAN_BLOB_FILE_READ_MICROS);

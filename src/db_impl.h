@@ -25,6 +25,22 @@ struct TitanColumnFamilyInfo {
 class TitanCompactionFilterFactory;
 class TitanCompactionFilter;
 
+class TitanColumnFamilyHandle : public rocksdb::ColumnFamilyHandleImpl {
+ public:
+  TitanColumnFamilyHandle(
+      const rocksdb::ColumnFamilyHandleImpl& rocks_cf_handle,
+      std::shared_ptr<BlobStorage> blob_storage)
+      : rocksdb::ColumnFamilyHandleImpl(rocks_cf_handle),
+        blob_storage(blob_storage) {}
+
+  ~TitanColumnFamilyHandle() {}
+
+  std::shared_ptr<BlobStorage> GetBlobStorage() { return blob_storage; }
+
+ private:
+  std::shared_ptr<BlobStorage> blob_storage;
+};
+
 class TitanDBImpl : public TitanDB {
  public:
   TitanDBImpl(const TitanDBOptions& options, const std::string& dbname);
@@ -35,6 +51,11 @@ class TitanDBImpl : public TitanDB {
               std::vector<ColumnFamilyHandle*>* handles);
 
   Status Close() override;
+
+  using TitanDB::DefaultColumnFamily;
+  ColumnFamilyHandle* DefaultColumnFamily() const override {
+    return default_cf_handle_;
+  }
 
   using TitanDB::CreateColumnFamilies;
   Status CreateColumnFamilies(
@@ -299,6 +320,8 @@ class TitanDBImpl : public TitanDB {
   DBImpl* db_impl_;  // Base DB impl
   TitanDBOptions db_options_;
   std::unique_ptr<Directory> directory_;
+
+  ColumnFamilyHandle* default_cf_handle_;
 
   std::atomic<bool> initialized_{false};
 
