@@ -777,9 +777,8 @@ Iterator* TitanDBImpl::NewIteratorImpl(
     std::shared_ptr<ManagedSnapshot> snapshot) {
   auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
 
-  mutex_.Lock();
-  auto storage = blob_file_set_->GetBlobStorage(handle->GetID()).lock();
-  mutex_.Unlock();
+  auto storage = static_cast_with_check<TitanColumnFamilyHandle>(handle)
+                     ->GetBlobStorage();
 
   if (!storage) {
     TITAN_LOG_ERROR(db_options_.info_log,
@@ -982,7 +981,8 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   if (!s.ok()) return s;
 
   MutexLock l(&mutex_);
-  auto bs = blob_file_set_->GetBlobStorage(cf_id).lock();
+  auto bs = static_cast_with_check<TitanColumnFamilyHandle>(column_family)
+                ->GetBlobStorage();
   if (!bs) {
     // TODO: Should treat it as background error and make DB read-only.
     TITAN_LOG_ERROR(db_options_.info_log,
