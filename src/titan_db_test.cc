@@ -1194,6 +1194,7 @@ TEST_F(TitanDBTest, GCInFallbackMode) {
   ASSERT_OK(db_->Flush(FlushOptions()));
   ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
   ASSERT_OK(db_->Delete(WriteOptions(), "foo"));
+  ASSERT_OK(db_->Delete(WriteOptions(), "bar"));
   ASSERT_OK(db_->Flush(FlushOptions()));
   ASSERT_OK(db_->CompactRange(CompactRangeOptions(), nullptr, nullptr));
   uint32_t default_cf_id = db_->DefaultColumnFamily()->GetID();
@@ -1204,7 +1205,7 @@ TEST_F(TitanDBTest, GCInFallbackMode) {
   ASSERT_EQ(1, GetBlobStorage().lock()->NumBlobFiles());
   ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
   ASSERT_EQ(0, GetBlobStorage().lock()->NumBlobFiles());
-  VerifyDB({{"bar", "v1"}});
+  VerifyDB({});
 }
 
 TEST_F(TitanDBTest, BackgroundErrorHandling) {

@@ -161,6 +161,32 @@ TEST_F(BlobGCPickerTest, ParallelPickGC) {
   UpdateBlobStorage();
 }
 
+TEST_F(BlobGCPickerTest, Fallback) {
+  TitanDBOptions titan_db_options;
+  TitanCFOptions titan_cf_options;
+  titan_cf_options.blob_run_mode = TitanBlobRunMode::kFallback;
+  NewBlobStorageAndPicker(titan_db_options, titan_cf_options);
+  AddBlobFile(1U, 1U << 30, 1U << 30);    // valid_size = 0MB
+  AddBlobFile(2U, 1U << 30, 1U << 30);    // valid_size = 0MB
+  AddBlobFile(3U, 1U << 30, 512U << 20);  // valid_size = 512MB
+  AddBlobFile(4U, 1U << 30, 512U << 20);  // valid_size = 512MB
+  UpdateBlobStorage();
+  auto blob_gc = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  ASSERT_TRUE(blob_gc != nullptr);
+  int gc_times = 0;
+  while (blob_gc != nullptr) {
+    gc_times++;
+    for (auto file : blob_gc->inputs()) {
+      RemoveBlobFile(file->file_number());
+    }
+    UpdateBlobStorage();
+    if (!blob_gc->trigger_next()) break;
+    blob_gc = basic_blob_gc_picker_->PickBlobGC(blob_storage_.get());
+  }
+  ASSERT_EQ(gc_times, 2);
+  ASSERT_EQ(blob_storage_->NumBlobFiles(), 2);
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
 
