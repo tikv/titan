@@ -777,8 +777,8 @@ Iterator* TitanDBImpl::NewIteratorImpl(
     std::shared_ptr<ManagedSnapshot> snapshot) {
   auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(handle)->cfd();
 
-  auto storage = static_cast_with_check<TitanColumnFamilyHandle>(handle)
-                     ->GetBlobStorage();
+  auto storage =
+      static_cast_with_check<TitanColumnFamilyHandle>(handle)->GetBlobStorage();
 
   if (!storage) {
     TITAN_LOG_ERROR(db_options_.info_log,

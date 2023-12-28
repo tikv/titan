@@ -31,14 +31,14 @@ class TitanColumnFamilyHandle : public rocksdb::ColumnFamilyHandleImpl {
       const rocksdb::ColumnFamilyHandleImpl& rocks_cf_handle,
       std::shared_ptr<BlobStorage> blob_storage)
       : rocksdb::ColumnFamilyHandleImpl(rocks_cf_handle),
-        blob_storage(blob_storage) {}
+        blob_storage_(blob_storage) {}
 
   ~TitanColumnFamilyHandle() {}
 
-  std::shared_ptr<BlobStorage> GetBlobStorage() { return blob_storage; }
+  std::shared_ptr<BlobStorage> GetBlobStorage() { return blob_storage_; }
 
  private:
-  std::shared_ptr<BlobStorage> blob_storage;
+  std::shared_ptr<BlobStorage> blob_storage_;
 };
 
 class TitanDBImpl : public TitanDB {
