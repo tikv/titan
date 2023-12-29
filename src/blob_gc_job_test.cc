@@ -582,9 +582,12 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   // with 0 blob file
 
   TitanReadOptions opts;
+  opts.abort_on_failure = false;
   auto* iter = db_->NewIterator(opts, db_->DefaultColumnFamily());
   iter->SeekToFirst();
   while (iter->Valid()) {
+    iter->value();
+    if (!iter->Valid()) break;
     iter->Next();
   }
   // `DeleteFilesInRange` may expose old blob index.
