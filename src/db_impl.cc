@@ -729,12 +729,10 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
 std::vector<Status> TitanDBImpl::MultiGet(
     const ReadOptions& options, const std::vector<ColumnFamilyHandle*>& handles,
     const std::vector<Slice>& keys, std::vector<std::string>* values) {
-  auto options_copy = options;
-  options_copy.total_order_seek = true;
-  if (options_copy.snapshot) {
-    return MultiGetImpl(options_copy, handles, keys, values);
+  if (options.snapshot) {
+    return MultiGetImpl(options, handles, keys, values);
   }
-  ReadOptions ro(options_copy);
+  ReadOptions ro(options);
   ManagedSnapshot snapshot(this);
   ro.snapshot = snapshot.snapshot();
   return MultiGetImpl(ro, handles, keys, values);
@@ -759,13 +757,11 @@ std::vector<Status> TitanDBImpl::MultiGetImpl(
 
 Iterator* TitanDBImpl::NewIterator(const TitanReadOptions& options,
                                    ColumnFamilyHandle* handle) {
-  TitanReadOptions options_copy = options;
-  options_copy.total_order_seek = true;
   std::shared_ptr<ManagedSnapshot> snapshot;
-  if (options_copy.snapshot) {
-    return NewIteratorImpl(options_copy, handle, snapshot);
+  if (options.snapshot) {
+    return NewIteratorImpl(options, handle, snapshot);
   }
-  TitanReadOptions ro(options_copy);
+  TitanReadOptions ro(options);
   snapshot.reset(new ManagedSnapshot(this));
   ro.snapshot = snapshot->snapshot();
   return NewIteratorImpl(ro, handle, snapshot);
@@ -799,7 +795,6 @@ Status TitanDBImpl::NewIterators(
     const std::vector<ColumnFamilyHandle*>& handles,
     std::vector<Iterator*>* iterators) {
   TitanReadOptions ro(options);
-  ro.total_order_seek = true;
   std::shared_ptr<ManagedSnapshot> snapshot;
   if (!ro.snapshot) {
     snapshot.reset(new ManagedSnapshot(this));
