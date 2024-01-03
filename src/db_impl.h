@@ -27,16 +27,13 @@ class TitanCompactionFilter;
 
 class TitanColumnFamilyHandle : public rocksdb::ColumnFamilyHandleImpl {
  public:
-  TitanColumnFamilyHandle(
-      rocksdb::ColumnFamilyHandleImpl* rocks_cf_handle,
-      std::shared_ptr<BlobStorage> blob_storage)
+  TitanColumnFamilyHandle(rocksdb::ColumnFamilyHandleImpl* rocks_cf_handle,
+                          std::shared_ptr<BlobStorage> blob_storage)
       : rocksdb::ColumnFamilyHandleImpl(*rocks_cf_handle),
         rocks_cf_handle_(rocks_cf_handle),
         blob_storage_(blob_storage) {}
 
-  ~TitanColumnFamilyHandle() {
-    delete rocks_cf_handle_;
-  }
+  ~TitanColumnFamilyHandle() { delete rocks_cf_handle_; }
 
   std::shared_ptr<BlobStorage> GetBlobStorage() { return blob_storage_; }
 
