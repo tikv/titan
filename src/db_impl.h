@@ -326,7 +326,7 @@ class TitanDBImpl : public TitanDB {
   TitanDBOptions db_options_;
   std::unique_ptr<Directory> directory_;
 
-  ColumnFamilyHandle* default_cf_handle_;
+  ColumnFamilyHandle* default_cf_handle_ = nullptr;
 
   std::atomic<bool> initialized_{false};
 
