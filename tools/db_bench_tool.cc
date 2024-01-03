@@ -63,6 +63,7 @@
 #include "rocksdb/write_batch.h"
 #include "test_util/testutil.h"
 #include "test_util/transaction_test_util.h"
+#include "titan/db.h"
 #include "util/cast_util.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
@@ -76,8 +77,6 @@
 #include "utilities/merge_operators.h"
 #include "utilities/merge_operators/bytesxor.h"
 #include "utilities/persistent_cache/block_cache_tier.h"
-
-#include "titan/db.h"
 
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::RegisterFlagValidator;
@@ -4549,11 +4548,11 @@ class Benchmark {
         }
         if (levelMeta.level == 0) {
           for (auto& fileMeta : levelMeta.files) {
-            fprintf(stdout, "Level[%d]: %s(size: %" ROCKSDB_PRIszt " bytes)\n",
+            fprintf(stdout, "Level[%d]: %s(size: %" PRIu64 " bytes)\n",
                     levelMeta.level, fileMeta.name.c_str(), fileMeta.size);
           }
         } else {
-          fprintf(stdout, "Level[%d]: %s - %s(total size: %" PRIi64 " bytes)\n",
+          fprintf(stdout, "Level[%d]: %s - %s(total size: %" PRIu64 " bytes)\n",
                   levelMeta.level, levelMeta.files.front().name.c_str(),
                   levelMeta.files.back().name.c_str(), levelMeta.size);
         }
@@ -4959,7 +4958,6 @@ class Benchmark {
     int64_t puts = 0;
     int64_t found = 0;
     int64_t seek = 0;
-    int64_t seek_found = 0;
     int64_t bytes = 0;
     const int64_t default_value_max = 1 * 1024 * 1024;
     int64_t value_max = default_value_max;
@@ -5094,7 +5092,7 @@ class Benchmark {
             seek++;
             read++;
             if (single_iter->Valid() && single_iter->key().compare(key) == 0) {
-              seek_found++;
+              found++;
             }
             int64_t scan_length =
                 ParetoCdfInversion(u, FLAGS_iter_theta, FLAGS_iter_k,
@@ -5412,19 +5410,15 @@ class Benchmark {
 
     fprintf(stderr, "num reads to do %" PRIu64 "\n", reads_);
     Duration duration(FLAGS_duration, reads_);
-    uint64_t num_seek_to_first = 0;
-    uint64_t num_next = 0;
     while (!duration.Done(1)) {
       if (!iter->Valid()) {
         iter->SeekToFirst();
-        num_seek_to_first++;
       } else if (!iter->status().ok()) {
         fprintf(stderr, "Iterator error: %s\n",
                 iter->status().ToString().c_str());
         abort();
       } else {
         iter->Next();
-        num_next++;
       }
 
       thread->stats.FinishedOps(&db_, db_.db, 1, kSeek);

@@ -177,19 +177,19 @@ if (WITH_TITAN_TOOLS)
   add_definitions(-DGFLAGS)
 
   add_executable(titandb_stress tools/titandb_stress.cc)
-  target_include_directories(titandb_stress PRIVATE ${gflags_INCLUDE_DIR})
+  target_include_directories(titandb_stress PRIVATE ${GFLAGS_INCLUDE_DIR})
   target_link_libraries(titandb_stress ${TOOLS_LIBS})
 
   add_executable(titandb_bench tools/db_bench.cc tools/db_bench_tool.cc)
-  target_include_directories(titandb_bench PRIVATE ${gflags_INCLUDE_DIR})
+  target_include_directories(titandb_bench PRIVATE ${GFLAGS_INCLUDE_DIR})
   target_link_libraries(titandb_bench ${TOOLS_LIBS})
 
   add_executable(titan_manifest_dump tools/manifest_dump.cc)
-  target_include_directories(titan_manifest_dump PRIVATE ${gflags_INCLUDE_DIR})
+  target_include_directories(titan_manifest_dump PRIVATE ${GFLAGS_INCLUDE_DIR})
   target_link_libraries(titan_manifest_dump ${TOOLS_LIBS})
   
   add_executable(titan_blob_file_dump tools/blob_file_dump.cc)
-  target_include_directories(titan_blob_file_dump PRIVATE ${gflags_INCLUDE_DIR})
+  target_include_directories(titan_blob_file_dump PRIVATE ${GFLAGS_INCLUDE_DIR})
   target_link_libraries(titan_blob_file_dump ${TOOLS_LIBS})
 endif()
 

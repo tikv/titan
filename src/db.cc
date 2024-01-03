@@ -15,8 +15,6 @@ Status TitanDB::Open(const TitanOptions& options, const std::string& dbname,
   Status s = TitanDB::Open(db_options, dbname, descs, &handles, db);
   if (s.ok()) {
     assert(handles.size() == 1);
-    // DBImpl is always holding the default handle.
-    delete handles[0];
   }
   return s;
 }

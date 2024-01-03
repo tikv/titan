@@ -139,7 +139,7 @@ class CheckpointTest : public testing::Test {
 
   void Close() {
     for (auto h : handles_) {
-      delete h;
+      db_->DestroyColumnFamilyHandle(h);
     }
     handles_.clear();
     delete db_;
@@ -452,7 +452,7 @@ TEST_F(CheckpointTest, CheckpointCF) {
   ASSERT_OK(snapshotDB->Get(roptions, cphandles[6], "six", &result));
   ASSERT_EQ(large_value_2, result);
   for (auto h : cphandles) {
-    delete h;
+    snapshotDB->DestroyColumnFamilyHandle(h);
   }
   cphandles.clear();
   delete snapshotDB;
@@ -518,7 +518,7 @@ TEST_F(CheckpointTest, CheckpointCFNoFlush) {
   ASSERT_OK(snapshotDB->Get(roptions, cphandles[3], "three", &result));
   ASSERT_EQ(large_value_1, result);
   for (auto h : cphandles) {
-    delete h;
+    snapshotDB->DestroyColumnFamilyHandle(h);
   }
   cphandles.clear();
   delete snapshotDB;
@@ -690,7 +690,7 @@ TEST_F(CheckpointTest, GCWhileCheckpointing) {
   ASSERT_OK(snapshotDB->Get(roptions, cphandles[2], "two", &result));
   ASSERT_EQ(large_value_1, result);
   for (auto h : cphandles) {
-    delete h;
+    snapshotDB->DestroyColumnFamilyHandle(h);
   }
   cphandles.clear();
   delete snapshotDB;
