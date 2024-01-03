@@ -28,16 +28,24 @@ class TitanCompactionFilter;
 class TitanColumnFamilyHandle : public rocksdb::ColumnFamilyHandleImpl {
  public:
   TitanColumnFamilyHandle(
-      const rocksdb::ColumnFamilyHandleImpl& rocks_cf_handle,
+      rocksdb::ColumnFamilyHandleImpl* rocks_cf_handle,
       std::shared_ptr<BlobStorage> blob_storage)
-      : rocksdb::ColumnFamilyHandleImpl(rocks_cf_handle),
+      : rocksdb::ColumnFamilyHandleImpl(*rocks_cf_handle),
+        rocks_cf_handle_(rocks_cf_handle),
         blob_storage_(blob_storage) {}
 
-  ~TitanColumnFamilyHandle() {}
+  ~TitanColumnFamilyHandle() {
+    delete rocks_cf_handle_;
+  }
 
   std::shared_ptr<BlobStorage> GetBlobStorage() { return blob_storage_; }
 
  private:
+  // Keep a reference to the rocksdb::ColumnFamilyHandleImpl, and delete it
+  // when this TitanColumnFamilyHandle is deleted. In case RocksDB internally
+  // uses the pointer to the rocksdb::ColumnFamilyHandleImpl, we can't delete
+  // it until the TitanColumnFamilyHandle is deleted.
+  rocksdb::ColumnFamilyHandleImpl* rocks_cf_handle_;
   std::shared_ptr<BlobStorage> blob_storage_;
 };
 
@@ -52,11 +60,6 @@ class TitanDBImpl : public TitanDB {
 
   Status Close() override;
 
-  using TitanDB::DefaultColumnFamily;
-  ColumnFamilyHandle* DefaultColumnFamily() const override {
-    return default_cf_handle_;
-  }
-
   using TitanDB::CreateColumnFamilies;
   Status CreateColumnFamilies(
       const std::vector<TitanCFDescriptor>& descs,
@@ -64,6 +67,11 @@ class TitanDBImpl : public TitanDB {
 
   Status DropColumnFamilies(
       const std::vector<ColumnFamilyHandle*>& handles) override;
+
+  using TitanDB::DefaultColumnFamily;
+  ColumnFamilyHandle* DefaultColumnFamily() const override {
+    return default_cf_handle_;
+  }
 
   Status DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) override;
 

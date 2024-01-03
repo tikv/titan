@@ -335,10 +335,9 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
     auto rocks_cf_handle =
         static_cast_with_check<rocksdb::ColumnFamilyHandleImpl>((*handles)[i]);
     auto titan_handle = new TitanColumnFamilyHandle(
-        *rocks_cf_handle,
+        rocks_cf_handle,
         blob_file_set_->GetBlobStorage(rocks_cf_handle->GetID()).lock());
     (*handles)[i] = titan_handle;
-    delete rocks_cf_handle;
     if ((*handles)[i]->GetName() == kDefaultColumnFamilyName) {
       default_cf_handle_ = titan_handle;
     }
@@ -372,6 +371,7 @@ Status TitanDBImpl::Close() {
   if (db_) {
     if (default_cf_handle_ != nullptr) {
       delete default_cf_handle_;
+      default_cf_handle_ = nullptr;
     }
     s = db_->Close();
     delete db_;
@@ -489,10 +489,9 @@ Status TitanDBImpl::CreateColumnFamilies(
             static_cast_with_check<rocksdb::ColumnFamilyHandleImpl>(
                 (*handles)[i]);
         auto titan_handle = new TitanColumnFamilyHandle(
-            *rocks_cf_handle,
+            rocks_cf_handle,
             blob_file_set_->GetBlobStorage(rocks_cf_handle->GetID()).lock());
         (*handles)[i] = titan_handle;
-        delete rocks_cf_handle;
       }
     }
   }
