@@ -94,6 +94,9 @@ Status BlobFileSet::Recover() {
     TITAN_LOG_INFO(db_options_.info_log,
                    "Next blob file number is %" PRIu64 ".", next_file_number);
   }
+  auto new_manifest_file_number = NewFileNumber();
+  s = OpenManifest(new_manifest_file_number);
+  if (!s.ok()) return s;
   // Purge inactive files at start
   std::set<uint64_t> alive_files;
   for (const auto& bs : column_families_) {
@@ -124,6 +127,9 @@ Status BlobFileSet::Recover() {
     FileType file_type;
     if (!ParseFileName(f, &file_number, &file_type)) continue;
     if (alive_files.find(file_number) != alive_files.end()) continue;
+    // The newly created manifest file is not obsolete.
+    if (file_number == new_manifest_file_number && file_type == kDescriptorFile)
+      continue;
     if (file_type != FileType::kBlobFile &&
         file_type != FileType::kDescriptorFile)
       continue;
@@ -131,11 +137,7 @@ Status BlobFileSet::Recover() {
                    "Titan recovery delete obsolete file %s.", f.c_str());
     env_->DeleteFile(dirname_ + "/" + f);
   }
-  auto new_manifest_file_number = NewFileNumber();
-  return OpenManifest(new_manifest_file_number);
-}
-
-Status BlobFileSet::OpenManifest(uint64_t file_number) {
+  return Status::OK();
   Status s;
 
   auto file_name = DescriptorFileName(dirname_, file_number);
