@@ -127,7 +127,11 @@ Status BlobFileSet::Recover() {
     FileType file_type;
     if (!ParseFileName(f, &file_number, &file_type)) continue;
     if (alive_files.find(file_number) != alive_files.end()) continue;
-    // We will delete the old manifest file and keep the new one.
+    // Newly created manifest file cannot be simply added to alive files.
+    // It has to be dealt as a special case.
+    // Output files from last GC may not recorded in the manifest, it is
+    // possible that an orphaned blob file has the same file number as the new
+    // manifest, in this case, the orphaned blob file should be deleted.
     if (file_number == new_manifest_file_number && file_type == kDescriptorFile)
       continue;
     if (file_type != FileType::kBlobFile &&
