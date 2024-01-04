@@ -138,6 +138,9 @@ Status BlobFileSet::Recover() {
     env_->DeleteFile(dirname_ + "/" + f);
   }
   return Status::OK();
+}
+
+Status BlobFileSet::OpenManifest(uint64_t file_number) {
   Status s;
 
   auto file_name = DescriptorFileName(dirname_, file_number);
