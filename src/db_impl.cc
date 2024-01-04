@@ -569,6 +569,7 @@ Status TitanDBImpl::DestroyColumnFamilyHandle(
   }
 
   auto cf_id = column_family->GetID();
+  auto cf_name = column_family->GetName();
   if (column_family == default_cf_handle_) {
     return Status::InvalidArgument(
         "Default column family handle is not destroyable.");

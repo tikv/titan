@@ -32,8 +32,8 @@ class TitanColumnFamilyHandle : public rocksdb::ColumnFamilyHandleImpl {
                           bool owned = true)
       : rocksdb::ColumnFamilyHandleImpl(*rocks_cf_handle),
         rocks_cf_handle_(rocks_cf_handle),
-        blob_storage_(blob_storage),
-        owned_(owned) {}
+        owned_(owned),
+        blob_storage_(blob_storage) {}
 
   ~TitanColumnFamilyHandle() {
     if (owned_) delete rocks_cf_handle_;
