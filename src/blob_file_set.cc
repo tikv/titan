@@ -127,7 +127,7 @@ Status BlobFileSet::Recover() {
     FileType file_type;
     if (!ParseFileName(f, &file_number, &file_type)) continue;
     if (alive_files.find(file_number) != alive_files.end()) continue;
-    // The newly created manifest file is not obsolete.
+    // We will delete the old manifest file and keep the new one.
     if (file_number == new_manifest_file_number && file_type == kDescriptorFile)
       continue;
     if (file_type != FileType::kBlobFile &&
