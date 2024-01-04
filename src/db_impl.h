@@ -28,12 +28,16 @@ class TitanCompactionFilter;
 class TitanColumnFamilyHandle : public rocksdb::ColumnFamilyHandleImpl {
  public:
   TitanColumnFamilyHandle(rocksdb::ColumnFamilyHandleImpl* rocks_cf_handle,
-                          std::shared_ptr<BlobStorage> blob_storage)
+                          std::shared_ptr<BlobStorage> blob_storage,
+                          bool owned = true)
       : rocksdb::ColumnFamilyHandleImpl(*rocks_cf_handle),
         rocks_cf_handle_(rocks_cf_handle),
+        owned_(owned),
         blob_storage_(blob_storage) {}
 
-  ~TitanColumnFamilyHandle() { delete rocks_cf_handle_; }
+  ~TitanColumnFamilyHandle() {
+    if (owned_) delete rocks_cf_handle_;
+  }
 
   std::shared_ptr<BlobStorage> GetBlobStorage() { return blob_storage_; }
 
@@ -43,6 +47,10 @@ class TitanColumnFamilyHandle : public rocksdb::ColumnFamilyHandleImpl {
   // uses the pointer to the rocksdb::ColumnFamilyHandleImpl, we can't delete
   // it until the TitanColumnFamilyHandle is deleted.
   rocksdb::ColumnFamilyHandleImpl* rocks_cf_handle_;
+  // Whether it owns the rocksdb::ColumnFamilyHandleImpl*, if it owns, it delete
+  // the handle when dropped
+  bool owned_;
+
   std::shared_ptr<BlobStorage> blob_storage_;
 };
 
@@ -331,7 +339,7 @@ class TitanDBImpl : public TitanDB {
   TitanDBOptions db_options_;
   std::unique_ptr<Directory> directory_;
 
-  ColumnFamilyHandle* default_cf_handle_;
+  ColumnFamilyHandle* default_cf_handle_{nullptr};
 
   std::atomic<bool> initialized_{false};
 
