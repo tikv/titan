@@ -339,7 +339,13 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
         blob_file_set_->GetBlobStorage(rocks_cf_handle->GetID()).lock());
     (*handles)[i] = titan_handle;
     if ((*handles)[i]->GetName() == kDefaultColumnFamilyName) {
-      default_cf_handle_ = titan_handle;
+      // New a separate handle for default column family, so default column
+      // family handle is always available even if caller delete the default
+      // column family handle.
+      default_cf_handle_ = new TitanColumnFamilyHandle(
+          rocks_cf_handle,
+          blob_file_set_->GetBlobStorage(rocks_cf_handle->GetID()).lock(),
+          false);
     }
     if (!descs[i].options.disable_auto_compactions) {
       cf_with_compaction.push_back(titan_handle);
@@ -563,8 +569,7 @@ Status TitanDBImpl::DestroyColumnFamilyHandle(
   }
 
   auto cf_id = column_family->GetID();
-  std::string cf_name = column_family->GetName();
-  if (cf_name == kDefaultColumnFamilyName) {
+  if (column_family == default_cf_handle_) {
     return Status::InvalidArgument(
         "Default column family handle is not destroyable.");
   }
