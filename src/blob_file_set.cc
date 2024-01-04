@@ -94,13 +94,8 @@ Status BlobFileSet::Recover() {
     TITAN_LOG_INFO(db_options_.info_log,
                    "Next blob file number is %" PRIu64 ".", next_file_number);
   }
-  auto new_manifest_file_number = NewFileNumber();
-  s = OpenManifest(new_manifest_file_number);
-  if (!s.ok()) return s;
-
   // Purge inactive files at start
   std::set<uint64_t> alive_files;
-  alive_files.insert(new_manifest_file_number);
   for (const auto& bs : column_families_) {
     std::string files_str;
     for (const auto& f : bs.second->files_) {
@@ -136,8 +131,8 @@ Status BlobFileSet::Recover() {
                    "Titan recovery delete obsolete file %s.", f.c_str());
     env_->DeleteFile(dirname_ + "/" + f);
   }
-
-  return Status::OK();
+  auto new_manifest_file_number = NewFileNumber();
+  return OpenManifest(new_manifest_file_number);
 }
 
 Status BlobFileSet::OpenManifest(uint64_t file_number) {
