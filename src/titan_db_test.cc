@@ -1,5 +1,4 @@
 #include <cinttypes>
-
 #include <unordered_map>
 
 #include "db/db_impl/db_impl.h"
@@ -2055,6 +2054,30 @@ TEST_F(TitanDBTest, DISABLED_NoSpaceLeft) {
   system(("sudo umount -l " + dbname_).c_str());
 }
 #endif
+
+TEST_F(TitanDBTest, RecoverAfterCrash) {
+  const uint64_t kNumKeys = 100;
+  std::map<std::string, std::string> data;
+  Open();
+  for (uint64_t k = 1; k <= kNumKeys; k++) {
+    Put(k, &data);
+  }
+  Flush();
+  auto new_fn = db_impl_->TEST_GetBlobFileSet()->NewFileNumber();
+  auto name = BlobFileName(options_.dirname, new_fn);
+  std::unique_ptr<WritableFileWriter> file;
+  {
+    std::unique_ptr<FSWritableFile> f;
+    ASSERT_OK(env_->GetFileSystem()->NewWritableFile(name, FileOptions(), &f,
+                                                     nullptr /*dbg*/));
+  }
+  Close();
+  ASSERT_OK(env_->GetFileSystem()->FileExists(name, IOOptions(), nullptr));
+  // During reopen, the recovery process should delete the file.
+  Open();
+  Close();
+  ASSERT_NOK(env_->GetFileSystem()->FileExists(name, IOOptions(), nullptr));
+}
 }  // namespace titandb
 }  // namespace rocksdb
 
