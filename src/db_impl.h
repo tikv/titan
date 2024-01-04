@@ -214,6 +214,11 @@ class TitanDBImpl : public TitanDB {
     return blob_file_set_->GetBlobStorage(column_family->GetID()).lock();
   }
 
+  BlobFileSet* TEST_GetBlobFileSet() {
+    MutexLock l(&mutex_);
+    return blob_file_set_.get();
+  }
+
  private:
   class FileManager;
   friend class FileManager;

@@ -97,10 +97,8 @@ Status BlobFileSet::Recover() {
   auto new_manifest_file_number = NewFileNumber();
   s = OpenManifest(new_manifest_file_number);
   if (!s.ok()) return s;
-
   // Purge inactive files at start
   std::set<uint64_t> alive_files;
-  alive_files.insert(new_manifest_file_number);
   for (const auto& bs : column_families_) {
     std::string files_str;
     for (const auto& f : bs.second->files_) {
@@ -129,6 +127,13 @@ Status BlobFileSet::Recover() {
     FileType file_type;
     if (!ParseFileName(f, &file_number, &file_type)) continue;
     if (alive_files.find(file_number) != alive_files.end()) continue;
+    // Newly created manifest file cannot be simply added to alive files.
+    // It has to be dealt as a special case.
+    // Output files from last GC may not recorded in the manifest, it is
+    // possible that an orphaned blob file has the same file number as the new
+    // manifest, in this case, the orphaned blob file should be deleted.
+    if (file_number == new_manifest_file_number && file_type == kDescriptorFile)
+      continue;
     if (file_type != FileType::kBlobFile &&
         file_type != FileType::kDescriptorFile)
       continue;
@@ -136,7 +141,6 @@ Status BlobFileSet::Recover() {
                    "Titan recovery delete obsolete file %s.", f.c_str());
     env_->DeleteFile(dirname_ + "/" + f);
   }
-
   return Status::OK();
 }
 
