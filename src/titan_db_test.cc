@@ -2,7 +2,6 @@
 #include <unordered_map>
 
 #include "db/db_impl/db_impl.h"
-#include "util/stderr_logger.h"
 #include "file/filename.h"
 #include "monitoring/statistics.h"
 #include "options/cf_options.h"
