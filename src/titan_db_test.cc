@@ -38,7 +38,6 @@ class TitanDBTest : public testing::Test {
     options_.create_if_missing = true;
     options_.min_blob_size = 32;
     options_.min_gc_batch_size = 1;
-    options_.merge_small_file_threshold = 0;
     options_.disable_background_gc = true;
     options_.blob_file_compression = CompressionType::kLZ4Compression;
     options_.statistics = CreateDBStatistics();
@@ -1073,6 +1072,7 @@ TEST_F(TitanDBTest, SetOptions) {
 
 TEST_F(TitanDBTest, BlobRunModeBasic) {
   options_.disable_background_gc = true;
+  options_.merge_small_file_threshold = 0;
   options_.disable_auto_compactions = true;
   Open();
 
@@ -1197,8 +1197,7 @@ TEST_F(TitanDBTest, FallbackModeEncounterMissingBlobFile) {
 
 TEST_F(TitanDBTest, GCInFallbackMode) {
   options_.disable_background_gc = true;
-  options_.blob_file_discardable_ratio = 0.01;
-  options_.min_blob_size = true;
+  options_.min_blob_size = 0;
   Open();
   ASSERT_OK(db_->Put(WriteOptions(), "foo", "v1"));
   ASSERT_OK(db_->Put(WriteOptions(), "bar", "v1"));
