@@ -20,12 +20,12 @@
 #define TITAN_LOG_STRINGIFY(x) #x
 #define TITAN_LOG_TOSTRING(x) TITAN_LOG_STRINGIFY(x)
 #define TITAN_LOG_PREPEND_FILE_LINE(FMT) \
-  ("[%s:" TITAN_LOG_TOSTRING(__LINE__) "] " FMT)
+  ("[titan/%s:" TITAN_LOG_TOSTRING(__LINE__) "] " FMT)
 
 inline const char* TitanLogShorterFileName(const char* file) {
-  // 15 is the length of "titan_logging.h".
+  // 16 is the length of "titan_logging.h".
   // If the name of this file changed, please change this number, too.
-  return file + (sizeof(__FILE__) > 15 ? sizeof(__FILE__) - 15 : 0);
+  return file + (sizeof(__FILE__) > 16 ? sizeof(__FILE__) - 16 : 0);
 }
 
 // Don't inclide file/line info in HEADER level
