@@ -243,7 +243,8 @@ void BlobStorage::ComputeGCScore() {
       // for the small file or file with gc mark (usually the file that just
       // recovered) we want gc these file but more hope to gc other file with
       // more invalid data
-      score = cf_options_.blob_file_discardable_ratio;
+      score = std::max(cf_options_.blob_file_discardable_ratio,
+                       file.second->GetDiscardableRatio());
     } else {
       score = file.second->GetDiscardableRatio();
     }
