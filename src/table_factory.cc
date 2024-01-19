@@ -27,7 +27,7 @@ TableBuilder *TitanTableFactory::NewTableBuilder(
     return base_builder.release();
   }
   TitanCFOptions cf_options = cf_options_;
-  cf_options.UpdateMutableOptions(mutable_cf_options_.load());
+  cf_options.UpdateMutableOptions(mutable_cf_options_);
 
   std::weak_ptr<BlobStorage> blob_storage;
 

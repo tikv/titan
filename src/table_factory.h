@@ -44,7 +44,7 @@ class TitanTableFactory : public TableFactory {
                                 WritableFileWriter* file) const override;
 
   void SetMutableCFOptions(const MutableTitanCFOptions& mutable_cf_options) {
-    mutable_cf_options_.store(mutable_cf_options);
+    mutable_cf_options_ = mutable_cf_options;
   }
 
   bool IsDeleteRangeSupported() const override {

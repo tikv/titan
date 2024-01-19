@@ -18,7 +18,8 @@ namespace titandb {
 // column family.
 class BlobStorage {
  public:
-  BlobStorage(const BlobStorage& bs) : destroyed_(false) {
+  BlobStorage(const BlobStorage& bs)
+      : mutable_cf_options_(bs.mutable_cf_options_.load()), destroyed_(false) {
     this->files_ = bs.files_;
     this->file_cache_ = bs.file_cache_;
     this->db_options_ = bs.db_options_;
@@ -161,7 +162,7 @@ class BlobStorage {
     min_blob_size_.store(min_blob_size);
   }
   void SetMutableCFOptions(const MutableTitanCFOptions& options) {
-    mutable_cf_options_.store(options);
+    mutable_cf_options_ = options;
   }
 
  private:
