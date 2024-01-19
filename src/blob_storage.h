@@ -34,7 +34,7 @@ class BlobStorage {
               std::atomic<bool>* initialized)
       : db_options_(_db_options),
         cf_options_(_cf_options),
-        blob_run_mode_(_cf_options.blob_run_mode),
+        mutable_cf_options_(MutableTitanCFOptions(_cf_options)),
         cf_id_(cf_id),
         levels_file_count_(_cf_options.num_levels, 0),
         blob_ranges_(InternalComparator(_cf_options.comparator)),
@@ -53,7 +53,7 @@ class BlobStorage {
 
   TitanCFOptions cf_options() {
     auto _cf_options = cf_options_;
-    _cf_options.blob_run_mode = blob_run_mode_.load();
+    cf_options_.UpdateMutableOptions(mutable_cf_options_.load());
     return _cf_options;
   }
 
@@ -157,7 +157,12 @@ class BlobStorage {
   void ExportBlobFiles(
       std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
-  void SetBlobRunMode(TitanBlobRunMode mode) { blob_run_mode_.store(mode); }
+  void SetMinBlobSize(uint64_t min_blob_size) {
+    min_blob_size_.store(min_blob_size);
+  }
+  void SetMutableCFOptions(const MutableTitanCFOptions& options) {
+    mutable_cf_options_.store(options);
+  }
 
  private:
   friend class BlobFileSet;
@@ -172,7 +177,8 @@ class BlobStorage {
 
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
-  std::atomic<TitanBlobRunMode> blob_run_mode_;
+  std::atomic<uint64_t> min_blob_size_;
+  std::atomic<MutableTitanCFOptions> mutable_cf_options_;
   uint32_t cf_id_;
 
   mutable port::Mutex mutex_;

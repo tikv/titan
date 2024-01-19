@@ -173,14 +173,14 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   }
 
   void Dump(Logger* logger) const;
+  void UpdateMutableOptions(const MutableTitanCFOptions& new_options);
 };
 
 struct ImmutableTitanCFOptions {
   ImmutableTitanCFOptions() : ImmutableTitanCFOptions(TitanCFOptions()) {}
 
   explicit ImmutableTitanCFOptions(const TitanCFOptions& opts)
-      : min_blob_size(opts.min_blob_size),
-        blob_file_compression(opts.blob_file_compression),
+      : blob_file_compression(opts.blob_file_compression),
         blob_file_target_size(opts.blob_file_target_size),
         blob_cache(opts.blob_cache),
         max_gc_batch_size(opts.max_gc_batch_size),
@@ -189,8 +189,6 @@ struct ImmutableTitanCFOptions {
         merge_small_file_threshold(opts.merge_small_file_threshold),
         level_merge(opts.level_merge),
         skip_value_in_compaction_filter(opts.skip_value_in_compaction_filter) {}
-
-  uint64_t min_blob_size;
 
   CompressionType blob_file_compression;
 
@@ -215,9 +213,10 @@ struct MutableTitanCFOptions {
   MutableTitanCFOptions() : MutableTitanCFOptions(TitanCFOptions()) {}
 
   explicit MutableTitanCFOptions(const TitanCFOptions& opts)
-      : blob_run_mode(opts.blob_run_mode) {}
+      : blob_run_mode(opts.blob_run_mode), min_blob_size(opts.min_blob_size) {}
 
   TitanBlobRunMode blob_run_mode;
+  uint64_t min_blob_size;
 };
 
 struct TitanOptions : public TitanDBOptions, public TitanCFOptions {
