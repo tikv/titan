@@ -19,7 +19,7 @@ namespace titandb {
 class BlobStorage {
  public:
   BlobStorage(const BlobStorage& bs)
-      : mutable_cf_options_(bs.mutable_cf_options_.load()), destroyed_(false) {
+      : mutable_cf_options_(bs.mutable_cf_options_), destroyed_(false) {
     this->files_ = bs.files_;
     this->file_cache_ = bs.file_cache_;
     this->db_options_ = bs.db_options_;
@@ -54,7 +54,7 @@ class BlobStorage {
 
   TitanCFOptions cf_options() {
     auto _cf_options = cf_options_;
-    cf_options_.UpdateMutableOptions(mutable_cf_options_.load());
+    cf_options_.UpdateMutableOptions(mutable_cf_options_);
     return _cf_options;
   }
 
@@ -158,9 +158,6 @@ class BlobStorage {
   void ExportBlobFiles(
       std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
-  void SetMinBlobSize(uint64_t min_blob_size) {
-    min_blob_size_.store(min_blob_size);
-  }
   void SetMutableCFOptions(const MutableTitanCFOptions& options) {
     mutable_cf_options_ = options;
   }
@@ -178,8 +175,7 @@ class BlobStorage {
 
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
-  std::atomic<uint64_t> min_blob_size_;
-  std::atomic<MutableTitanCFOptions> mutable_cf_options_;
+  MutableTitanCFOptions mutable_cf_options_;
   uint32_t cf_id_;
 
   mutable port::Mutex mutex_;
