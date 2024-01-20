@@ -95,9 +95,13 @@ if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
     set(CMAKE_REQUIRED_FLAGS "--std=c++11")
     CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
-std::atomic<uint64_t> x(0);
+struct A { 
+  A() : a(0) {}
+  uint64_t a;
+};
+std::atomic<uint64_t> x(A());
 int main() {
-  uint64_t i = x.load(std::memory_order_relaxed);
+  uint64_t i = x.load(std::memory_order_relaxed).a;
   bool b = x.is_lock_free();
   return 0;
 }
@@ -114,9 +118,13 @@ if (NOT MSVC)
   set(CMAKE_REQUIRED_FLAGS "--std=c++11")
   CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
-std::atomic<uint64_t> x(0);
+struct A { 
+  A() : a(0) {}
+  uint64_t a;
+};
+std::atomic<uint64_t> x(A());
 int main() {
-  uint64_t i = x.load(std::memory_order_relaxed);
+  uint64_t i = x.load(std::memory_order_relaxed).a;
   bool b = x.is_lock_free();
   return 0;
 }
