@@ -95,17 +95,24 @@ if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
     set(CMAKE_REQUIRED_FLAGS "--std=c++11")
     CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
+struct X {
+  char a;
+  uint64_t b;
+}
 int main() {
-  struct A { char a [3]; } a = { { 'a', 'b', 'c' } };
-  std::atomic<A> aa;
-  aa.store (a);
-  bool b = aa.is_lock_free();
+  auto x = X{ 'a', 0 };
+  std::atomic<X> a;
+  a.store (x);
+  bool b = a.is_lock_free();
   return 0;
 }
 " BUILTIN_ATOMIC)
     if (NOT BUILTIN_ATOMIC)
       #TODO: Check if -latomic exists
       list(APPEND THIRDPARTY_LIBS atomic)
+      message(STATUS "atomic library is required")
+    else()
+      message(STATUS "atomic library is not required")
     endif()
   endif()
 endif()
@@ -115,17 +122,24 @@ if (NOT MSVC)
   set(CMAKE_REQUIRED_FLAGS "--std=c++11")
   CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
+struct X {
+  char a;
+  uint64_t b;
+}
 int main() {
-  struct A { char a [3]; } a = { { 'a', 'b', 'c' } };
-  std::atomic<A> aa;
-  aa.store (a);
-  bool b = aa.is_lock_free();
+  auto x = X{ 'a', 0 };
+  std::atomic<X> a;
+  a.store (x);
+  bool b = a.is_lock_free();
   return 0;
 }
 " BUILTIN_ATOMIC)
   if (NOT BUILTIN_ATOMIC)
     #TODO: Check if -latomic exists
     list(APPEND THIRDPARTY_LIBS atomic)
+    message(STATUS "atomic library is required")
+  else()
+    message(STATUS "atomic library is not required")
   endif()
 endif()
 
