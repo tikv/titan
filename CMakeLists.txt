@@ -95,10 +95,11 @@ if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
     set(CMAKE_REQUIRED_FLAGS "--std=c++11")
     CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
-std::atomic<uint64_t> x(0);
 int main() {
-  uint64_t i = x.load(std::memory_order_relaxed);
-  bool b = x.is_lock_free();
+  struct A { char a [3]; } a = { { 'a', 'b', 'c' } };
+  std::atomic<A> aa;
+  aa.store (a);
+  bool b = aa.is_lock_free();
   return 0;
 }
 " BUILTIN_ATOMIC)
@@ -114,10 +115,11 @@ if (NOT MSVC)
   set(CMAKE_REQUIRED_FLAGS "--std=c++11")
   CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
-std::atomic<uint64_t> x(0);
 int main() {
-  uint64_t i = x.load(std::memory_order_relaxed);
-  bool b = x.is_lock_free();
+  struct A { char a [3]; } a = { { 'a', 'b', 'c' } };
+  std::atomic<A> aa;
+  aa.store (a);
+  bool b = aa.is_lock_free();
   return 0;
 }
 " BUILTIN_ATOMIC)
