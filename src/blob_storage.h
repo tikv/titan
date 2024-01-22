@@ -54,7 +54,7 @@ class BlobStorage {
 
   TitanCFOptions cf_options() {
     auto _cf_options = cf_options_;
-    cf_options_.UpdateMutableOptions(mutable_cf_options_);
+    _cf_options.UpdateMutableOptions(mutable_cf_options_);
     return _cf_options;
   }
 
