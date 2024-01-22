@@ -18,7 +18,9 @@ namespace titandb {
 // column family.
 class BlobStorage {
  public:
-  BlobStorage(const BlobStorage& bs) : destroyed_(false) {
+  BlobStorage(const BlobStorage& bs)
+      : destroyed_(false),
+        mutable_cf_options_(MutableTitanCFOptions(bs.cf_options_)) {
     this->files_ = bs.files_;
     this->file_cache_ = bs.file_cache_;
     this->db_options_ = bs.db_options_;
@@ -41,7 +43,8 @@ class BlobStorage {
         file_cache_(_file_cache),
         destroyed_(false),
         stats_(stats),
-        initialized_(initialized) {}
+        initialized_(initialized),
+        mutable_cf_options_(MutableTitanCFOptions(_cf_options)) {}
 
   ~BlobStorage() {
     for (auto& file : files_) {
@@ -158,6 +161,9 @@ class BlobStorage {
       std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
   void SetBlobRunMode(TitanBlobRunMode mode) { blob_run_mode_.store(mode); }
+  void SetMutableCFOptions(const MutableTitanCFOptions& options) {
+    mutable_cf_options_.store(options);
+  }
 
  private:
   friend class BlobFileSet;
@@ -215,6 +221,7 @@ class BlobStorage {
 
   // Indicates whether the files' live data size is initialized.
   std::atomic<bool>* initialized_;
+  std::atomic<MutableTitanCFOptions> mutable_cf_options_;
 };
 
 }  // namespace titandb

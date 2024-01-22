@@ -1137,11 +1137,15 @@ Status TitanDBImpl::SetOptions(
       MutexLock l(&mutex_);
       assert(cf_info_.count(cf_id) > 0);
       TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
+      auto mutable_cf_options =
+          MutableTitanCFOptions(cf_info.mutable_cf_options);
+      mutable_cf_options.blob_run_mode = blob_run_mode;
       cf_info.titan_table_factory->SetBlobRunMode(blob_run_mode);
       cf_info.mutable_cf_options.blob_run_mode = blob_run_mode;
       auto bs = blob_file_set_->GetBlobStorage(cf_id).lock();
       if (bs != nullptr) {
         bs->SetBlobRunMode(blob_run_mode);
+        bs->SetMutableCFOptions(mutable_cf_options);
       }
     }
   }
