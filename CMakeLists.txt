@@ -95,12 +95,16 @@ if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
     set(CMAKE_REQUIRED_FLAGS "--std=c++11")
     CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
+enum Class Y {
+  kA = 0,
+  kB = 1,
+}
 struct X {
-  char a;
+  Y a;
   uint64_t b;
 }
 int main() {
-  auto x = X{ 'a', 0 };
+  auto x = X{ Y::kA, 0 };
   std::atomic<X> a;
   a.store (x);
   bool b = a.is_lock_free();
@@ -122,12 +126,16 @@ if (NOT MSVC)
   set(CMAKE_REQUIRED_FLAGS "--std=c++11")
   CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
+enum Class Y {
+  kA = 0,
+  kB = 1,
+}
 struct X {
-  char a;
+  Y a;
   uint64_t b;
 }
 int main() {
-  auto x = X{ 'a', 0 };
+  auto x = X{ Y::kA, 0 };
   std::atomic<X> a;
   a.store (x);
   bool b = a.is_lock_free();
