@@ -150,7 +150,7 @@ int main() {
     message(STATUS "atomic library is not required")
   endif()
 endif()
-list(APPEND THIRDPARTY_LIBS atomic)
+link_libraries(atomic)
 
 if (WITH_TITAN_TESTS AND (CMAKE_BUILD_TYPE STREQUAL "Debug"))
   include(CTest)
