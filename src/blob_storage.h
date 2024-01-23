@@ -35,7 +35,7 @@ class BlobStorage {
               std::atomic<bool>* initialized)
       : db_options_(_db_options),
         cf_options_(_cf_options),
-        mutable_cf_options_(MutableTitanCFOptions(_cf_options)),
+        mutable_cf_options_(_cf_options),
         cf_id_(cf_id),
         levels_file_count_(_cf_options.num_levels, 0),
         blob_ranges_(InternalComparator(_cf_options.comparator)),
@@ -159,6 +159,7 @@ class BlobStorage {
       std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
   void SetMutableCFOptions(const MutableTitanCFOptions& options) {
+    MutexLock l(&mutex_);
     mutable_cf_options_ = options;
   }
 
