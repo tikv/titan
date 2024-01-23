@@ -215,10 +215,9 @@ struct MutableTitanCFOptions {
   MutableTitanCFOptions() : MutableTitanCFOptions(TitanCFOptions()) {}
 
   explicit MutableTitanCFOptions(const TitanCFOptions& opts)
-      : blob_run_mode(opts.blob_run_mode), min_blob_size(opts.min_blob_size) {}
+      : blob_run_mode(opts.blob_run_mode) {}
 
   TitanBlobRunMode blob_run_mode;
-  uint64_t min_blob_size;
 };
 
 struct TitanOptions : public TitanDBOptions, public TitanCFOptions {

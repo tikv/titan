@@ -10,7 +10,6 @@ addons:
     packages:
       - clang-format-10
       - g++-9
-      - libatomic-ops-dev
       - libgflags-dev
       - liblz4-dev
       - libsnappy-dev

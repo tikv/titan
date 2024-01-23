@@ -95,28 +95,16 @@ if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
     set(CMAKE_REQUIRED_FLAGS "--std=c++11")
     CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
-enum Class Y {
-  kA = 0,
-  kB = 1,
-}
-struct X {
-  Y a;
-  uint64_t b;
-}
+std::atomic<uint64_t> x(0);
 int main() {
-  auto x = X{ Y::kA, 0 };
-  std::atomic<X> a;
-  a.store (x);
-  bool b = a.is_lock_free();
+  uint64_t i = x.load(std::memory_order_relaxed);
+  bool b = x.is_lock_free();
   return 0;
 }
 " BUILTIN_ATOMIC)
     if (NOT BUILTIN_ATOMIC)
       #TODO: Check if -latomic exists
       list(APPEND THIRDPARTY_LIBS atomic)
-      message(STATUS "atomic library is required")
-    else()
-      message(STATUS "atomic library is not required")
     endif()
   endif()
 endif()
@@ -126,31 +114,18 @@ if (NOT MSVC)
   set(CMAKE_REQUIRED_FLAGS "--std=c++11")
   CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
-enum Class Y {
-  kA = 0,
-  kB = 1,
-}
-struct X {
-  Y a;
-  uint64_t b;
-}
+std::atomic<uint64_t> x(0);
 int main() {
-  auto x = X{ Y::kA, 0 };
-  std::atomic<X> a;
-  a.store (x);
-  bool b = a.is_lock_free();
+  uint64_t i = x.load(std::memory_order_relaxed);
+  bool b = x.is_lock_free();
   return 0;
 }
 " BUILTIN_ATOMIC)
   if (NOT BUILTIN_ATOMIC)
     #TODO: Check if -latomic exists
     list(APPEND THIRDPARTY_LIBS atomic)
-    message(STATUS "atomic library is required")
-  else()
-    message(STATUS "atomic library is not required")
   endif()
 endif()
-link_libraries(atomic)
 
 if (WITH_TITAN_TESTS AND (CMAKE_BUILD_TYPE STREQUAL "Debug"))
   include(CTest)
