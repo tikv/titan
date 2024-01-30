@@ -178,7 +178,8 @@ Status BlobFileReader::Get(const ReadOptions& /*options*/,
     auto cache_value = new OwnedSlice(std::move(blob));
     auto cache_size = cache_value->size() + sizeof(*cache_value);
     cache_->Insert(cache_key, cache_value, cache_size,
-                   &DeleteCacheValue<OwnedSlice>, &cache_handle);
+                   &DeleteCacheValue<OwnedSlice>, &cache_handle,
+                   Cache::Priority::BOTTOM);
     buffer->PinSlice(*cache_value, UnrefCacheHandle, cache_.get(),
                      cache_handle);
   } else {
