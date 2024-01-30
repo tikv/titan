@@ -1140,8 +1140,11 @@ Status TitanDBImpl::SetOptions(
   MutableTitanCFOptions mutable_cf_options =
       cf_info_.at(column_family->GetID()).mutable_cf_options;
   bool titan_options_changed = false;
-  ExtractTitanCfOptions(column_family, opts, mutable_cf_options,
-                        titan_options_changed);
+  s = ExtractTitanCfOptions(column_family, opts, mutable_cf_options,
+                            titan_options_changed);
+  if (!s.ok()) {
+    return s;
+  }
   if (opts.size() > 0) {
     s = db_->SetOptions(column_family, opts);
     if (!s.ok()) {
