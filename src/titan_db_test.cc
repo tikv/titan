@@ -1053,6 +1053,11 @@ TEST_F(TitanDBTest, SetOptions) {
   titan_options = db_->GetTitanOptions();
   ASSERT_EQ(TitanBlobRunMode::kReadOnly, titan_options.blob_run_mode);
   opts.clear();
+  opts["min_blob_size"] = "456";
+  ASSERT_OK(db_->SetOptions(opts));
+  titan_options = db_->GetTitanOptions();
+  ASSERT_EQ(456, titan_options.min_blob_size);
+  opts.clear();
 
   // Set column family options.
   opts["disable_auto_compactions"] = "true";
@@ -2076,6 +2081,44 @@ TEST_F(TitanDBTest, RecoverAfterCrash) {
   Open();
   Close();
   ASSERT_NOK(env_->GetFileSystem()->FileExists(name, IOOptions(), nullptr));
+}
+
+TEST_F(TitanDBTest, OnlineChangeMinBlobSize) {
+  const uint64_t kNumKeys = 100;
+  std::map<std::string, std::string> data;
+  Open();
+  for (uint64_t k = 1; k <= kNumKeys; k++) {
+    Put(k, &data);
+  }
+  Flush();
+  auto blob_storage = GetBlobStorage(db_->DefaultColumnFamily());
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage.lock()->ExportBlobFiles(blob_files);
+  ASSERT_EQ(1, blob_files.size());
+  auto blob_file = blob_files.begin();
+  VerifyBlob(blob_file->first, data);
+  auto first_blob_file_number = blob_file->first;
+
+  std::unordered_map<std::string, std::string> opts = {
+      {"min_blob_size", "123"}};
+  ASSERT_OK(db_->SetOptions(opts));
+  auto titan_options = db_->GetTitanOptions();
+  ASSERT_EQ(123, titan_options.min_blob_size);
+  options_.min_blob_size = 123;
+
+  data.clear();
+  for (uint64_t k = 1; k <= kNumKeys; k++) {
+    Put(k, &data);
+  }
+  Flush();
+  blob_files.clear();
+  blob_storage.lock()->ExportBlobFiles(blob_files);
+  ASSERT_EQ(2, blob_files.size());
+  for (const auto& pair : blob_files) {
+    if (pair.first != first_blob_file_number) {
+      VerifyBlob(pair.first, data);
+    }
+  }
 }
 }  // namespace titandb
 }  // namespace rocksdb

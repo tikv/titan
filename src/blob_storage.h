@@ -18,7 +18,8 @@ namespace titandb {
 // column family.
 class BlobStorage {
  public:
-  BlobStorage(const BlobStorage& bs) : destroyed_(false) {
+  BlobStorage(const BlobStorage& bs)
+      : mutable_cf_options_(bs.mutable_cf_options_), destroyed_(false) {
     this->files_ = bs.files_;
     this->file_cache_ = bs.file_cache_;
     this->db_options_ = bs.db_options_;
@@ -34,7 +35,7 @@ class BlobStorage {
               std::atomic<bool>* initialized)
       : db_options_(_db_options),
         cf_options_(_cf_options),
-        blob_run_mode_(_cf_options.blob_run_mode),
+        mutable_cf_options_(_cf_options),
         cf_id_(cf_id),
         levels_file_count_(_cf_options.num_levels, 0),
         blob_ranges_(InternalComparator(_cf_options.comparator)),
@@ -53,7 +54,7 @@ class BlobStorage {
 
   TitanCFOptions cf_options() {
     auto _cf_options = cf_options_;
-    _cf_options.blob_run_mode = blob_run_mode_.load();
+    _cf_options.UpdateMutableOptions(mutable_cf_options_);
     return _cf_options;
   }
 
@@ -157,7 +158,10 @@ class BlobStorage {
   void ExportBlobFiles(
       std::map<uint64_t, std::weak_ptr<BlobFileMeta>>& ret) const;
 
-  void SetBlobRunMode(TitanBlobRunMode mode) { blob_run_mode_.store(mode); }
+  void SetMutableCFOptions(const MutableTitanCFOptions& options) {
+    MutexLock l(&mutex_);
+    mutable_cf_options_ = options;
+  }
 
  private:
   friend class BlobFileSet;
@@ -172,7 +176,7 @@ class BlobStorage {
 
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
-  std::atomic<TitanBlobRunMode> blob_run_mode_;
+  MutableTitanCFOptions mutable_cf_options_;
   uint32_t cf_id_;
 
   mutable port::Mutex mutex_;
