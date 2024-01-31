@@ -23,7 +23,7 @@ class BlobFileCache {
   // the buffer must be valid when the record is used.
   Status Get(const ReadOptions& options, uint64_t file_number,
              uint64_t file_size, const BlobHandle& handle, BlobRecord* record,
-             PinnableSlice* buffer);
+             PinnableSlice* value);
 
   // Creates a prefetcher for the specified file number.
   Status NewPrefetcher(uint64_t file_number, uint64_t file_size,

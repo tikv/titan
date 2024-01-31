@@ -30,11 +30,11 @@ Slice Compress(const CompressionInfo& info, const Slice& input,
 }
 
 Status Uncompress(const UncompressionInfo& info, const Slice& input,
-                  OwnedSlice* output) {
+                  OwnedSlice* output, MemoryAllocator* allocator ) {
   assert(info.type() != kNoCompression);
   size_t usize = 0;
-  CacheAllocationPtr ubuf = UncompressData(info, input.data(), input.size(),
-                                           &usize, kCompressionFormat);
+  CacheAllocationPtr ubuf = UncompressData(
+      info, input.data(), input.size(), &usize, kCompressionFormat, allocator);
   if (!ubuf.get()) {
     return Status::Corruption("Corrupted compressed blob");
   }
