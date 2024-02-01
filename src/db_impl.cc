@@ -12,6 +12,7 @@
 #include "port/port.h"
 #include "util/autovector.h"
 #include "util/mutexlock.h"
+#include "util/string_util.h"
 #include "util/threadpool_imp.h"
 
 #include "base_db_listener.h"
@@ -1094,30 +1095,50 @@ Options TitanDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
   return options;
 }
 
+Status TitanDBImpl::ExtractTitanCfOptions(
+    ColumnFamilyHandle* column_family,
+    std::unordered_map<std::string, std::string>& new_options,
+    MutableTitanCFOptions& mutable_cf_options, bool& changed) {
+  auto option_pos = new_options.find("blob_run_mode");
+  if (option_pos != new_options.end()) {
+    const std::string& blob_run_mode_string = option_pos->second;
+    auto run_mode_mapping_pos =
+        blob_run_mode_string_map.find(blob_run_mode_string);
+    if (run_mode_mapping_pos == blob_run_mode_string_map.end()) {
+      return Status::InvalidArgument("No blob_run_mode defined for " +
+                                     blob_run_mode_string);
+    } else {
+      mutable_cf_options.blob_run_mode = run_mode_mapping_pos->second;
+      TITAN_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
+                     column_family->GetName().c_str(),
+                     blob_run_mode_string.c_str());
+    }
+    new_options.erase(option_pos);
+    changed = true;
+  }
+
+  option_pos = new_options.find("min_blob_size");
+  if (option_pos != new_options.end()) {
+    uint64_t min_blob_size = ParseUint64(option_pos->second);
+    mutable_cf_options.min_blob_size = min_blob_size;
+    new_options.erase(option_pos);
+    changed = true;
+  }
+  return Status::OK();
+}
+
 Status TitanDBImpl::SetOptions(
     ColumnFamilyHandle* column_family,
     const std::unordered_map<std::string, std::string>& new_options) {
   Status s;
   auto opts = new_options;
-  bool set_blob_run_mode = false;
-  TitanBlobRunMode blob_run_mode = TitanBlobRunMode::kNormal;
-  {
-    auto p = opts.find("blob_run_mode");
-    set_blob_run_mode = (p != opts.end());
-    if (set_blob_run_mode) {
-      const std::string& blob_run_mode_string = p->second;
-      auto pm = blob_run_mode_string_map.find(blob_run_mode_string);
-      if (pm == blob_run_mode_string_map.end()) {
-        return Status::InvalidArgument("No blob_run_mode defined for " +
-                                       blob_run_mode_string);
-      } else {
-        blob_run_mode = pm->second;
-        TITAN_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
-                       column_family->GetName().c_str(),
-                       blob_run_mode_string.c_str());
-      }
-      opts.erase(p);
-    }
+  MutableTitanCFOptions mutable_cf_options =
+      cf_info_.at(column_family->GetID()).mutable_cf_options;
+  bool titan_options_changed = false;
+  s = ExtractTitanCfOptions(column_family, opts, mutable_cf_options,
+                            titan_options_changed);
+  if (!s.ok()) {
+    return s;
   }
   if (opts.size() > 0) {
     s = db_->SetOptions(column_family, opts);
@@ -1125,18 +1146,18 @@ Status TitanDBImpl::SetOptions(
       return s;
     }
   }
-  // Make sure base db's SetOptions success before setting blob_run_mode.
-  if (set_blob_run_mode) {
+  // Make sure base db's SetOptions success before setting Titan's.
+  if (titan_options_changed) {
     uint32_t cf_id = column_family->GetID();
     {
       MutexLock l(&mutex_);
       assert(cf_info_.count(cf_id) > 0);
       TitanColumnFamilyInfo& cf_info = cf_info_[cf_id];
-      cf_info.titan_table_factory->SetBlobRunMode(blob_run_mode);
-      cf_info.mutable_cf_options.blob_run_mode = blob_run_mode;
+      cf_info.titan_table_factory->SetMutableCFOptions(mutable_cf_options);
+      cf_info.mutable_cf_options = mutable_cf_options;
       auto bs = blob_file_set_->GetBlobStorage(cf_id).lock();
       if (bs != nullptr) {
-        bs->SetBlobRunMode(blob_run_mode);
+        bs->SetMutableCFOptions(mutable_cf_options);
       }
     }
   }

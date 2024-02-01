@@ -23,7 +23,7 @@ class TitanTableFactory : public TableFactory {
                     TitanStats* stats)
       : db_options_(db_options),
         cf_options_(cf_options),
-        blob_run_mode_(cf_options.blob_run_mode),
+        mutable_cf_options_(cf_options),
         base_factory_(cf_options.table_factory),
         blob_manager_(blob_manager),
         db_mutex_(db_mutex),
@@ -43,7 +43,10 @@ class TitanTableFactory : public TableFactory {
   TableBuilder* NewTableBuilder(const TableBuilderOptions& options,
                                 WritableFileWriter* file) const override;
 
-  void SetBlobRunMode(TitanBlobRunMode mode) { blob_run_mode_.store(mode); }
+  void SetMutableCFOptions(const MutableTitanCFOptions& mutable_cf_options) {
+    db_mutex_->AssertHeld();
+    mutable_cf_options_ = mutable_cf_options;
+  }
 
   bool IsDeleteRangeSupported() const override {
     return base_factory_->IsDeleteRangeSupported();
@@ -52,7 +55,8 @@ class TitanTableFactory : public TableFactory {
  private:
   const TitanDBOptions db_options_;
   const TitanCFOptions cf_options_;
-  std::atomic<TitanBlobRunMode> blob_run_mode_;
+  MutableTitanCFOptions mutable_cf_options_;
+
   std::shared_ptr<TableFactory> base_factory_;
   std::shared_ptr<BlobFileManager> blob_manager_;
   port::Mutex* db_mutex_;
