@@ -30,7 +30,7 @@ Slice Compress(const CompressionInfo& info, const Slice& input,
 }
 
 Status Uncompress(const UncompressionInfo& info, const Slice& input,
-                  OwnedSlice* output, MemoryAllocator* allocator ) {
+                  OwnedSlice* output, MemoryAllocator* allocator) {
   assert(info.type() != kNoCompression);
   size_t usize = 0;
   CacheAllocationPtr ubuf = UncompressData(
