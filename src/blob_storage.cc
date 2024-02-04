@@ -8,22 +8,13 @@ namespace titandb {
 
 Status BlobStorage::Get(const ReadOptions& options, const BlobIndex& index,
                         BlobRecord* record, PinnableSlice* value) {
-  auto sfile = FindFile(index.file_number).lock();
-  if (!sfile)
-    return Status::Corruption("Missing blob file: " +
-                              std::to_string(index.file_number));
-  return file_cache_->Get(options, sfile->file_number(), sfile->file_size(),
-                          index.blob_handle, record, value);
+  return file_cache_->Get(options, index.file_number, index.blob_handle, record,
+                          value);
 }
 
 Status BlobStorage::NewPrefetcher(uint64_t file_number,
                                   std::unique_ptr<BlobFilePrefetcher>* result) {
-  auto sfile = FindFile(file_number).lock();
-  if (!sfile)
-    return Status::Corruption("Missing blob wfile: " +
-                              std::to_string(file_number));
-  return file_cache_->NewPrefetcher(sfile->file_number(), sfile->file_size(),
-                                    result);
+  return file_cache_->NewPrefetcher(file_number, result);
 }
 
 Status BlobStorage::GetBlobFilesInRanges(
