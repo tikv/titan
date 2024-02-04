@@ -2120,6 +2120,123 @@ TEST_F(TitanDBTest, OnlineChangeMinBlobSize) {
     }
   }
 }
+
+TEST_F(TitanDBTest, OnlineChangeCompressionType) {
+  const uint64_t kNumKeys = 100;
+  std::map<std::string, std::string> data;
+  Open();
+
+  std::unordered_map<std::string, std::string> opts = {
+      {"blob_file_compression", "kNoCompression"}};
+  ASSERT_OK(db_->SetOptions(opts));
+  auto titan_options = db_->GetTitanOptions();
+  ASSERT_EQ(kNoCompression, titan_options.blob_file_compression);
+  for (uint64_t k = 1; k <= kNumKeys; k++) {
+    Put(k, &data);
+  }
+  Flush();
+  auto blob_storage = GetBlobStorage(db_->DefaultColumnFamily());
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage.lock()->ExportBlobFiles(blob_files);
+  ASSERT_EQ(1, blob_files.size());
+  auto blob_file = blob_files.begin();
+  VerifyBlob(blob_file->first, data);
+  auto first_blob_file_number = blob_file->first;
+  auto first_blob_file_size = blob_file->second.lock()->file_size();
+
+  data.clear();
+  for (uint64_t k = 1; k <= kNumKeys; k++) {
+    Put(k, &data);
+  }
+  Flush();
+  blob_files.clear();
+  blob_storage.lock()->ExportBlobFiles(blob_files);
+  ASSERT_EQ(2, blob_files.size());
+  uint64_t second_blob_file_number = 0;
+  for (const auto& pair : blob_files) {
+    if (pair.first != first_blob_file_number) {
+      second_blob_file_number = pair.first;
+      ASSERT_EQ(first_blob_file_size, pair.second.lock()->file_size());
+      VerifyBlob(pair.first, data);
+    }
+  }
+
+  opts = {{"blob_file_compression", "kLZ4Compression"}};
+  ASSERT_OK(db_->SetOptions(opts));
+  titan_options = db_->GetTitanOptions();
+  ASSERT_EQ(kLZ4Compression, titan_options.blob_file_compression);
+
+  data.clear();
+  for (uint64_t k = 1; k <= kNumKeys; k++) {
+    Put(k, &data);
+  }
+  Flush();
+  blob_files.clear();
+  blob_storage.lock()->ExportBlobFiles(blob_files);
+  ASSERT_EQ(3, blob_files.size());
+  for (const auto& pair : blob_files) {
+    if (pair.first != first_blob_file_number &&
+        pair.first != second_blob_file_number) {
+      VerifyBlob(pair.first, data);
+      // The third blob file should be smaller, since it uses compression
+      // algorithm.
+      ASSERT_GT(first_blob_file_size, pair.second.lock()->file_size());
+    }
+  }
+}
+
+TEST_F(TitanDBTest, OnlineChangeBlobFileDiscardableRatio) {
+  options_.min_blob_size = 0;
+  const uint64_t kNumKeys = 100;
+  std::map<std::string, std::string> data;
+  Open();
+  uint32_t default_cf_id = db_->DefaultColumnFamily()->GetID();
+
+  std::unordered_map<std::string, std::string> opts = {
+      {"blob_file_discardable_ratio", "0.8"}};
+  ASSERT_OK(db_->SetOptions(opts));
+  for (uint64_t k = 1; k <= kNumKeys; k++) {
+    auto key = GenKey(k);
+    ASSERT_OK(db_->Put(WriteOptions(), key, "v"));
+  }
+  Flush();
+
+  data.clear();
+  for (uint64_t k = 1; k <= kNumKeys; k++) {
+    if (k % 2 == 0) {
+      Delete(k);
+    }
+  }
+  Flush();
+  CompactAll();
+
+  db_impl_->TEST_StartGC(default_cf_id);
+  db_impl_->TEST_WaitForBackgroundGC();
+
+  auto blob_storage = GetBlobStorage(db_->DefaultColumnFamily());
+  ASSERT_EQ(blob_storage.lock()->cf_options().blob_file_discardable_ratio, 0.8);
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> blob_files;
+  blob_storage.lock()->ExportBlobFiles(blob_files);
+  ASSERT_EQ(1, blob_files.size());
+  auto blob_file = blob_files.begin();
+  ASSERT_GT(blob_file->second.lock()->GetDiscardableRatio(), 0.4);
+
+  opts = {{"blob_file_discardable_ratio", "0.4"}};
+  ASSERT_OK(db_->SetOptions(opts));
+  auto titan_options = db_->GetTitanOptions();
+  ASSERT_EQ(0.4, titan_options.blob_file_discardable_ratio);
+
+  db_impl_->TEST_StartGC(default_cf_id);
+  db_impl_->TEST_WaitForBackgroundGC();
+  ASSERT_OK(db_impl_->TEST_PurgeObsoleteFiles());
+
+  blob_files.clear();
+  blob_storage.lock()->ExportBlobFiles(blob_files);
+  ASSERT_EQ(1, blob_files.size());
+  blob_file = blob_files.begin();
+  // The discardable ratio should be updated after GC.
+  ASSERT_LT(blob_file->second.lock()->GetDiscardableRatio(), 0.4);
+}
 }  // namespace titandb
 }  // namespace rocksdb
 

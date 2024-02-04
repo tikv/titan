@@ -9,6 +9,7 @@
 #include "db/arena_wrapped_db_iter.h"
 #include "logging/log_buffer.h"
 #include "monitoring/statistics_impl.h"
+#include "options/options_helper.h"
 #include "port/port.h"
 #include "util/autovector.h"
 #include "util/mutexlock.h"
@@ -1126,9 +1127,43 @@ Status TitanDBImpl::ExtractTitanCfOptions(
   if (option_pos != new_options.end()) {
     uint64_t min_blob_size = ParseUint64(option_pos->second);
     mutable_cf_options.min_blob_size = min_blob_size;
+    TITAN_LOG_INFO(db_options_.info_log, "[%s] Set min_blob_size: %" PRIu64,
+                   column_family->GetName().c_str(), min_blob_size);
     new_options.erase(option_pos);
     changed = true;
   }
+
+  option_pos = new_options.find("blob_file_compression");
+  if (option_pos != new_options.end()) {
+    const std::string& blob_file_compression_string = option_pos->second;
+    auto compression_type_mapping_pos =
+        compression_type_string_map.find(blob_file_compression_string);
+    if (compression_type_mapping_pos == compression_type_string_map.end()) {
+      return Status::InvalidArgument("No compression type defined for " +
+                                     blob_file_compression_string);
+    } else {
+      mutable_cf_options.blob_file_compression =
+          compression_type_mapping_pos->second;
+      TITAN_LOG_INFO(db_options_.info_log, "[%s] Set blob_file_compression: %s",
+                     column_family->GetName().c_str(),
+                     blob_file_compression_string.c_str());
+    }
+    new_options.erase(option_pos);
+    changed = true;
+  }
+
+  option_pos = new_options.find("blob_file_discardable_ratio");
+  if (option_pos != new_options.end()) {
+    double blob_file_discardable_ratio = ParseDouble(option_pos->second);
+    mutable_cf_options.blob_file_discardable_ratio =
+        blob_file_discardable_ratio;
+    TITAN_LOG_INFO(
+        db_options_.info_log, "[%s] Set blob_file_discardable_ratio: %f",
+        column_family->GetName().c_str(), blob_file_discardable_ratio);
+    new_options.erase(option_pos);
+    changed = true;
+  }
+
   return Status::OK();
 }
 
