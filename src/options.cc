@@ -8,7 +8,6 @@
 
 #include "options/options_helper.h"
 #include "rocksdb/convenience.h"
-
 #include "titan_logging.h"
 
 namespace rocksdb {
@@ -34,7 +33,7 @@ TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
                                const ImmutableTitanCFOptions& immutable_opts,
                                const MutableTitanCFOptions& mutable_opts)
     : ColumnFamilyOptions(cf_opts),
-      min_blob_size(immutable_opts.min_blob_size),
+      min_blob_size(mutable_opts.min_blob_size),
       blob_file_compression(immutable_opts.blob_file_compression),
       blob_file_target_size(immutable_opts.blob_file_target_size),
       blob_cache(immutable_opts.blob_cache),
@@ -95,6 +94,12 @@ void TitanCFOptions::Dump(Logger* logger) const {
   }
   TITAN_LOG_HEADER(logger, "TitanCFOptions.blob_run_mode                : %s",
                    blob_run_mode_str.c_str());
+}
+
+void TitanCFOptions::UpdateMutableOptions(
+    const MutableTitanCFOptions& new_options) {
+  blob_run_mode = new_options.blob_run_mode;
+  min_blob_size = new_options.min_blob_size;
 }
 
 std::map<TitanBlobRunMode, std::string>

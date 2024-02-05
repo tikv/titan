@@ -27,7 +27,8 @@ TableBuilder *TitanTableFactory::NewTableBuilder(
     return base_builder.release();
   }
   TitanCFOptions cf_options = cf_options_;
-  cf_options.blob_run_mode = blob_run_mode_.load();
+  cf_options.UpdateMutableOptions(mutable_cf_options_);
+
   std::weak_ptr<BlobStorage> blob_storage;
 
   // since we force use dynamic_level_bytes=true when level_merge=true, the last

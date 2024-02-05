@@ -239,6 +239,11 @@ class TitanDBImpl : public TitanDB {
       const TitanDBOptions& options,
       const std::vector<TitanCFDescriptor>& column_families) const;
 
+  Status ExtractTitanCfOptions(
+      ColumnFamilyHandle* column_family,
+      std::unordered_map<std::string, std::string>& new_options,
+      MutableTitanCFOptions& mutable_cf_options, bool& changed);
+
   Status GetImpl(const ReadOptions& options, ColumnFamilyHandle* handle,
                  const Slice& key, PinnableSlice* value);
 
