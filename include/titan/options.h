@@ -172,6 +172,10 @@ struct TitanCFOptions : public ColumnFamilyOptions {
     return *this;
   }
 
+  MemoryAllocator* memory_allocator() const {
+    return blob_cache ? blob_cache->memory_allocator() : nullptr;
+  }
+
   void Dump(Logger* logger) const;
   void UpdateMutableOptions(const MutableTitanCFOptions& new_options);
 };

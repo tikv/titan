@@ -114,7 +114,8 @@ class BlobDecoder {
       : BlobDecoder(&UncompressionDict::GetEmptyDict(), kNoCompression) {}
 
   Status DecodeHeader(Slice* src);
-  Status DecodeRecord(Slice* src, BlobRecord* record, OwnedSlice* buffer);
+  Status DecodeRecord(Slice* src, BlobRecord* record, OwnedSlice* buffer,
+                      MemoryAllocator* allocator = nullptr);
 
   void SetUncompressionDict(const UncompressionDict* uncompression_dict) {
     uncompression_dict_ = uncompression_dict;

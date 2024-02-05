@@ -25,10 +25,10 @@ class BlobFileReader {
                      TitanStats* stats);
 
   // Gets the blob record pointed by the handle in this file. The data
-  // of the record is stored in the provided buffer, so the buffer
+  // of the record is stored in the value slice underlying, so the value slice
   // must be valid when the record is used.
   Status Get(const ReadOptions& options, const BlobHandle& handle,
-             BlobRecord* record, PinnableSlice* buffer);
+             BlobRecord* record, PinnableSlice* value);
 
  private:
   friend class BlobFilePrefetcher;
@@ -78,7 +78,8 @@ class BlobFilePrefetcher : public Cleanable {
 // uncompression dictionary
 Status InitUncompressionDict(
     const BlobFileFooter& footer, RandomAccessFileReader* file,
-    std::unique_ptr<UncompressionDict>* uncompression_dict);
+    std::unique_ptr<UncompressionDict>* uncompression_dict,
+    MemoryAllocator* allocator);
 
 }  // namespace titandb
 }  // namespace rocksdb

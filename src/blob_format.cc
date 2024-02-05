@@ -71,7 +71,8 @@ Status BlobDecoder::DecodeHeader(Slice* src) {
 }
 
 Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
-                                 OwnedSlice* buffer) {
+                                 OwnedSlice* buffer,
+                                 MemoryAllocator* allocator) {
   TEST_SYNC_POINT_CALLBACK("BlobDecoder::DecodeRecord", &crc_);
 
   Slice input(src->data(), record_size_);
@@ -86,7 +87,7 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
   }
   UncompressionContext ctx(compression_);
   UncompressionInfo info(ctx, *uncompression_dict_, compression_);
-  Status s = Uncompress(info, input, buffer);
+  Status s = Uncompress(info, input, buffer, allocator);
   if (!s.ok()) {
     return s;
   }

@@ -701,15 +701,14 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
   assert(s.ok());
   if (!s.ok()) return s;
 
-  BlobRecord record;
-  PinnableSlice buffer;
-
   auto storage =
       static_cast_with_check<TitanColumnFamilyHandle>(handle)->GetBlobStorage();
   if (storage) {
     StopWatch read_sw(env_->GetSystemClock().get(), statistics(stats_.get()),
                       TITAN_BLOB_FILE_READ_MICROS);
-    s = storage->Get(options, index, &record, &buffer);
+    value->Reset();
+    BlobRecord record;
+    s = storage->Get(options, index, &record, value);
     RecordTick(statistics(stats_.get()), TITAN_BLOB_FILE_NUM_KEYS_READ);
     RecordTick(statistics(stats_.get()), TITAN_BLOB_FILE_BYTES_READ,
                index.blob_handle.size);
@@ -725,10 +724,6 @@ Status TitanDBImpl::GetImpl(const ReadOptions& options,
                     key.ToString(true).c_str(),
                     options.snapshot->GetSequenceNumber(),
                     s.ToString().c_str());
-  }
-  if (s.ok()) {
-    value->Reset();
-    value->PinSelf(record.value);
   }
   return s;
 }

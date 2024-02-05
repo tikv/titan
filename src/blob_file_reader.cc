@@ -116,7 +116,8 @@ Status BlobFileReader::Open(const TitanCFOptions& options,
   reader->footer_ = footer;
   if (header.flags & BlobFileHeader::kHasUncompressionDictionary) {
     s = InitUncompressionDict(footer, reader->file_.get(),
-                              &reader->uncompression_dict_);
+                              &reader->uncompression_dict_,
+                              options.memory_allocator());
     if (!s.ok()) {
       return s;
     }
@@ -151,7 +152,7 @@ BlobFileReader::BlobFileReader(const TitanCFOptions& options,
 
 Status BlobFileReader::Get(const ReadOptions& /*options*/,
                            const BlobHandle& handle, BlobRecord* record,
-                           PinnableSlice* buffer) {
+                           PinnableSlice* value) {
   TEST_SYNC_POINT("BlobFileReader::Get");
 
   std::string cache_key;
@@ -162,8 +163,11 @@ Status BlobFileReader::Get(const ReadOptions& /*options*/,
     if (cache_handle) {
       RecordTick(statistics(stats_), TITAN_BLOB_CACHE_HIT);
       auto blob = reinterpret_cast<OwnedSlice*>(cache_->Value(cache_handle));
-      buffer->PinSlice(*blob, UnrefCacheHandle, cache_.get(), cache_handle);
-      return DecodeInto(*blob, record);
+      Status s = DecodeInto(*blob, record);
+      if (!s.ok()) return s;
+      value->PinSlice(record->value, UnrefCacheHandle, cache_.get(),
+                      cache_handle);
+      return s;
     }
   }
   RecordTick(statistics(stats_), TITAN_BLOB_CACHE_MISS);
@@ -178,11 +182,13 @@ Status BlobFileReader::Get(const ReadOptions& /*options*/,
     auto cache_value = new OwnedSlice(std::move(blob));
     auto cache_size = cache_value->size() + sizeof(*cache_value);
     cache_->Insert(cache_key, cache_value, cache_size,
-                   &DeleteCacheValue<OwnedSlice>, &cache_handle);
-    buffer->PinSlice(*cache_value, UnrefCacheHandle, cache_.get(),
-                     cache_handle);
+                   &DeleteCacheValue<OwnedSlice>, &cache_handle,
+                   Cache::Priority::BOTTOM);
+    value->PinSlice(record->value, UnrefCacheHandle, cache_.get(),
+                    cache_handle);
   } else {
-    buffer->PinSlice(blob, OwnedSlice::CleanupFunc, blob.release(), nullptr);
+    value->PinSlice(record->value, OwnedSlice::CleanupFunc, blob.release(),
+                    nullptr);
   }
 
   return Status::OK();
@@ -191,7 +197,8 @@ Status BlobFileReader::Get(const ReadOptions& /*options*/,
 Status BlobFileReader::ReadRecord(const BlobHandle& handle, BlobRecord* record,
                                   OwnedSlice* buffer) {
   Slice blob;
-  CacheAllocationPtr ubuf(new char[handle.size]);
+  CacheAllocationPtr ubuf =
+      AllocateBlock(handle.size, options_.memory_allocator());
   Status s = file_->Read(IOOptions(), handle.offset, handle.size, &blob,
                          ubuf.get(), nullptr /*aligned_buf*/);
   if (!s.ok()) {
@@ -211,7 +218,7 @@ Status BlobFileReader::ReadRecord(const BlobHandle& handle, BlobRecord* record,
     return s;
   }
   buffer->reset(std::move(ubuf), blob);
-  s = decoder.DecodeRecord(&blob, record, buffer);
+  s = decoder.DecodeRecord(&blob, record, buffer, options_.memory_allocator());
   return s;
 }
 
@@ -237,7 +244,8 @@ Status BlobFilePrefetcher::Get(const ReadOptions& options,
 
 Status InitUncompressionDict(
     const BlobFileFooter& footer, RandomAccessFileReader* file,
-    std::unique_ptr<UncompressionDict>* uncompression_dict) {
+    std::unique_ptr<UncompressionDict>* uncompression_dict,
+    MemoryAllocator* memory_allocator) {
   // TODO: Cache the compression dictionary in either block cache or blob cache.
 #if ZSTD_VERSION_NUMBER < 10103
   return Status::NotSupported("the version of libztsd is too low");
@@ -248,7 +256,9 @@ Status InitUncompressionDict(
   assert(footer.meta_index_handle.size() > 0);
   BlockHandle meta_index_handle = footer.meta_index_handle;
   Slice blob;
-  CacheAllocationPtr ubuf(new char[meta_index_handle.size()]);
+
+  CacheAllocationPtr ubuf =
+      AllocateBlock(meta_index_handle.size(), memory_allocator);
   Status s = file->Read(IOOptions(), meta_index_handle.offset(),
                         meta_index_handle.size(), &blob, ubuf.get(),
                         nullptr /*aligned_buf*/);
@@ -276,7 +286,8 @@ Status InitUncompressionDict(
   }
 
   Slice dict_slice;
-  CacheAllocationPtr dict_buf(new char[dict_block.size()]);
+  CacheAllocationPtr dict_buf =
+      AllocateBlock(dict_block.size(), memory_allocator);
   s = file->Read(IOOptions(), dict_block.offset(), dict_block.size(),
                  &dict_slice, dict_buf.get(), nullptr /*aligned_buf*/);
   if (!s.ok()) {

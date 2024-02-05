@@ -67,7 +67,7 @@ class BlobStorage {
   // buffer is used to store the record data, so the buffer must be
   // valid when the record is used.
   Status Get(const ReadOptions& options, const BlobIndex& index,
-             BlobRecord* record, PinnableSlice* buffer);
+             BlobRecord* record, PinnableSlice* value);
 
   // Creates a prefetcher for the specified file number.
   Status NewPrefetcher(uint64_t file_number,
