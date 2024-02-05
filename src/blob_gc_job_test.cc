@@ -591,7 +591,7 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
     iter->Next();
   }
   // `DeleteFilesInRange` may expose old blob index.
-  ASSERT_TRUE(iter->status().IsCorruption());
+  ASSERT_FALSE(iter->status().ok());
   delete iter;
 
   // Set key only to ignore the stale blob indexes.

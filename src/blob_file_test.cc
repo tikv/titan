@@ -107,17 +107,14 @@ class BlobFileTest : public testing::Test {
       expect.key = key;
       expect.value = value;
       BlobRecord record;
-      PinnableSlice buffer;
+      OwnedSlice buffer;
       BlobHandle blob_handle = contexts[i]->new_blob_index.blob_handle;
       ASSERT_OK(cache.Get(ro, file_number_, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
-      buffer.Reset();
       ASSERT_OK(cache.Get(ro, file_number_, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
-      buffer.Reset();
       ASSERT_OK(prefetcher->Get(ro, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
-      buffer.Reset();
       ASSERT_OK(prefetcher->Get(ro, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
     }
@@ -187,17 +184,14 @@ class BlobFileTest : public testing::Test {
       expect.key = key;
       expect.value = value;
       BlobRecord record;
-      PinnableSlice buffer;
+      OwnedSlice buffer;
       BlobHandle blob_handle = contexts[i]->new_blob_index.blob_handle;
       ASSERT_OK(cache.Get(ro, file_number_, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
-      buffer.Reset();
       ASSERT_OK(cache.Get(ro, file_number_, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
-      buffer.Reset();
       ASSERT_OK(blob_file_reader->Get(ro, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
-      buffer.Reset();
       ASSERT_OK(blob_file_reader->Get(ro, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
     }

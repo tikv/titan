@@ -48,7 +48,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     }
 
     BlobRecord record;
-    PinnableSlice buffer;
+    OwnedSlice buffer;
     Status get_status = GetBlobRecord(index, &record, &buffer);
     UpdateIOBytes(prev_bytes_read, prev_bytes_written, &io_bytes_read_,
                   &io_bytes_written_);
@@ -91,7 +91,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     auto blob_file = storage->FindFile(index.file_number).lock();
     if (ShouldMerge(blob_file)) {
       BlobRecord record;
-      PinnableSlice buffer;
+      OwnedSlice buffer;
       Status get_status = GetBlobRecord(index, &record, &buffer);
 
       // If not ok, write original blob index as compaction output without
@@ -381,7 +381,7 @@ void TitanTableBuilder::UpdateInternalOpStats() {
 
 Status TitanTableBuilder::GetBlobRecord(const BlobIndex& index,
                                         BlobRecord* record,
-                                        PinnableSlice* buffer) {
+                                        OwnedSlice* buffer) {
   Status s;
 
   auto it = input_file_prefetchers_.find(index.file_number);

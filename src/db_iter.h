@@ -137,6 +137,16 @@ class TitanDBIterator : public Iterator {
       return s;
     }
 
+    std::string cache_key;
+    auto blob_cache = storage_->blob_cache();
+    if (blob_cache) {
+      cache_key = storage_->EncodeBlobCache(index);
+      bool cache_hit;
+      s = storage_->TryGetBlobCache(cache_key, &record_, &buffer_, &cache_hit);
+      if (!s.ok()) return s;
+      if (cache_hit) return s;
+    }
+
     auto it = files_.find(index.file_number);
     if (it == files_.end()) {
       std::unique_ptr<BlobFilePrefetcher> prefetcher;
@@ -154,7 +164,8 @@ class TitanDBIterator : public Iterator {
     }
 
     buffer_.Reset();
-    s = it->second->Get(options_, index.blob_handle, &record_, &buffer_);
+    OwnedSlice blob;
+    s = it->second->Get(options_, index.blob_handle, &record_, &blob);
     if (!s.ok()) {
       TITAN_LOG_ERROR(
           info_log_,
@@ -163,6 +174,19 @@ class TitanDBIterator : public Iterator {
           index.file_number, index.blob_handle.offset, index.blob_handle.size,
           s.ToString().c_str());
       if (options_.abort_on_failure) std::abort();
+    }
+
+    if (blob_cache && options_.fill_cache) {
+      Cache::Handle *cache_handle = nullptr;
+      auto cache_value = new OwnedSlice(std::move(blob));
+      blob_cache->Insert(cache_key, cache_value,
+                         cache_value->size() + sizeof(*cache_value),
+                         &DeleteCacheValue<OwnedSlice>, &cache_handle,
+                         Cache::Priority::BOTTOM);
+      buffer_.PinSlice(*cache_value, UnrefCacheHandle, blob_cache,
+                       cache_handle);
+    } else {
+      buffer_.PinSlice(blob, OwnedSlice::CleanupFunc, blob.release(), nullptr);
     }
     return s;
   }

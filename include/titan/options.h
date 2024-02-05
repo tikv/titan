@@ -98,7 +98,7 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // If non-NULL use the specified cache for blob records.
   //
   // Default: nullptr
-  std::shared_ptr<Cache> blob_cache;
+  std::shared_ptr<Cache> blob_cache{nullptr};
 
   // Max batch size for GC.
   //

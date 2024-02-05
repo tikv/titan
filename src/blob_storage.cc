@@ -6,10 +6,66 @@
 namespace rocksdb {
 namespace titandb {
 
+std::string BlobStorage::EncodeBlobCache(const BlobIndex& index) {
+  std::string cache_key(cache_prefix_);
+  PutVarint64(&cache_key, index.file_number);
+  PutVarint64(&cache_key, index.blob_handle.offset);
+  return cache_key;
+}
+
+Status BlobStorage::TryGetBlobCache(const std::string& cache_key,
+                                    BlobRecord* record, PinnableSlice* value,
+                                    bool* cache_hit) {
+  Status s;
+  Cache::Handle* cache_handle = blob_cache_->Lookup(cache_key);
+  if (cache_handle) {
+    *cache_hit = true;
+    RecordTick(statistics(stats_), TITAN_BLOB_CACHE_HIT);
+    auto blob = reinterpret_cast<OwnedSlice*>(blob_cache_->Value(cache_handle));
+    s = DecodeInto(*blob, record);
+    if (!s.ok()) return s;
+
+    value->PinSlice(record->value, UnrefCacheHandle, blob_cache_.get(),
+                    cache_handle);
+    return s;
+  }
+  *cache_hit = false;
+  RecordTick(statistics(stats_), TITAN_BLOB_CACHE_MISS);
+  return s;
+}
+
 Status BlobStorage::Get(const ReadOptions& options, const BlobIndex& index,
                         BlobRecord* record, PinnableSlice* value) {
-  return file_cache_->Get(options, index.file_number, index.blob_handle, record,
-                          value);
+  std::string cache_key;
+
+  if (blob_cache_) {
+    cache_key = EncodeBlobCache(index);
+    bool cache_hit;
+    Status s = TryGetBlobCache(cache_key, record, value, &cache_hit);
+    if (!s.ok()) return s;
+    if (cache_hit) return s;
+  }
+
+  OwnedSlice blob;
+  Status s = file_cache_->Get(options, index.file_number, index.blob_handle,
+                              record, &blob);
+  if (!s.ok()) {
+    return s;
+  }
+
+  if (blob_cache_ && options.fill_cache) {
+    Cache::Handle* cache_handle = nullptr;
+    auto cache_value = new OwnedSlice(std::move(blob));
+    blob_cache_->Insert(
+        cache_key, cache_value, cache_value->size() + sizeof(*cache_value),
+        &DeleteCacheValue<OwnedSlice>, &cache_handle, Cache::Priority::BOTTOM);
+    value->PinSlice(record->value, UnrefCacheHandle, blob_cache_.get(),
+                    cache_handle);
+  } else {
+    value->PinSlice(record->value, OwnedSlice::CleanupFunc, blob.release(),
+                    nullptr);
+  }
+  return s;
 }
 
 Status BlobStorage::NewPrefetcher(uint64_t file_number,

@@ -28,7 +28,7 @@ class BlobFileReader {
   // of the record is stored in the value slice underlying, so the value slice
   // must be valid when the record is used.
   Status Get(const ReadOptions& options, const BlobHandle& handle,
-             BlobRecord* record, PinnableSlice* value);
+             BlobRecord* record, OwnedSlice* buffer);
 
  private:
   friend class BlobFilePrefetcher;
@@ -37,23 +37,18 @@ class BlobFileReader {
                  std::unique_ptr<RandomAccessFileReader> file,
                  TitanStats* stats);
 
-  Status ReadRecord(const BlobHandle& handle, BlobRecord* record,
-                    OwnedSlice* buffer);
   static Status ReadHeader(std::unique_ptr<RandomAccessFileReader>& file,
                            BlobFileHeader* header);
 
   TitanCFOptions options_;
   std::unique_ptr<RandomAccessFileReader> file_;
 
-  std::shared_ptr<Cache> cache_;
-  std::string cache_prefix_;
-
   // Information read from the file.
   BlobFileFooter footer_;
 
   std::unique_ptr<UncompressionDict> uncompression_dict_ = nullptr;
 
-  TitanStats* stats_;
+  // TitanStats* stats_;
 };
 
 // Performs readahead on continuous reads.
@@ -64,7 +59,7 @@ class BlobFilePrefetcher : public Cleanable {
   BlobFilePrefetcher(BlobFileReader* reader) : reader_(reader) {}
 
   Status Get(const ReadOptions& options, const BlobHandle& handle,
-             BlobRecord* record, PinnableSlice* buffer);
+             BlobRecord* record, OwnedSlice* buffer);
 
  private:
   BlobFileReader* reader_;

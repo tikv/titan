@@ -14,6 +14,7 @@
 #include "test_util/sync_point.h"
 #include "util/crc32c.h"
 #include "util/string_util.h"
+#include "rocksdb/cache.h"
 
 #include "titan_stats.h"
 
@@ -43,22 +44,6 @@ Status NewBlobFileReader(uint64_t file_number, uint64_t readahead_size,
 const uint64_t kMaxReadaheadSize = 256 << 10;
 
 namespace {
-
-void GenerateCachePrefix(std::string* dst, Cache* cc,
-                         FSRandomAccessFile* file) {
-  char buffer[kMaxVarint64Length * 3 + 1];
-  auto size = file->GetUniqueId(buffer, sizeof(buffer));
-  if (size == 0) {
-    auto end = EncodeVarint64(buffer, cc->NewId());
-    size = end - buffer;
-  }
-  dst->assign(buffer, size);
-}
-
-void EncodeBlobCache(std::string* dst, const Slice& prefix, uint64_t offset) {
-  dst->assign(prefix.data(), prefix.size());
-  PutVarint64(dst, offset);
-}
 
 // Seek to the specified meta block.
 // Return true if it successfully seeks to that block.
@@ -140,62 +125,13 @@ Status BlobFileReader::ReadHeader(std::unique_ptr<RandomAccessFileReader>& file,
 
 BlobFileReader::BlobFileReader(const TitanCFOptions& options,
                                std::unique_ptr<RandomAccessFileReader> file,
-                               TitanStats* stats)
-    : options_(options),
-      file_(std::move(file)),
-      cache_(options.blob_cache),
-      stats_(stats) {
-  if (cache_) {
-    GenerateCachePrefix(&cache_prefix_, cache_.get(), file_->file());
-  }
-}
+                               TitanStats* _stats)
+    : options_(options), file_(std::move(file)) {}
 
-Status BlobFileReader::Get(const ReadOptions& /*options*/,
+Status BlobFileReader::Get(const ReadOptions& _options,
                            const BlobHandle& handle, BlobRecord* record,
-                           PinnableSlice* value) {
+                           OwnedSlice* buffer) {
   TEST_SYNC_POINT("BlobFileReader::Get");
-
-  std::string cache_key;
-  Cache::Handle* cache_handle = nullptr;
-  if (cache_) {
-    EncodeBlobCache(&cache_key, cache_prefix_, handle.offset);
-    cache_handle = cache_->Lookup(cache_key);
-    if (cache_handle) {
-      RecordTick(statistics(stats_), TITAN_BLOB_CACHE_HIT);
-      auto blob = reinterpret_cast<OwnedSlice*>(cache_->Value(cache_handle));
-      Status s = DecodeInto(*blob, record);
-      if (!s.ok()) return s;
-      value->PinSlice(record->value, UnrefCacheHandle, cache_.get(),
-                      cache_handle);
-      return s;
-    }
-  }
-  RecordTick(statistics(stats_), TITAN_BLOB_CACHE_MISS);
-
-  OwnedSlice blob;
-  Status s = ReadRecord(handle, record, &blob);
-  if (!s.ok()) {
-    return s;
-  }
-
-  if (cache_) {
-    auto cache_value = new OwnedSlice(std::move(blob));
-    auto cache_size = cache_value->size() + sizeof(*cache_value);
-    cache_->Insert(cache_key, cache_value, cache_size,
-                   &DeleteCacheValue<OwnedSlice>, &cache_handle,
-                   Cache::Priority::BOTTOM);
-    value->PinSlice(record->value, UnrefCacheHandle, cache_.get(),
-                    cache_handle);
-  } else {
-    value->PinSlice(record->value, OwnedSlice::CleanupFunc, blob.release(),
-                    nullptr);
-  }
-
-  return Status::OK();
-}
-
-Status BlobFileReader::ReadRecord(const BlobHandle& handle, BlobRecord* record,
-                                  OwnedSlice* buffer) {
   Slice blob;
   CacheAllocationPtr ubuf =
       AllocateBlock(handle.size, options_.memory_allocator());
@@ -224,7 +160,7 @@ Status BlobFileReader::ReadRecord(const BlobHandle& handle, BlobRecord* record,
 
 Status BlobFilePrefetcher::Get(const ReadOptions& options,
                                const BlobHandle& handle, BlobRecord* record,
-                               PinnableSlice* buffer) {
+                               OwnedSlice* buffer) {
   if (handle.offset == last_offset_) {
     last_offset_ = handle.offset + handle.size;
     if (handle.offset + handle.size > readahead_limit_) {

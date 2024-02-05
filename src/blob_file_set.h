@@ -41,7 +41,8 @@ class BlobFileSet {
   // If the manifest exists, it will recover from the latest one.
   // It is a corruption if the persistent storage contains data
   // outside of the provided column families.
-  Status Open(const std::map<uint32_t, TitanCFOptions>& column_families);
+  Status Open(const std::map<uint32_t, TitanCFOptions>& column_families,
+              const std::string& cache_prefix);
 
   // Applies *edit and saved to the manifest.
   // REQUIRES: mutex is held
@@ -50,7 +51,8 @@ class BlobFileSet {
   // Adds some column families with the specified options.
   // REQUIRES: mutex is held
   void AddColumnFamilies(
-      const std::map<uint32_t, TitanCFOptions>& column_families);
+      const std::map<uint32_t, TitanCFOptions>& column_families,
+      const std::string& cache_prefix);
 
   // Drops some column families. The obsolete files will be deleted in
   // background when they will not be accessed anymore.

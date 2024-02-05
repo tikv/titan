@@ -52,16 +52,16 @@ class VersionTest : public testing::Test {
 
     blob_file_set_.reset(
         new BlobFileSet(db_options_, nullptr, nullptr, &mutex_));
-    ASSERT_OK(blob_file_set_->Open({}));
+    ASSERT_OK(blob_file_set_->Open({}, ""));
     column_families_.clear();
     // Sets up some column families.
     for (uint32_t id = 0; id < 10; id++) {
       std::shared_ptr<BlobStorage> storage;
-      storage.reset(new BlobStorage(db_options_, cf_options_, id, file_cache_,
-                                    nullptr, nullptr));
+      storage.reset(new BlobStorage(db_options_, cf_options_, id, "",
+                                    file_cache_, nullptr, nullptr));
       column_families_.emplace(id, storage);
-      storage.reset(new BlobStorage(db_options_, cf_options_, id, file_cache_,
-                                    nullptr, nullptr));
+      storage.reset(new BlobStorage(db_options_, cf_options_, id, "",
+                                    file_cache_, nullptr, nullptr));
       blob_file_set_->column_families_.emplace(id, storage);
     }
   }
@@ -253,7 +253,7 @@ TEST_F(VersionTest, ObsoleteFiles) {
   std::map<uint32_t, TitanCFOptions> m;
   m.insert({1, TitanCFOptions()});
   m.insert({2, TitanCFOptions()});
-  blob_file_set_->AddColumnFamilies(m);
+  blob_file_set_->AddColumnFamilies(m, "");
   {
     auto add1_1_5 = AddBlobFilesEdit(1, 1, 5);
     MutexLock l(&mutex_);

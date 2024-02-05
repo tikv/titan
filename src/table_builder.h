@@ -76,7 +76,7 @@ class TitanTableBuilder : public TableBuilder {
   void UpdateInternalOpStats();
 
   Status GetBlobRecord(const BlobIndex& index, BlobRecord* record,
-                       PinnableSlice* buffer);
+                       OwnedSlice* buffer);
 
   void AddBase(const Slice& key, const ParsedInternalKey& parsedKey,
                const Slice& value);

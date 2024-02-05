@@ -173,7 +173,7 @@ class TableBuilderTest : public testing::Test {
         new BlobFileSet(db_options_, nullptr, nullptr, &db_impl_->mutex_));
     std::map<uint32_t, TitanCFOptions> cfs{{0, cf_options_}};
     db_impl_->TEST_set_initialized(true);
-    blob_file_set_->Open(cfs);
+    blob_file_set_->Open(cfs, "");
     blob_manager_.reset(new FileManager(db_options_, blob_file_set_.get()));
     // Replace base table facotry.
     base_table_factory_ =
@@ -338,7 +338,7 @@ TEST_F(TableBuilderTest, Basic) {
       ASSERT_OK(DecodeInto(iter->value(), &index));
       ASSERT_EQ(index.file_number, kTestFileNumber);
       BlobRecord record;
-      PinnableSlice buffer;
+      OwnedSlice buffer;
       ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
       ASSERT_EQ(record.key, key);
       ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
