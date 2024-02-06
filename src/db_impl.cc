@@ -1105,63 +1105,54 @@ Status TitanDBImpl::ExtractTitanCfOptions(
     ColumnFamilyHandle* column_family,
     std::unordered_map<std::string, std::string>& new_options,
     MutableTitanCFOptions& mutable_cf_options, bool& changed) {
-  auto option_pos = new_options.find("blob_run_mode");
-  if (option_pos != new_options.end()) {
-    const std::string& blob_run_mode_string = option_pos->second;
-    auto run_mode_mapping_pos =
-        blob_run_mode_string_map.find(blob_run_mode_string);
-    if (run_mode_mapping_pos == blob_run_mode_string_map.end()) {
-      return Status::InvalidArgument("No blob_run_mode defined for " +
-                                     blob_run_mode_string);
+  for (auto it = new_options.begin(); it != new_options.end();) {
+    const std::string& name = it->first;
+    const std::string& value = it->second;
+    if (name == "blob_run_mode") {
+      auto run_mode_mapping_pos = blob_run_mode_string_map.find(value);
+      if (run_mode_mapping_pos == blob_run_mode_string_map.end()) {
+        return Status::InvalidArgument("No blob_run_mode defined for " + value);
+      } else {
+        mutable_cf_options.blob_run_mode = run_mode_mapping_pos->second;
+        TITAN_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
+                       column_family->GetName().c_str(), value.c_str());
+      }
+      it = new_options.erase(it);
+      changed = true;
+    } else if (name == "min_blob_size") {
+      uint64_t min_blob_size = ParseUint64(value);
+      mutable_cf_options.min_blob_size = min_blob_size;
+      TITAN_LOG_INFO(db_options_.info_log, "[%s] Set min_blob_size: %" PRIu64,
+                     column_family->GetName().c_str(), min_blob_size);
+      it = new_options.erase(it);
+      changed = true;
+    } else if (name == "blob_file_compression") {
+      auto compression_type_mapping_pos =
+          compression_type_string_map.find(value);
+      if (compression_type_mapping_pos == compression_type_string_map.end()) {
+        return Status::InvalidArgument("No compression type defined for " +
+                                       value);
+      } else {
+        mutable_cf_options.blob_file_compression =
+            compression_type_mapping_pos->second;
+        TITAN_LOG_INFO(db_options_.info_log,
+                       "[%s] Set blob_file_compression: %s",
+                       column_family->GetName().c_str(), value.c_str());
+      }
+      it = new_options.erase(it);
+      changed = true;
+    } else if (name == "blob_file_discardable_ratio") {
+      double blob_file_discardable_ratio = ParseDouble(value);
+      mutable_cf_options.blob_file_discardable_ratio =
+          blob_file_discardable_ratio;
+      TITAN_LOG_INFO(
+          db_options_.info_log, "[%s] Set blob_file_discardable_ratio: %f",
+          column_family->GetName().c_str(), blob_file_discardable_ratio);
+      it = new_options.erase(it);
+      changed = true;
     } else {
-      mutable_cf_options.blob_run_mode = run_mode_mapping_pos->second;
-      TITAN_LOG_INFO(db_options_.info_log, "[%s] Set blob_run_mode: %s",
-                     column_family->GetName().c_str(),
-                     blob_run_mode_string.c_str());
+      ++it;
     }
-    new_options.erase(option_pos);
-    changed = true;
-  }
-
-  option_pos = new_options.find("min_blob_size");
-  if (option_pos != new_options.end()) {
-    uint64_t min_blob_size = ParseUint64(option_pos->second);
-    mutable_cf_options.min_blob_size = min_blob_size;
-    TITAN_LOG_INFO(db_options_.info_log, "[%s] Set min_blob_size: %" PRIu64,
-                   column_family->GetName().c_str(), min_blob_size);
-    new_options.erase(option_pos);
-    changed = true;
-  }
-
-  option_pos = new_options.find("blob_file_compression");
-  if (option_pos != new_options.end()) {
-    const std::string& blob_file_compression_string = option_pos->second;
-    auto compression_type_mapping_pos =
-        compression_type_string_map.find(blob_file_compression_string);
-    if (compression_type_mapping_pos == compression_type_string_map.end()) {
-      return Status::InvalidArgument("No compression type defined for " +
-                                     blob_file_compression_string);
-    } else {
-      mutable_cf_options.blob_file_compression =
-          compression_type_mapping_pos->second;
-      TITAN_LOG_INFO(db_options_.info_log, "[%s] Set blob_file_compression: %s",
-                     column_family->GetName().c_str(),
-                     blob_file_compression_string.c_str());
-    }
-    new_options.erase(option_pos);
-    changed = true;
-  }
-
-  option_pos = new_options.find("blob_file_discardable_ratio");
-  if (option_pos != new_options.end()) {
-    double blob_file_discardable_ratio = ParseDouble(option_pos->second);
-    mutable_cf_options.blob_file_discardable_ratio =
-        blob_file_discardable_ratio;
-    TITAN_LOG_INFO(
-        db_options_.info_log, "[%s] Set blob_file_discardable_ratio: %f",
-        column_family->GetName().c_str(), blob_file_discardable_ratio);
-    new_options.erase(option_pos);
-    changed = true;
   }
 
   return Status::OK();
@@ -1322,8 +1313,8 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
                        ".",
                        flush_job_info.job_id, file->file_number());
       } else {
-        // No need to set live data size here, because it's already set in table
-        // builder
+        // No need to set live data size here, because it's already set in
+        // table builder
         file->FileStateTransit(BlobFileMeta::FileEvent::kFlushCompleted);
         TITAN_LOG_INFO(db_options_.info_log,
                        "OnFlushCompleted[%d]: output blob file %" PRIu64
@@ -1361,12 +1352,12 @@ void TitanDBImpl::OnCompactionCompleted(
           prop_iter->second, to_add, &blob_file_size_diff);
       if (!gc_stats_status.ok()) {
         // TODO: Should treat it as background error and make DB read-only.
-        TITAN_LOG_ERROR(
-            db_options_.info_log,
-            "OnCompactionCompleted[%d]: failed to extract GC stats from table "
-            "property: compaction file: %s, error: %s",
-            compaction_job_info.job_id, file_name.c_str(),
-            gc_stats_status.ToString().c_str());
+        TITAN_LOG_ERROR(db_options_.info_log,
+                        "OnCompactionCompleted[%d]: failed to extract GC "
+                        "stats from table "
+                        "property: compaction file: %s, error: %s",
+                        compaction_job_info.job_id, file_name.c_str(),
+                        gc_stats_status.ToString().c_str());
         assert(false);
       }
     }
@@ -1418,9 +1409,9 @@ void TitanDBImpl::OnCompactionCompleted(
         // flush/compaction is still `kPendingLSM`, while the blob file size
         // delta is for the later compaction event, and it is possible that
         // delta is negative.
-        // If the delta is positive, it means the blob file is the output of the
-        // compaction and the live data size is already in table builder. So
-        // here only update live data size when negative.
+        // If the delta is positive, it means the blob file is the output of
+        // the compaction and the live data size is already in table builder.
+        // So here only update live data size when negative.
         if (delta < 0) {
           file->UpdateLiveDataSize(delta);
         }
@@ -1449,8 +1440,8 @@ void TitanDBImpl::OnCompactionCompleted(
         }
         file->UpdateLiveDataSize(delta);
         if (cf_options.level_merge) {
-          // After level merge, most entries of merged blob files are written to
-          // new blob files. Delete blob files which have no live data.
+          // After level merge, most entries of merged blob files are written
+          // to new blob files. Delete blob files which have no live data.
           // Mark last two level blob files to merge in next compaction if
           // discardable size reached GC threshold
           if (file->NoLiveData()) {
