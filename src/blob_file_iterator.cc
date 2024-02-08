@@ -56,7 +56,8 @@ bool BlobFileIterator::Init() {
 
   if (blob_file_header.flags & BlobFileHeader::kHasUncompressionDictionary) {
     status_ = InitUncompressionDict(blob_file_footer, file_.get(),
-                                    &uncompression_dict_);
+                                    &uncompression_dict_,
+                                    titan_cf_options_.memory_allocator());
     if (!status_.ok()) {
       return false;
     }
@@ -146,7 +147,8 @@ void BlobFileIterator::GetBlobRecord() {
                         nullptr /*aligned_buf*/, true /*for_compaction*/);
   if (status_.ok()) {
     status_ =
-        decoder_.DecodeRecord(&record_slice, &cur_blob_record_, &uncompressed_);
+        decoder_.DecodeRecord(&record_slice, &cur_blob_record_, &uncompressed_,
+                              titan_cf_options_.memory_allocator());
   }
   if (!status_.ok()) return;
 

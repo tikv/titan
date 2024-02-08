@@ -66,7 +66,7 @@ Slice Compress(const CompressionInfo& info, const Slice& input,
 // If successful, fills "*buffer" with the uncompressed data and
 // points "*output" to it.
 Status Uncompress(const UncompressionInfo& info, const Slice& input,
-                  OwnedSlice* output);
+                  OwnedSlice* output, MemoryAllocator* allocator = nullptr);
 
 void UnrefCacheHandle(void* cache, void* handle);
 

@@ -7,13 +7,13 @@ namespace rocksdb {
 namespace titandb {
 
 Status BlobStorage::Get(const ReadOptions& options, const BlobIndex& index,
-                        BlobRecord* record, PinnableSlice* buffer) {
+                        BlobRecord* record, PinnableSlice* value) {
   auto sfile = FindFile(index.file_number).lock();
   if (!sfile)
     return Status::Corruption("Missing blob file: " +
                               std::to_string(index.file_number));
   return file_cache_->Get(options, sfile->file_number(), sfile->file_size(),
-                          index.blob_handle, record, buffer);
+                          index.blob_handle, record, value);
 }
 
 Status BlobStorage::NewPrefetcher(uint64_t file_number,
