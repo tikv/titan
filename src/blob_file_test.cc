@@ -98,7 +98,7 @@ class BlobFileTest : public testing::Test {
 
     ReadOptions ro;
     std::unique_ptr<BlobFilePrefetcher> prefetcher;
-    ASSERT_OK(cache.NewPrefetcher(file_number_, file_size, &prefetcher));
+    ASSERT_OK(cache.NewPrefetcher(file_number_, &prefetcher));
     ASSERT_EQ(contexts.size(), n);
     for (int i = 0; i < n; i++) {
       auto key = GenKey(i);
@@ -109,12 +109,10 @@ class BlobFileTest : public testing::Test {
       BlobRecord record;
       PinnableSlice buffer;
       BlobHandle blob_handle = contexts[i]->new_blob_index.blob_handle;
-      ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
-                          &buffer));
+      ASSERT_OK(cache.Get(ro, file_number_, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
       buffer.Reset();
-      ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
-                          &buffer));
+      ASSERT_OK(cache.Get(ro, file_number_, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
       buffer.Reset();
       ASSERT_OK(prefetcher->Get(ro, blob_handle, &record, &buffer));
@@ -191,12 +189,10 @@ class BlobFileTest : public testing::Test {
       BlobRecord record;
       PinnableSlice buffer;
       BlobHandle blob_handle = contexts[i]->new_blob_index.blob_handle;
-      ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
-                          &buffer));
+      ASSERT_OK(cache.Get(ro, file_number_, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
       buffer.Reset();
-      ASSERT_OK(cache.Get(ro, file_number_, file_size, blob_handle, &record,
-                          &buffer));
+      ASSERT_OK(cache.Get(ro, file_number_, blob_handle, &record, &buffer));
       ASSERT_EQ(record, expect);
       buffer.Reset();
       ASSERT_OK(blob_file_reader->Get(ro, blob_handle, &record, &buffer));
