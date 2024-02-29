@@ -161,6 +161,13 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: false
   bool skip_value_in_compaction_filter{false};
 
+  // If set true, Titan will use hole punching to release space of unrefed
+  // blobs. This feature is only available on Linux with file systems that
+  // support hole punching, such as ext4, xfs, btrfs, etc.
+  //
+  // Default: false
+  bool hole_punching_gc{false};
+
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}
@@ -214,12 +221,14 @@ struct MutableTitanCFOptions {
       : blob_run_mode(opts.blob_run_mode),
         min_blob_size(opts.min_blob_size),
         blob_file_compression(opts.blob_file_compression),
-        blob_file_discardable_ratio(opts.blob_file_discardable_ratio) {}
+        blob_file_discardable_ratio(opts.blob_file_discardable_ratio),
+        hole_punching_gc(opts.hole_punching_gc) {}
 
   TitanBlobRunMode blob_run_mode;
   uint64_t min_blob_size;
   CompressionType blob_file_compression;
   double blob_file_discardable_ratio;
+  bool hole_punching_gc;
 };
 
 struct TitanOptions : public TitanDBOptions, public TitanCFOptions {
