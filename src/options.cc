@@ -34,12 +34,12 @@ TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
                                const MutableTitanCFOptions& mutable_opts)
     : ColumnFamilyOptions(cf_opts),
       min_blob_size(mutable_opts.min_blob_size),
-      blob_file_compression(immutable_opts.blob_file_compression),
+      blob_file_compression(mutable_opts.blob_file_compression),
       blob_file_target_size(immutable_opts.blob_file_target_size),
       blob_cache(immutable_opts.blob_cache),
       max_gc_batch_size(immutable_opts.max_gc_batch_size),
       min_gc_batch_size(immutable_opts.min_gc_batch_size),
-      blob_file_discardable_ratio(immutable_opts.blob_file_discardable_ratio),
+      blob_file_discardable_ratio(mutable_opts.blob_file_discardable_ratio),
       merge_small_file_threshold(immutable_opts.merge_small_file_threshold),
       blob_run_mode(mutable_opts.blob_run_mode),
       skip_value_in_compaction_filter(
@@ -100,6 +100,8 @@ void TitanCFOptions::UpdateMutableOptions(
     const MutableTitanCFOptions& new_options) {
   blob_run_mode = new_options.blob_run_mode;
   min_blob_size = new_options.min_blob_size;
+  blob_file_compression = new_options.blob_file_compression;
+  blob_file_discardable_ratio = new_options.blob_file_discardable_ratio;
 }
 
 std::map<TitanBlobRunMode, std::string>
