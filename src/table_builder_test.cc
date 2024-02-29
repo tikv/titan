@@ -400,7 +400,7 @@ TEST_F(TableBuilderTest, DictCompress) {
     ASSERT_OK(DecodeInto(iter->value(), &index));
     ASSERT_EQ(index.file_number, kTestFileNumber);
     BlobRecord record;
-    PinnableSlice buffer;
+    OwnedSlice buffer;
     ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
     ASSERT_EQ(record.key, key);
     ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
@@ -519,7 +519,7 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
       ASSERT_OK(DecodeInto(iter->value(), &index));
       ASSERT_EQ(index.file_number, kTestFileNumber);
       BlobRecord record;
-      PinnableSlice buffer;
+      OwnedSlice buffer;
       ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
       ASSERT_EQ(record.key, key);
       ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
@@ -846,7 +846,7 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
       BlobIndex index;
       ASSERT_OK(DecodeInto(second_iter->value(), &index));
       BlobRecord record;
-      PinnableSlice buffer;
+      OwnedSlice buffer;
       ASSERT_OK(blob_reader->Get(ro, index.blob_handle, &record, &buffer));
       ASSERT_EQ(record.key, key);
       ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
