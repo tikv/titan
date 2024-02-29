@@ -8,13 +8,13 @@
 
 #include "file/filename.h"
 #include "file/readahead_raf.h"
+#include "rocksdb/cache.h"
 #include "table/block_based/block.h"
 #include "table/internal_iterator.h"
 #include "table/meta_blocks.h"
 #include "test_util/sync_point.h"
 #include "util/crc32c.h"
 #include "util/string_util.h"
-#include "rocksdb/cache.h"
 
 #include "titan_stats.h"
 
