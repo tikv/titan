@@ -18,19 +18,9 @@ namespace titandb {
 // column family.
 class BlobStorage {
  public:
-  BlobStorage(const BlobStorage& bs)
-      : mutable_cf_options_(bs.mutable_cf_options_), destroyed_(false) {
-    this->files_ = bs.files_;
-    this->file_cache_ = bs.file_cache_;
-    this->db_options_ = bs.db_options_;
-    this->cf_options_ = bs.cf_options_;
-    this->cf_id_ = bs.cf_id_;
-    this->stats_ = bs.stats_;
-    this->initialized_ = bs.initialized_;
-  }
-
   BlobStorage(const TitanDBOptions& _db_options,
               const TitanCFOptions& _cf_options, uint32_t cf_id,
+              const std::string& cache_prefix,
               std::shared_ptr<BlobFileCache> _file_cache, TitanStats* stats,
               std::atomic<bool>* initialized)
       : db_options_(_db_options),
@@ -39,6 +29,8 @@ class BlobStorage {
         cf_id_(cf_id),
         levels_file_count_(_cf_options.num_levels, 0),
         blob_ranges_(InternalComparator(_cf_options.comparator)),
+        cache_prefix_(cache_prefix),
+        blob_cache_(_cf_options.blob_cache),
         file_cache_(_file_cache),
         destroyed_(false),
         stats_(stats),
@@ -63,11 +55,22 @@ class BlobStorage {
     return gc_score_;
   }
 
+  Cache* blob_cache() { return blob_cache_.get(); }
+
   // Gets the blob record pointed by the blob index. The provided
   // buffer is used to store the record data, so the buffer must be
   // valid when the record is used.
   Status Get(const ReadOptions& options, const BlobIndex& index,
              BlobRecord* record, PinnableSlice* value);
+
+  // Gets the blob record pointed by the blob index by blob cache.
+  // The provided buffer is used to store the record data, so the buffer must be
+  // valid when the record is used.
+  // If cache hit, set cache_hit to true, otherwise false.
+  Status TryGetBlobCache(const std::string& cache_key, BlobRecord* record,
+                         PinnableSlice* value, bool* cache_hit);
+
+  std::string EncodeBlobCache(const BlobIndex& index);
 
   // Creates a prefetcher for the specified file number.
   Status NewPrefetcher(uint64_t file_number,
@@ -177,7 +180,7 @@ class BlobStorage {
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
   MutableTitanCFOptions mutable_cf_options_;
-  uint32_t cf_id_;
+  const uint32_t cf_id_;
 
   mutable port::Mutex mutex_;
 
@@ -205,6 +208,8 @@ class BlobStorage {
   std::multimap<const Slice, std::shared_ptr<BlobFileMeta>, InternalComparator>
       blob_ranges_;
 
+  const std::string cache_prefix_;
+  std::shared_ptr<Cache> blob_cache_;
   std::shared_ptr<BlobFileCache> file_cache_;
 
   std::vector<GCScore> gc_score_;

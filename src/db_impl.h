@@ -324,6 +324,8 @@ class TitanDBImpl : public TitanDB {
 
   void DumpStats();
 
+  std::string GenerateCachePrefix();
+
   FileLock* lock_{nullptr};
   // The lock sequence must be Titan.mutex_.Lock() -> Base DB mutex_.Lock()
   // while the unlock sequence must be Base DB mutex.Unlock() ->
