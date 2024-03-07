@@ -59,6 +59,11 @@ class BlobGCJob {
       blob_file_builders_;
   std::vector<std::pair<WriteBatch, GarbageCollectionWriteCallback>>
       rewrite_batches_;
+  // Files that are worth hole punching to reclaim space. Other files will be
+  // rewritten to new files. The key is the file number, and the value is the
+  // size of the alignment block and fd.
+  std::unordered_map<uint64_t, std::pair<uint64_t, int>>
+      hole_punch_worthy_files_;
 
   std::atomic_bool *shuting_down_{nullptr};
 
@@ -92,6 +97,7 @@ class BlobGCJob {
   Status InstallOutputBlobFiles();
   Status RewriteValidKeyToLSM();
   Status DeleteInputBlobFiles();
+  Status HolePunchFile(BlobIndex &blob_index);
 
   bool IsShutingDown();
 };

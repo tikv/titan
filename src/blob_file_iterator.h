@@ -35,6 +35,8 @@ class BlobFileIterator {
   Slice value() const;
   Status status() const { return status_; }
   uint64_t header_size() const { return header_size_; }
+  uint64_t file_number() const { return file_number_; }
+  uint64_t alginment_size() const { return alignment_size_; }
 
   void IterateForPrev(uint64_t);
 
@@ -61,6 +63,8 @@ class BlobFileIterator {
   bool valid_{false};
 
   std::unique_ptr<UncompressionDict> uncompression_dict_;
+  uint64_t alignment_size_{0};
+
   BlobDecoder decoder_;
 
   uint64_t iterate_offset_{0};
@@ -76,7 +80,11 @@ class BlobFileIterator {
   uint64_t readahead_size_{kMinReadaheadSize};
 
   void PrefetchAndGet();
-  void GetBlobRecord();
+  // Return whether the record at the current offset is valid or not (punch
+  // hole), if it is deleted, callers needs to move the offset to the next
+  // block.
+  bool GetBlobRecord();
+  void AdjustOffsetToNextAlignment();
 };
 
 class BlobFileMergeIterator {

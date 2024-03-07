@@ -291,7 +291,7 @@ Status BlobFileHeader::DecodeFrom(Slice* src) {
         "Blob file header magic number missing or mismatched.");
   }
   if (!GetFixed32(src, &version) ||
-      (version != kVersion1 && version != kVersion2)) {
+      (version != kVersion1 && version != kVersion2 && version != kVersion3)) {
     return Status::Corruption("Blob file header version missing or invalid.");
   }
   if (version == BlobFileHeader::kVersion2) {
@@ -305,6 +305,7 @@ Status BlobFileHeader::DecodeFrom(Slice* src) {
 
 void BlobFileFooter::EncodeTo(std::string* dst) const {
   auto size = dst->size();
+  PutFixed64(dst, alignment_size);
   meta_index_handle.EncodeTo(dst);
   // Add padding to make a fixed size footer.
   dst->resize(size + kEncodedLength - 12);
@@ -315,6 +316,17 @@ void BlobFileFooter::EncodeTo(std::string* dst) const {
 
 Status BlobFileFooter::DecodeFrom(Slice* src) {
   auto data = src->data();
+  if (version == BlobFileHeader::kVersion3) {
+    if (!GetFixed64(src, &alignment_size)) {
+      return Status::Corruption("BlobFileFooter", "alignment size");
+    }
+  } else {
+    // src's size is kEncodedLength regardless of version. If version is not 3,
+    // the first 8 bytes should be ignored.
+    src->remove_prefix(8);
+    // Update the footer's offset.
+    data = src->data();
+  }
   Status s = meta_index_handle.DecodeFrom(src);
   if (!s.ok()) {
     return Status::Corruption("BlobFileFooter", s.ToString());

@@ -54,6 +54,8 @@ bool BlobFileIterator::Init() {
                             BlockBasedTable::kBlockTrailerSize);
   }
 
+  alignment_size_ = blob_file_footer.alignment_size;
+
   if (blob_file_header.flags & BlobFileHeader::kHasUncompressionDictionary) {
     status_ = InitUncompressionDict(blob_file_footer, file_.get(),
                                     &uncompression_dict_,
@@ -126,16 +128,38 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
   valid_ = false;
 }
 
-void BlobFileIterator::GetBlobRecord() {
+void BlobFileIterator::AdjustOffsetToNextAlignment() {
+  if (alignment_size_ == 0) return;
+  uint64_t remainder = iterate_offset_ % alignment_size_;
+  if (remainder != 0) {
+    iterate_offset_ += alignment_size_ - remainder;
+  }
+}
+
+bool BlobFileIterator::GetBlobRecord() {
   FixedSlice<kRecordHeaderSize> header_buffer;
-  // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
-  // is only used for GC, we always set for_compaction to true.
+  // With for_compaction=true, rate_limiter is enabled. Since
+  // BlobFileIterator is only used for GC, we always set for_compaction to
+  // true.
   status_ = file_->Read(IOOptions(), iterate_offset_, kRecordHeaderSize,
                         &header_buffer, header_buffer.get(),
                         nullptr /*aligned_buf*/, true /*for_compaction*/);
   if (!status_.ok()) return;
   status_ = decoder_.DecodeHeader(&header_buffer);
   if (!status_.ok()) return;
+  // If the header buffer is all zero, it means the record is deleted (punch
+  // hole).
+  bool deleted = true;
+  for (size_t i = 0; i < kRecordHeaderSize; i++) {
+    if (header_buffer[i] != 0) {
+      deleted = false;
+      break;
+    }
+  }
+  if (deleted) {
+    AdjustOffsetToNextAlignment();
+    return false;
+  }
 
   Slice record_slice;
   auto record_size = decoder_.GetRecordSize();
@@ -155,39 +179,46 @@ void BlobFileIterator::GetBlobRecord() {
   cur_record_offset_ = iterate_offset_;
   cur_record_size_ = kRecordHeaderSize + record_size;
   iterate_offset_ += cur_record_size_;
+  // align to next record
+  AdjustOffsetToNextAlignment();
   valid_ = true;
+  return true;
 }
 
 void BlobFileIterator::PrefetchAndGet() {
-  if (iterate_offset_ >= end_of_blob_record_) {
-    valid_ = false;
-    return;
-  }
+  while (iterate_offset_ < end_of_blob_record_) {
+    // TODO: maybe reduce read ahead when encountering punch holes. e.g. just
+    // read header.
+    if (readahead_begin_offset_ > iterate_offset_ ||
+        readahead_end_offset_ < iterate_offset_) {
+      // alignment
+      readahead_begin_offset_ =
+          iterate_offset_ - (iterate_offset_ & (kDefaultPageSize - 1));
+      readahead_end_offset_ = readahead_begin_offset_;
+      readahead_size_ = kMinReadaheadSize;
+    }
+    auto min_blob_size =
+        iterate_offset_ + kRecordHeaderSize + titan_cf_options_.min_blob_size;
+    if (readahead_end_offset_ <= min_blob_size) {
+      while (readahead_end_offset_ + readahead_size_ <= min_blob_size &&
+             readahead_size_ < kMaxReadaheadSize)
+        readahead_size_ <<= 1;
+      file_->Prefetch(readahead_end_offset_, readahead_size_);
+      readahead_end_offset_ += readahead_size_;
+      readahead_size_ = std::min(kMaxReadaheadSize, readahead_size_ << 1);
+    }
 
-  if (readahead_begin_offset_ > iterate_offset_ ||
-      readahead_end_offset_ < iterate_offset_) {
-    // alignment
-    readahead_begin_offset_ =
-        iterate_offset_ - (iterate_offset_ & (kDefaultPageSize - 1));
-    readahead_end_offset_ = readahead_begin_offset_;
-    readahead_size_ = kMinReadaheadSize;
-  }
-  auto min_blob_size =
-      iterate_offset_ + kRecordHeaderSize + titan_cf_options_.min_blob_size;
-  if (readahead_end_offset_ <= min_blob_size) {
-    while (readahead_end_offset_ + readahead_size_ <= min_blob_size &&
-           readahead_size_ < kMaxReadaheadSize)
-      readahead_size_ <<= 1;
-    file_->Prefetch(readahead_end_offset_, readahead_size_);
-    readahead_end_offset_ += readahead_size_;
-    readahead_size_ = std::min(kMaxReadaheadSize, readahead_size_ << 1);
-  }
+    bool live = GetBlobRecord();
 
-  GetBlobRecord();
+    if (readahead_end_offset_ < iterate_offset_) {
+      readahead_end_offset_ = iterate_offset_;
+    }
 
-  if (readahead_end_offset_ < iterate_offset_) {
-    readahead_end_offset_ = iterate_offset_;
+    // If the record is valid (not punch-holed), we can return. Otherwise,
+    // continue iterating until we find a valid record.
+    if (live) return;
   }
+  valid_ = false;
 }
 
 BlobFileMergeIterator::BlobFileMergeIterator(

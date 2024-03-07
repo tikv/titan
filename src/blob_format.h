@@ -37,7 +37,8 @@ namespace titandb {
 //
 const uint64_t kBlobMaxHeaderSize = 12;
 const uint64_t kRecordHeaderSize = 9;
-const uint64_t kBlobFooterSize = BlockHandle::kMaxEncodedLength + 8 + 4;
+const uint64_t kBlobFooterSize = 8 + BlockHandle::kMaxEncodedLength + 8 + 4;
+const std::string kAlignmentSizeBlockName = "titan.alignment_size";
 
 // Format of blob record (not fixed size):
 //
@@ -327,6 +328,8 @@ struct BlobFileHeader {
   static const uint32_t kHeaderMagicNumber = 0x2be0a614ul;
   static const uint32_t kVersion1 = 1;
   static const uint32_t kVersion2 = 2;
+  // Introducing alignment size in version 3.
+  static const uint32_t kVersion3 = 3;
 
   static const uint64_t kMinEncodedLength = 4 + 4;
   static const uint64_t kMaxEncodedLength = 4 + 4 + 4;
@@ -334,7 +337,7 @@ struct BlobFileHeader {
   // Flags:
   static const uint32_t kHasUncompressionDictionary = 1 << 0;
 
-  uint32_t version = kVersion2;
+  uint32_t version = kVersion3;
   uint32_t flags = 0;
 
   static Status ValidateVersion(uint32_t ver) {
@@ -355,22 +358,32 @@ struct BlobFileHeader {
   Status DecodeFrom(Slice* src);
 };
 
-// Format of blob file footer (BlockHandle::kMaxEncodedLength + 12):
+// Format of blob file footer V3 (BlockHandle::kMaxEncodedLength + 20):
 //
-//    +---------------------+-------------+--------------+----------+
-//    |  meta index handle  |   padding   | magic number | checksum |
-//    +---------------------+-------------+--------------+----------+
-//    | Varint64 + Varint64 | padding_len |   Fixed64    | Fixed32  |
-//    +---------------------+-------------+--------------+----------+
+//    +------------------+---------------------+-------------+
+//    | alignment size   |  meta index handle  |   padding   |
+//    +------------------+---------------------+-------------+
+//    |     Fixed64      | Varint64 + Varint64 | padding_len |
+//    +------------------+---------------------+-------------+
 //
-// To make the blob file footer fixed size,
-// the padding_len is `BlockHandle::kMaxEncodedLength - meta_handle_len`
+//    +--------------+----------+
+//    | magic number | checksum |
+//    +--------------+----------+
+//    |   Fixed64    | Fixed32  |
+//    +--------------+----------+
+//
+// To make the blob file footer fixed size, the padding_len is calculated as:
+// `BlockHandle::kMaxEncodedLength - meta_handle_len - sizeof(uint64_t)`
 struct BlobFileFooter {
   // The first 64bits from $(echo titandb/blob | sha1sum).
   static const uint64_t kFooterMagicNumber{0x2be0a6148e39edc6ull};
   static const uint64_t kEncodedLength{kBlobFooterSize};
 
   BlockHandle meta_index_handle{BlockHandle::NullBlockHandle()};
+  uint64_t alignment_size{0};
+
+  // Non-persistent field.
+  uint32_t version = BlobFileHeader::kVersion3;
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);

@@ -151,6 +151,27 @@ void BlobFileBuilder::WriteEncoderData(BlobHandle* handle) {
   }
 }
 
+void BlobFileBuilder::FillFSBlockWithPadding() {
+  if (alignment_size_ == 0) {
+    return;
+  }
+  size_t padding = 0;
+  if (file_->GetFileSize() % alignment_size_ != 0) {
+    padding = alignment_size_ - file_->GetFileSize() % alignment_size_;
+  }
+  if (padding > 0) {
+    char buf[4096] = {0};
+    while (padding > sizeof(buf)) {
+      status_ = file_->Append(Slice(buf, sizeof(buf)));
+      if (!ok()) {
+        return;
+      }
+      padding -= sizeof(buf);
+    }
+    status_ = file_->Append(Slice(buf, padding));
+  }
+}
+
 void BlobFileBuilder::WriteRawBlock(const Slice& block, BlockHandle* handle) {
   handle->set_offset(file_->GetFileSize());
   handle->set_size(block.size());

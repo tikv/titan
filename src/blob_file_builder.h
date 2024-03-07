@@ -123,6 +123,7 @@ class BlobFileBuilder {
   void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder);
   void FlushSampleRecords(OutContexts* out_ctx);
   void WriteEncoderData(BlobHandle* handle);
+  void FillFSBlockWithPadding();
 
   TitanCFOptions cf_options_;
   WritableFileWriter* file_;
@@ -142,6 +143,8 @@ class BlobFileBuilder {
   std::string smallest_key_;
   std::string largest_key_;
   uint64_t live_data_size_ = 0;
+
+  uint64_t alignment_size_ = 0;
 };
 
 }  // namespace titandb
