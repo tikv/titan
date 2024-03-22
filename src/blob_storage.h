@@ -63,6 +63,11 @@ class BlobStorage {
     return gc_score_;
   }
 
+  const std::vector<GCScore> punch_hole_score() {
+    MutexLock l(&mutex_);
+    return punch_hole_score_;
+  }
+
   // Gets the blob record pointed by the blob index. The provided
   // buffer is used to store the record data, so the buffer must be
   // valid when the record is used.
@@ -118,6 +123,8 @@ class BlobStorage {
 
   // Add a new blob file to this blob storage.
   void AddBlobFile(std::shared_ptr<BlobFileMeta>& file);
+
+  void HolePunchBlobFile(std::shared_ptr<BlobFileMeta>& file);
 
   // Gets all obsolete blob files whose obsolete_sequence is smaller than the
   // oldest_sequence. Note that the files returned would be erased from internal
@@ -208,6 +215,7 @@ class BlobStorage {
   std::shared_ptr<BlobFileCache> file_cache_;
 
   std::vector<GCScore> gc_score_;
+  std::vector<GCScore> punch_hole_score_;
 
   std::list<std::pair<uint64_t, SequenceNumber>> obsolete_files_;
   // It is marked when the column family handle is destroyed, indicating the

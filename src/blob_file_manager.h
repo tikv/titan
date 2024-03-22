@@ -72,6 +72,12 @@ class BlobFileManager {
     (void)handles;
     return Status::OK();
   }
+
+  virtual Status BatchUpdateFiles(
+      const std::vector<std::shared_ptr<BlobFileMeta>>& files) {
+    (void)files;
+    return Status::OK();
+  }
 };
 
 }  // namespace titandb

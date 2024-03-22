@@ -145,10 +145,87 @@ Status BlobGCJob::Run() {
                    blob_gc_->column_family_handle()->GetName().c_str(),
                    tmp.c_str());
 
-  return DoRunGC();
+  if (blob_gc_->use_punch_hole()) {
+    return HolePunchBlobFiles();
+  } else {
+    return RewriteBlobFiles();
+  }
 }
 
-Status BlobGCJob::DoRunGC() {
+Status BlobGCJob::HolePunchBlobFiles() {
+  for (const auto& file : blob_gc_->inputs()) {
+    if (IsShutingDown()) {
+      return Status::ShutdownInProgress();
+    }
+    Status s = HolePunchSingleBlobFile(file);
+    if (!s.ok()) {
+      return s;
+    }
+  }
+  return Status::OK();
+}
+
+Status BlobGCJob::HolePunchSingleBlobFile(std::shared_ptr<BlobFileMeta> file) {
+  Status s;
+  auto fd = open(BlobFileName(db_options_.dirname, file->file_number()).c_str(),
+                 O_WRONLY);
+  std::unique_ptr<RandomAccessFileReader> file_reader;
+  s = NewBlobFileReader(file->file_number(), 0, db_options_, env_options_, env_,
+                        &file_reader);
+  if (!s.ok()) {
+    return s;
+  }
+  uint64_t live_blocks = 0;
+  std::unique_ptr<BlobFileIterator> iter(
+      new BlobFileIterator(std::move(file_reader), file->file_number(),
+                           file->file_size(), blob_gc_->titan_cf_options()));
+  for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+    if (IsShutingDown()) {
+      return Status::ShutdownInProgress();
+    }
+    BlobIndex blob_index = iter->GetBlobIndex();
+    auto key = iter->key();
+    bool discardable = false;
+    s = DiscardEntry(key, blob_index, blob_gc_->snapshot(), &discardable);
+    if (!s.ok()) {
+      return s;
+    }
+    if (!discardable) {
+      live_blocks +=
+          (blob_index.blob_handle.size + file->alignment_size() - 1) /
+          file->alignment_size();
+      continue;
+    }
+
+#if defined(FALLOC_FL_PUNCH_HOLE) && defined(FALLOC_FL_KEEP_SIZE)
+    auto num_blocks_aligned =
+        ((blob_index.blob_handle.size + file->alignment_size() - 1) /
+         file->alignment_size());
+    // Hole punch the file at the blob_index.blob_handle.offset with
+    // blob_index.blob_handle.size aligned to alignment_size.
+    auto err = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+                         blob_index.blob_handle.offset,
+                         num_blocks_aligned * file->alignment_size());
+    if (err != 0) {
+      return Status::IOError("Hole punch failed", strerror(err));
+    }
+#elif
+    return Status::NotSupported("Hole punch not supported");
+#endif
+  }
+  assert(live_blocks + file->hole_punchable_blocks() == file->live_blocks());
+  auto new_blob_file = std::make_shared<BlobFileMeta>(
+      file->file_number(), file->file_size(), 0, 0, file->smallest_key(),
+      file->largest_key());
+  new_blob_file->set_live_blocks(live_blocks);
+  new_blob_file->set_hole_punchable_blocks(0);
+  new_blob_file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
+  hole_punched_files_.emplace_back(new_blob_file);
+
+  return Status::OK();
+}
+
+Status BlobGCJob::RewriteBlobFiles() {
   Status s;
 
   std::unique_ptr<BlobFileMergeIterator> gc_iter;
@@ -195,94 +272,83 @@ Status BlobGCJob::DoRunGC() {
     }
 
     bool discardable = false;
-    s = DiscardEntry(gc_iter->key(), blob_index, &discardable);
+    s = DiscardEntry(gc_iter->key(), blob_index, nullptr, &discardable);
     if (!s.ok()) {
       break;
     }
-    if (hole_punch_worthy_files_.find(blob_index.file_number) !=
-        hole_punch_worthy_files_.end()) {
-      if (discardable) {
-        // TODO: update file meta.
-        s = HolePunchFile(blob_index);
-        if (!s.ok()) {
-          break;
-        }
-      }
-    } else {
-      if (discardable) {
-        metrics_.gc_num_keys_overwritten++;
-        metrics_.gc_bytes_overwritten += blob_index.blob_handle.size;
+    if (discardable) {
+      metrics_.gc_num_keys_overwritten++;
+      metrics_.gc_bytes_overwritten += blob_index.blob_handle.size;
+      continue;
+    }
+    last_key_is_fresh = true;
+
+    if (blob_gc_->titan_cf_options().blob_run_mode ==
+        TitanBlobRunMode::kFallback) {
+      auto* cfh = blob_gc_->column_family_handle();
+      GarbageCollectionWriteCallback callback(cfh, gc_iter->key().ToString(),
+                                              blob_index, BlobIndex());
+      rewrite_batches_.emplace_back(
+          std::make_pair(WriteBatch(), std::move(callback)));
+      auto& wb = rewrite_batches_.back().first;
+      s = WriteBatchInternal::Put(&wb, cfh->GetID(), gc_iter->key(),
+                                  gc_iter->value());
+      if (!s.ok()) {
+        break;
+      } else {
         continue;
       }
-      last_key_is_fresh = true;
+    }
 
-      if (blob_gc_->titan_cf_options().blob_run_mode ==
-          TitanBlobRunMode::kFallback) {
-        auto* cfh = blob_gc_->column_family_handle();
-        GarbageCollectionWriteCallback callback(cfh, gc_iter->key().ToString(),
-                                                blob_index, BlobIndex());
-        rewrite_batches_.emplace_back(
-            std::make_pair(WriteBatch(), std::move(callback)));
-        auto& wb = rewrite_batches_.back().first;
-        s = WriteBatchInternal::Put(&wb, cfh->GetID(), gc_iter->key(),
-                                    gc_iter->value());
-        if (!s.ok()) {
-          break;
-        } else {
-          continue;
-        }
+    // Rewrite entry to new blob file
+    if ((!blob_file_handle && !blob_file_builder) ||
+        file_size >= blob_gc_->titan_cf_options().blob_file_target_size) {
+      if (file_size >= blob_gc_->titan_cf_options().blob_file_target_size) {
+        assert(blob_file_builder);
+        assert(blob_file_handle);
+        assert(blob_file_builder->status().ok());
+        blob_file_builders_.emplace_back(std::make_pair(
+            std::move(blob_file_handle), std::move(blob_file_builder)));
       }
-
-      // Rewrite entry to new blob file
-      if ((!blob_file_handle && !blob_file_builder) ||
-          file_size >= blob_gc_->titan_cf_options().blob_file_target_size) {
-        if (file_size >= blob_gc_->titan_cf_options().blob_file_target_size) {
-          assert(blob_file_builder);
-          assert(blob_file_handle);
-          assert(blob_file_builder->status().ok());
-          blob_file_builders_.emplace_back(std::make_pair(
-              std::move(blob_file_handle), std::move(blob_file_builder)));
-        }
-        s = blob_file_manager_->NewFile(&blob_file_handle,
-                                        Env::IOPriority::IO_LOW);
-        if (!s.ok()) {
-          break;
-        }
-        TITAN_LOG_INFO(db_options_.info_log,
-                       "Titan new GC output file %" PRIu64 ".",
-                       blob_file_handle->GetNumber());
-        blob_file_builder = std::unique_ptr<BlobFileBuilder>(
-            new BlobFileBuilder(db_options_, blob_gc_->titan_cf_options(),
-                                blob_file_handle->GetFile()));
-        file_size = 0;
-      }
-      assert(blob_file_handle);
-      assert(blob_file_builder);
-
-      BlobRecord blob_record;
-      blob_record.key = gc_iter->key();
-      blob_record.value = gc_iter->value();
-      // count written bytes for new blob record,
-      // blob index's size is counted in `RewriteValidKeyToLSM`
-      metrics_.gc_bytes_written += blob_record.size();
-
-      // BlobRecordContext require key to be an internal key. We encode key to
-      // internal key in spite we only need the user key.
-      std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
-          new BlobFileBuilder::BlobRecordContext);
-      InternalKey ikey(blob_record.key, 1, kTypeValue);
-      ctx->key = ikey.Encode().ToString();
-      ctx->original_blob_index = blob_index;
-      ctx->new_blob_index.file_number = blob_file_handle->GetNumber();
-
-      BlobFileBuilder::OutContexts contexts;
-      blob_file_builder->Add(blob_record, std::move(ctx), &contexts);
-
-      BatchWriteNewIndices(contexts, &s);
-
+      s = blob_file_manager_->NewFile(&blob_file_handle,
+                                      Env::IOPriority::IO_LOW);
       if (!s.ok()) {
         break;
       }
+      TITAN_LOG_INFO(db_options_.info_log,
+                     "Titan new GC output file %" PRIu64 ".",
+                     blob_file_handle->GetNumber());
+      blob_file_builder = std::unique_ptr<BlobFileBuilder>(
+          new BlobFileBuilder(db_options_, blob_gc_->titan_cf_options(),
+                              blob_file_handle->GetFile()));
+      file_size = 0;
+    }
+    assert(blob_file_handle);
+    assert(blob_file_builder);
+
+    BlobRecord blob_record;
+    blob_record.key = gc_iter->key();
+    blob_record.value = gc_iter->value();
+    // count written bytes for new blob record,
+    // blob index's size is counted in `RewriteValidKeyToLSM`
+    metrics_.gc_bytes_written += blob_record.size();
+
+    // BlobRecordContext require key to be an internal key. We encode key to
+    // internal key in spite we only need the user key.
+    std::unique_ptr<BlobFileBuilder::BlobRecordContext> ctx(
+        new BlobFileBuilder::BlobRecordContext);
+    InternalKey ikey(blob_record.key, 1, kTypeValue);
+    ctx->key = ikey.Encode().ToString();
+    ctx->original_blob_index = blob_index;
+    ctx->new_blob_index.file_number = blob_file_handle->GetNumber();
+
+    BlobFileBuilder::OutContexts contexts;
+    blob_file_builder->Add(blob_record, std::move(ctx), &contexts);
+
+    BatchWriteNewIndices(contexts, &s);
+
+    if (!s.ok()) {
+      break;
     }
   }
 
@@ -349,15 +415,6 @@ Status BlobGCJob::BuildIterator(
         std::unique_ptr<BlobFileIterator>(new BlobFileIterator(
             std::move(file), inputs[i]->file_number(), inputs[i]->file_size(),
             blob_gc_->titan_cf_options()));
-    if (blob_file_iter->alginment_size() > 0) {
-      // TODO: avoid opening the file twice.
-      auto fd = open(
-          BlobFileName(db_options_.dirname, inputs[i]->file_number()).c_str(),
-          O_WRONLY);
-      hole_punch_worthy_files_.emplace(
-          blob_file_iter->file_number(),
-          std::make_pair(blob_file_iter->alginment_size(), fd));
-    }
     list.emplace_back(std::move(blob_file_iter));
   }
 
@@ -369,7 +426,7 @@ Status BlobGCJob::BuildIterator(
 }
 
 Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
-                               bool* discardable) {
+                               const Snapshot* snapshot, bool* discardable) {
   TitanStopWatch sw(env_, metrics_.gc_read_lsm_micros);
   assert(discardable != nullptr);
   PinnableSlice index_entry;
@@ -378,7 +435,11 @@ Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
   gopts.column_family = blob_gc_->column_family_handle();
   gopts.value = &index_entry;
   gopts.is_blob_index = &is_blob_index;
-  Status s = base_db_impl_->GetImpl(ReadOptions(), key, gopts);
+  auto read_opts = ReadOptions();
+  if (snapshot != nullptr) {
+    read_opts.snapshot = snapshot;
+  }
+  Status s = base_db_impl_->GetImpl(read_opts, key, gopts);
   if (!s.ok() && !s.IsNotFound()) {
     return s;
   }
@@ -401,30 +462,6 @@ Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
   return Status::OK();
 }
 
-uint64_t AlignUp(uint64_t size, uint64_t alignment) {
-  return ((size + alignment - 1) / alignment) * alignment;
-}
-
-Status BlobGCJob::HolePunchFile(BlobIndex& blob_index) {
-#if defined(FALLOC_FL_PUNCH_HOLE) && defined(FALLOC_FL_KEEP_SIZE)
-  auto it = hole_punch_worthy_files_.find(blob_index.file_number);
-  if (it == hole_punch_worthy_files_.end()) {
-    return Status::NotFound("File not found in hole punch worthy files");
-  }
-  auto& pair = it->second;
-  auto alignment_size = pair.first;
-  auto fd = pair.second;
-  // Hole punch the file at the blob_index.blob_handle.offset with
-  // blob_index.blob_handle.size aligned to alignment_size.
-  fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
-            blob_index.blob_handle.offset,
-            AlignUp(blob_index.blob_handle.size, alignment_size));
-  return Status::OK();
-#elif
-  return Status::NotSupported("Hole punch not supported");
-#endif
-}
-
 // We have to make sure crash consistency, but LSM db MANIFEST and BLOB db
 // MANIFEST are separate, so we need to make sure all new blob file have
 // added to db before we rewrite any key to LSM
@@ -432,9 +469,9 @@ Status BlobGCJob::Finish() {
   Status s;
   {
     // Close all the files to make sure the data is sync to disk.
-    for (auto& blob_file : hole_punch_worthy_files_) {
-      close(blob_file.second.second);
-    }
+    // for (auto& blob_file : hole_punch_worthy_files_) {
+    //   close(std::get<1>(blob_file.second));
+    // }
     mutex_->Unlock();
     s = InstallOutputBlobFiles();
     if (s.ok()) {
@@ -461,6 +498,18 @@ Status BlobGCJob::Finish() {
   }
   TEST_SYNC_POINT("BlobGCJob::Finish::AfterRewriteValidKeyToLSM");
 
+  // if (s.ok()) {
+  //   VersionEdit edit;
+  //   for (auto& file : hole_punch_worthy_files_) {
+  //     auto meta = std::get<2>(file.second);
+  //     auto file_number = file.first;
+  //     if (live_blocks_by_file_.find(file_number) !=
+  //         live_blocks_by_file_.end()) {
+  //       meta->set_live_blocks(live_blocks_by_file_[file_number]);
+  //     }
+  //   }
+  // }
+
   if (s.ok()) {
     UpdateInternalOpStats();
   }
@@ -472,7 +521,8 @@ Status BlobGCJob::InstallOutputBlobFiles() {
   Status s;
   std::vector<
       std::pair<std::shared_ptr<BlobFileMeta>, std::unique_ptr<BlobFileHandle>>>
-      files;
+      new_files;
+  std::vector<std::shared_ptr<BlobFileMeta>> updated_files;
   std::string tmp;
   for (auto& builder : blob_file_builders_) {
     BlobFileBuilder::OutContexts contexts;
@@ -494,17 +544,19 @@ Status BlobGCJob::InstallOutputBlobFiles() {
       tmp.append(" ");
     }
     tmp.append(std::to_string(file->file_number()));
-    files.emplace_back(std::make_pair(file, std::move(builder.first)));
+    new_files.emplace_back(std::make_pair(file, std::move(builder.first)));
   }
   if (s.ok()) {
-    TITAN_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
-                     blob_gc_->column_family_handle()->GetName().c_str(),
-                     tmp.c_str());
-    s = blob_file_manager_->BatchFinishFiles(
-        blob_gc_->column_family_handle()->GetID(), files);
-    if (s.ok()) {
-      for (auto& file : files) {
-        blob_gc_->AddOutputFile(file.first.get());
+    if (!new_files.empty()) {
+      TITAN_LOG_BUFFER(log_buffer_, "[%s] output[%s]",
+                       blob_gc_->column_family_handle()->GetName().c_str(),
+                       tmp.c_str());
+      s = blob_file_manager_->BatchFinishFiles(
+          blob_gc_->column_family_handle()->GetID(), new_files);
+      if (s.ok()) {
+        for (auto& file : new_files) {
+          blob_gc_->AddOutputFile(file.first.get());
+        }
       }
     }
   } else {
@@ -531,6 +583,10 @@ Status BlobGCJob::InstallOutputBlobFiles() {
                      "Delete GC output files[%s] failed: %s",
                      to_delete_files.c_str(), status.ToString().c_str());
     }
+  }
+
+  if (!hole_punched_files_.empty()) {
+    s = blob_file_manager_->BatchUpdateFiles(hole_punched_files_);
   }
 
   return s;

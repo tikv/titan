@@ -144,9 +144,9 @@ bool BlobFileIterator::GetBlobRecord() {
   status_ = file_->Read(IOOptions(), iterate_offset_, kRecordHeaderSize,
                         &header_buffer, header_buffer.get(),
                         nullptr /*aligned_buf*/, true /*for_compaction*/);
-  if (!status_.ok()) return;
+  if (!status_.ok()) return false;
   status_ = decoder_.DecodeHeader(&header_buffer);
-  if (!status_.ok()) return;
+  if (!status_.ok()) return false;
   // If the header buffer is all zero, it means the record is deleted (punch
   // hole).
   bool deleted = true;
@@ -174,7 +174,7 @@ bool BlobFileIterator::GetBlobRecord() {
         decoder_.DecodeRecord(&record_slice, &cur_blob_record_, &uncompressed_,
                               titan_cf_options_.memory_allocator());
   }
-  if (!status_.ok()) return;
+  if (!status_.ok()) return false;
 
   cur_record_offset_ = iterate_offset_;
   cur_record_size_ = kRecordHeaderSize + record_size;
@@ -217,6 +217,7 @@ void BlobFileIterator::PrefetchAndGet() {
     // If the record is valid (not punch-holed), we can return. Otherwise,
     // continue iterating until we find a valid record.
     if (live) return;
+    iterate_offset_ += alignment_size_;
   }
   valid_ = false;
 }

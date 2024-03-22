@@ -122,6 +122,23 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     return s;
   }
 
+  Status BatchUpdateFiles(
+      const std::vector<std::shared_ptr<BlobFileMeta>>& files) override {
+    Status s = Status::OK();
+    VersionEdit edit;
+    for (const auto& file : files) {
+      edit.HolePunchBlobFile(file);
+    }
+    {
+      MutexLock l(&db_->mutex_);
+      s = db_->blob_file_set_->LogAndApply(edit);
+      if (!s.ok()) {
+        db_->SetBGError(s);
+      }
+    }
+    return s;
+  }
+
  private:
   class FileHandle : public BlobFileHandle {
    public:

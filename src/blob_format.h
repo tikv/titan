@@ -38,7 +38,6 @@ namespace titandb {
 const uint64_t kBlobMaxHeaderSize = 12;
 const uint64_t kRecordHeaderSize = 9;
 const uint64_t kBlobFooterSize = 8 + BlockHandle::kMaxEncodedLength + 8 + 4;
-const std::string kAlignmentSizeBlockName = "titan.alignment_size";
 
 // Format of blob record (not fixed size):
 //
@@ -210,6 +209,7 @@ class BlobFileMeta {
     kFlushOrCompactionOutput,
     kDelete,
     kNeedMerge,
+    kPunchHoleOutput,
     kReset,  // reset file to normal for test
   };
 
@@ -229,19 +229,27 @@ class BlobFileMeta {
   BlobFileMeta(uint64_t _file_number, uint64_t _file_size,
                uint64_t _file_entries, uint32_t _file_level,
                const std::string& _smallest_key,
-               const std::string& _largest_key)
+               const std::string& _largest_key, uint64_t _alignment_size = 0,
+               uint64_t _live_blocks = 0)
       : file_number_(_file_number),
         file_size_(_file_size),
         file_entries_(_file_entries),
         file_level_(_file_level),
         smallest_key_(_smallest_key),
-        largest_key_(_largest_key) {}
+        largest_key_(_largest_key),
+        alignment_size_(_alignment_size),
+        live_blocks_(_live_blocks),
+        hole_punchable_blocks_(0) {}
 
   friend bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs);
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
   Status DecodeFromLegacy(Slice* src);
+  Status DecodeFromV3(Slice* src);
+
+  void set_live_data_size(uint64_t size) { live_data_size_ = size; }
+  void set_live_blocks(uint64_t size) { live_blocks_ = size; }
 
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }
@@ -249,8 +257,11 @@ class BlobFileMeta {
   uint32_t file_level() const { return file_level_; }
   const std::string& smallest_key() const { return smallest_key_; }
   const std::string& largest_key() const { return largest_key_; }
+  uint64_t live_blocks() const { return live_blocks_; }
+  uint64_t hole_punchable_blocks() const { return hole_punchable_blocks_; }
 
-  void set_live_data_size(int64_t size) { live_data_size_ = size; }
+  uint64_t alignment_size() const { return alignment_size_; }
+
   uint64_t file_entries() const { return file_entries_; }
   FileState file_state() const { return state_; }
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
@@ -273,6 +284,22 @@ class BlobFileMeta {
     return 1 - (static_cast<double>(live_data_size_) /
                 (file_size_ - kBlobMaxHeaderSize - kBlobFooterSize));
   }
+
+  double GetPunchHoleScore() const {
+    // Only hole-punch a file if we can at least reclaim 256 blocks and
+    // the remaining live data is more than 20% of the file size.
+    if (hole_punchable_blocks_ > 256 &&
+        double((live_blocks_ - hole_punchable_blocks_)) * 1024 * 4 /
+                file_size_ >
+            0.2) {
+      return hole_punchable_blocks_ * 1024 * 4 / file_size_;
+    }
+    return 0.0;
+  }
+
+  void set_hole_punchable_blocks(uint64_t size) {
+    hole_punchable_blocks_ = size;
+  }
   TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
   void Dump(bool with_keys) const;
 
@@ -294,14 +321,18 @@ class BlobFileMeta {
   // Size of data with reference from SST files.
   //
   // Because the new generated SST is added to superversion before
-  // `OnFlushCompleted()`/`OnCompactionCompleted()` is called, so if there is a
-  // later compaction trigger by the new generated SST, the later
+  // `OnFlushCompleted()`/`OnCompactionCompleted()` is called, so if there is
+  // a later compaction trigger by the new generated SST, the later
   // `OnCompactionCompleted()` maybe called before the previous events'
   // `OnFlushCompleted()`/`OnCompactionCompleted()` is called.
   // So when state_ == kPendingLSM, it uses this to record the delta as a
   // positive number if any later compaction is trigger before previous
   // `OnCompactionCompleted()` is called.
   std::atomic<int64_t> live_data_size_{0};
+
+  uint64_t alignment_size_{0};
+  std::atomic<uint64_t> live_blocks_{0};
+  std::atomic<uint64_t> hole_punchable_blocks_{0};
   std::atomic<FileState> state_{FileState::kNone};
 };
 
@@ -321,8 +352,8 @@ class BlobFileMeta {
 //    |   Fixed32    | Fixed32 | Fixed32 |
 //    +--------------+---------+---------+
 //
-// The header is mean to be compatible with header of BlobDB blob files, except
-// we use a different magic number.
+// The header is mean to be compatible with header of BlobDB blob files,
+// except we use a different magic number.
 struct BlobFileHeader {
   // The first 32bits from $(echo titandb/blob | sha1sum).
   static const uint32_t kHeaderMagicNumber = 0x2be0a614ul;

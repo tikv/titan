@@ -14,7 +14,8 @@ namespace titandb {
 class BlobGC {
  public:
   BlobGC(std::vector<std::shared_ptr<BlobFileMeta>>&& blob_files,
-         TitanCFOptions&& _titan_cf_options, bool need_trigger_next);
+         TitanCFOptions&& _titan_cf_options, bool need_trigger_next,
+         uint64_t cf_id, bool punch_hole = false);
 
   // No copying allowed
   BlobGC(const BlobGC&) = delete;
@@ -38,20 +39,42 @@ class BlobGC {
 
   void ReleaseGcFiles();
 
+  uint64_t cf_id() { return cf_id_; }
+
+  const Snapshot* snapshot() {
+    assert(use_punch_hole_);
+    assert(snapshot_ != nullptr);
+    return snapshot_;
+  }
+  void SetSnapshot(const Snapshot* snapshot) { snapshot_ = snapshot; }
+  void ReleaseSnapshot(DB* db);
+
+  bool use_punch_hole() { return use_punch_hole_; }
+
   bool trigger_next() { return trigger_next_; }
 
  private:
   std::vector<std::shared_ptr<BlobFileMeta>> inputs_;
   std::vector<BlobFileMeta*> outputs_;
   TitanCFOptions titan_cf_options_;
+  const bool trigger_next_;
+  uint64_t cf_id_;
   ColumnFamilyHandle* cfh_{nullptr};
   // Whether need to trigger gc after this gc or not
-  const bool trigger_next_;
+  const bool use_punch_hole_;
+  const Snapshot* snapshot_{nullptr};
 };
 
 struct GCScore {
   uint64_t file_number;
   double score;
+};
+
+struct PunchHoleScore {
+  uint64_t file_number;
+  uint64_t file_size;
+  uint64_t live_blocks;
+  uint64_t hole_punchable_blocks;
 };
 
 }  // namespace titandb

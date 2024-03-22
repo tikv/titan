@@ -59,11 +59,8 @@ class BlobGCJob {
       blob_file_builders_;
   std::vector<std::pair<WriteBatch, GarbageCollectionWriteCallback>>
       rewrite_batches_;
-  // Files that are worth hole punching to reclaim space. Other files will be
-  // rewritten to new files. The key is the file number, and the value is the
-  // size of the alignment block and fd.
-  std::unordered_map<uint64_t, std::pair<uint64_t, int>>
-      hole_punch_worthy_files_;
+
+  std::vector<std::shared_ptr<BlobFileMeta>> hole_punched_files_;
 
   std::atomic_bool *shuting_down_{nullptr};
 
@@ -82,6 +79,8 @@ class BlobGCJob {
     uint64_t gc_num_files = 0;
     uint64_t gc_read_lsm_micros = 0;
     uint64_t gc_update_lsm_micros = 0;
+    uint64_t gc_punch_holes = 0;
+    uint64_t gc_punch_hole_bytes = 0;
   } metrics_;
 
   uint64_t prev_bytes_read_ = 0;
@@ -89,15 +88,16 @@ class BlobGCJob {
   uint64_t io_bytes_read_ = 0;
   uint64_t io_bytes_written_ = 0;
 
-  Status DoRunGC();
+  Status RewriteBlobFiles();
+  Status HolePunchBlobFiles();
+  Status HolePunchSingleBlobFile(std::shared_ptr<BlobFileMeta> file);
   void BatchWriteNewIndices(BlobFileBuilder::OutContexts &contexts, Status *s);
   Status BuildIterator(std::unique_ptr<BlobFileMergeIterator> *result);
   Status DiscardEntry(const Slice &key, const BlobIndex &blob_index,
-                      bool *discardable);
+                      const Snapshot *snapshot, bool *discardable);
   Status InstallOutputBlobFiles();
   Status RewriteValidKeyToLSM();
   Status DeleteInputBlobFiles();
-  Status HolePunchFile(BlobIndex &blob_index);
 
   bool IsShutingDown();
 };

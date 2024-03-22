@@ -90,6 +90,31 @@ void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   blob_ranges_.emplace(std::make_pair(Slice(file->smallest_key()), file));
 }
 
+void BlobStorage::HolePunchBlobFile(std::shared_ptr<BlobFileMeta>& file) {
+  MutexLock l(&mutex_);
+  // Update the file in files_ and blob_ranges_.
+  auto f_it = files_.find(file->file_number());
+  if (f_it != files_.end()) {
+    f_it->second = file;
+  } else {
+    TITAN_LOG_ERROR(db_options_.info_log,
+                    "Hole punch blob file %" PRIu64
+                    " failed, file not found in BlobStorage.",
+                    file->file_number());
+    files_.emplace(std::make_pair(file->file_number(), file));
+  }
+  auto it = blob_ranges_.equal_range(file->smallest_key()).second;
+  if (it->second->file_number() == file->file_number()) {
+    it->second = file;
+  } else {
+    TITAN_LOG_ERROR(db_options_.info_log,
+                    "Hole punch blob file %" PRIu64
+                    " failed, file not found in BlobStorage.",
+                    file->file_number());
+    blob_ranges_.emplace(std::make_pair(Slice(file->smallest_key()), file));
+  }
+}
+
 bool BlobStorage::MarkFileObsolete(uint64_t file_number,
                                    SequenceNumber obsolete_sequence) {
   MutexLock l(&mutex_);
@@ -223,12 +248,24 @@ void BlobStorage::ComputeGCScore() {
 
   MutexLock l(&mutex_);
   gc_score_.clear();
+  punch_hole_score_.clear();
 
   for (auto& file : files_) {
     if (file.second->is_obsolete()) {
       continue;
     }
 
+    if (cf_options_.hole_punching_gc) {
+      auto punch_hole_score = file.second->GetPunchHoleScore();
+      if (punch_hole_score > 0) {
+        GCScore gc_score = {};
+        punch_hole_score_.emplace_back(GCScore{
+            .file_number = file.first,
+            .score = punch_hole_score,
+        });
+        continue;
+      }
+    }
     double score;
     if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
       // for the small file or file with gc mark (usually the file that just
@@ -246,6 +283,10 @@ void BlobStorage::ComputeGCScore() {
   }
 
   std::sort(gc_score_.begin(), gc_score_.end(),
+            [](const GCScore& first, const GCScore& second) {
+              return first.score > second.score;
+            });
+  std::sort(punch_hole_score_.begin(), punch_hole_score_.end(),
             [](const GCScore& first, const GCScore& second) {
               return first.score > second.score;
             });

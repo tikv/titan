@@ -269,7 +269,6 @@ class TitanDBImpl : public TitanDB {
   // REQUIRE: mutex_ held
   void AddToGCQueue(uint32_t column_family_id) {
     mutex_.AssertHeld();
-    unscheduled_gc_++;
     gc_queue_.push_back(column_family_id);
   }
 
@@ -277,9 +276,9 @@ class TitanDBImpl : public TitanDB {
   // REQUIRE: mutex_ held
   uint32_t PopFirstFromGCQueue() {
     assert(!gc_queue_.empty());
-    auto column_family_id = *gc_queue_.begin();
+    auto cf_id = *gc_queue_.begin();
     gc_queue_.pop_front();
-    return column_family_id;
+    return cf_id;
   }
 
   // REQUIRE: mutex_ held
@@ -287,7 +286,7 @@ class TitanDBImpl : public TitanDB {
 
   static void BGWorkGC(void* db);
   void BackgroundCallGC();
-  Status BackgroundGC(LogBuffer* log_buffer, uint32_t column_family_id);
+  Status BackgroundGC(LogBuffer* log_buffer, std::unique_ptr<BlobGC> blob_gc);
 
   void PurgeObsoleteFiles();
   Status PurgeObsoleteFilesImpl();
@@ -379,11 +378,12 @@ class TitanDBImpl : public TitanDB {
   std::deque<uint32_t> gc_queue_;
 
   // REQUIRE: mutex_ held.
+  std::deque<std::unique_ptr<BlobGC>> punch_hole_gc_queue_;
+
+  // REQUIRE: mutex_ held.
   int bg_gc_scheduled_ = 0;
   // REQUIRE: mutex_ held.
   int bg_gc_running_ = 0;
-  // REQUIRE: mutex_ held.
-  int unscheduled_gc_ = 0;
   // REQUIRE: mutex_ held.
   int drop_cf_requests_ = 0;
 

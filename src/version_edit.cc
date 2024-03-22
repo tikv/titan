@@ -13,12 +13,16 @@ void VersionEdit::EncodeTo(std::string* dst) const {
   PutVarint32Varint32(dst, kColumnFamilyID, column_family_id_);
 
   for (auto& file : added_files_) {
-    PutVarint32(dst, kAddedBlobFileV2);
+    PutVarint32(dst, kAddedBlobFileV3);
     file->EncodeTo(dst);
   }
   for (auto& file : deleted_files_) {
     // obsolete sequence is a inpersistent field, so no need to encode it.
     PutVarint32Varint64(dst, kDeletedBlobFile, file.first);
+  }
+  for (auto& file : updated_files_) {
+    PutVarint32(dst, kHolePunchedBlobFile);
+    file->EncodeTo(dst);
   }
 }
 
@@ -67,11 +71,29 @@ Status VersionEdit::DecodeFrom(Slice* src) {
           error = s.ToString().c_str();
         }
         break;
+      case kAddedBlobFileV3:
+        blob_file = std::make_shared<BlobFileMeta>();
+        s = blob_file->DecodeFromV3(src);
+        if (s.ok()) {
+          AddBlobFile(blob_file);
+        } else {
+          error = s.ToString().c_str();
+        }
+        break;
       case kDeletedBlobFile:
         if (GetVarint64(src, &file_number)) {
           DeleteBlobFile(file_number, 0);
         } else {
           error = "deleted blob file";
+        }
+        break;
+      case kHolePunchedBlobFile:
+        blob_file = std::make_shared<BlobFileMeta>();
+        s = blob_file->DecodeFrom(src);
+        if (s.ok()) {
+          HolePunchBlobFile(blob_file);
+        } else {
+          error = s.ToString().c_str();
         }
         break;
       default:

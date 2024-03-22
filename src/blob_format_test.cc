@@ -36,7 +36,7 @@ TEST(BlobFormatTest, BlobIndex) {
 }
 
 TEST(BlobFormatTest, BlobFileMeta) {
-  BlobFileMeta input(2, 3, 0, 0, "0", "9");
+  BlobFileMeta input(2, 3, 0, 0, "0", "9", 0, 0);
   CheckCodec(input);
 }
 

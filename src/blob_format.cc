@@ -141,6 +141,9 @@ void BlobFileMeta::EncodeTo(std::string* dst) const {
   PutVarint32(dst, file_level_);
   PutLengthPrefixedSlice(dst, smallest_key_);
   PutLengthPrefixedSlice(dst, largest_key_);
+  PutVarint64(dst, alignment_size_);
+  PutVarint64(dst, live_blocks_);
+  PutVarint64(dst, hole_punchable_blocks_);
 }
 
 Status BlobFileMeta::DecodeFromLegacy(Slice* src) {
@@ -171,11 +174,39 @@ Status BlobFileMeta::DecodeFrom(Slice* src) {
   return Status::OK();
 }
 
+Status BlobFileMeta::DecodeFromV3(Slice* src) {
+  if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) ||
+      !GetVarint64(src, &file_entries_) || !GetVarint32(src, &file_level_)) {
+    return Status::Corruption("BlobFileMeta decode failed");
+  }
+  Slice str;
+  if (GetLengthPrefixedSlice(src, &str)) {
+    smallest_key_.assign(str.data(), str.size());
+  } else {
+    return Status::Corruption("BlobSmallestKey Decode failed");
+  }
+  if (GetLengthPrefixedSlice(src, &str)) {
+    largest_key_.assign(str.data(), str.size());
+  } else {
+    return Status::Corruption("BlobLargestKey decode failed");
+  }
+  uint64_t alignment_size, live_blocks, hole_punchable_blocks;
+  if (!GetVarint64(src, &alignment_size) || !GetVarint64(src, &live_blocks) ||
+      !GetVarint64(src, &hole_punchable_blocks)) {
+    return Status::Corruption("BlobFileMeta decode failed");
+  }
+  alignment_size_ = alignment_size;
+  live_blocks_.store(live_blocks);
+  hole_punchable_blocks_.store(hole_punchable_blocks);
+  return Status::OK();
+}
+
 bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs) {
   return (lhs.file_number_ == rhs.file_number_ &&
           lhs.file_size_ == rhs.file_size_ &&
           lhs.file_entries_ == rhs.file_entries_ &&
-          lhs.file_level_ == rhs.file_level_);
+          lhs.file_level_ == rhs.file_level_ &&
+          lhs.live_blocks_.load() == rhs.live_blocks_.load());
 }
 
 void BlobFileMeta::FileStateTransit(const FileEvent& event) {
@@ -233,6 +264,10 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
       }
       assert(state_ == FileState::kNormal);
       state_ = FileState::kToMerge;
+      break;
+    case FileEvent::kPunchHoleOutput:
+      assert(state_ == FileState::kBeingGC);
+      state_ = FileState::kNormal;
       break;
     case FileEvent::kReset:
       state_ = FileState::kNormal;
