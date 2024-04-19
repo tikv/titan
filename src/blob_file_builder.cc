@@ -1,3 +1,5 @@
+#include "iostream"
+
 #include "blob_file_builder.h"
 
 #include "table/block_based/block_based_table_reader.h"
@@ -34,7 +36,7 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
 #endif
   }
   // alignment_size_ = cf_options_.alignment_size;
-  alignment_size_ = 4 * 1024;
+  alignment_size_ = cf_options.hole_punching_gc ? 4 * 1024 : 0;
   WriteHeader();
 }
 
@@ -42,7 +44,7 @@ void BlobFileBuilder::WriteHeader() {
   BlobFileHeader header;
   header.version = blob_file_version_;
   if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
-    assert(blob_file_version_ == BlobFileHeader::kVersion2);
+    assert(blob_file_version_ >= BlobFileHeader::kVersion2);
     header.flags |= BlobFileHeader::kHasUncompressionDictionary;
   }
   std::string buffer;
@@ -70,7 +72,6 @@ void BlobFileBuilder::Add(const BlobRecord& record,
   } else {
     encoder_.EncodeRecord(record);
     WriteEncoderData(&ctx->new_blob_index.blob_handle);
-    FillBlockWithPadding();
     out_ctx->emplace_back(std::move(ctx));
   }
 

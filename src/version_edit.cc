@@ -64,7 +64,7 @@ Status VersionEdit::DecodeFrom(Slice* src) {
         break;
       case kAddedBlobFileV2:
         blob_file = std::make_shared<BlobFileMeta>();
-        s = blob_file->DecodeFrom(src);
+        s = blob_file->DecodeFromV2(src);
         if (s.ok()) {
           AddBlobFile(blob_file);
         } else {
@@ -73,7 +73,7 @@ Status VersionEdit::DecodeFrom(Slice* src) {
         break;
       case kAddedBlobFileV3:
         blob_file = std::make_shared<BlobFileMeta>();
-        s = blob_file->DecodeFromV3(src);
+        s = blob_file->DecodeFrom(src);
         if (s.ok()) {
           AddBlobFile(blob_file);
         } else {

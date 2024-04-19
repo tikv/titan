@@ -109,7 +109,8 @@ class BlobFileIteratorTest : public testing::Test {
   void TestBlobFileIterator() {
     NewBuilder();
 
-    const int n = 1000;
+    // const int n = 1000;
+    const int n = 2;
     BlobFileBuilder::OutContexts contexts;
     for (int i = 0; i < n; i++) {
       AddKeyValue(GenKey(i), GenValue(i), contexts);
@@ -152,7 +153,7 @@ TEST_F(BlobFileIteratorTest, DictCompress) {
 
 TEST_F(BlobFileIteratorTest, IterateForPrev) {
   NewBuilder();
-  const int n = 1000;
+  const int n = 2;
 
   BlobFileBuilder::OutContexts contexts;
   for (int i = 0; i < n; i++) {

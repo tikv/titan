@@ -246,7 +246,7 @@ class BlobFileMeta {
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
   Status DecodeFromLegacy(Slice* src);
-  Status DecodeFromV3(Slice* src);
+  Status DecodeFromV2(Slice* src);
 
   void set_live_data_size(uint64_t size) { live_data_size_ = size; }
   void set_live_blocks(uint64_t size) { live_blocks_ = size; }
@@ -372,7 +372,8 @@ struct BlobFileHeader {
   uint32_t flags = 0;
 
   static Status ValidateVersion(uint32_t ver) {
-    if (ver != BlobFileHeader::kVersion1 && ver != BlobFileHeader::kVersion2) {
+    if (ver != BlobFileHeader::kVersion1 && ver != BlobFileHeader::kVersion2 &&
+        ver != BlobFileHeader::kVersion3) {
       return Status::InvalidArgument("unrecognized blob file version " +
                                      ToString(ver));
     }

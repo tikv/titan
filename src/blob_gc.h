@@ -61,7 +61,7 @@ class BlobGC {
   uint64_t cf_id_;
   ColumnFamilyHandle* cfh_{nullptr};
   // Whether need to trigger gc after this gc or not
-  const bool use_punch_hole_;
+  bool use_punch_hole_;
   const Snapshot* snapshot_{nullptr};
 };
 

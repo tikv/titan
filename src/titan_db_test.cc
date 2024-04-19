@@ -1327,7 +1327,7 @@ TEST_F(TitanDBTest, GCAfterDropCF) {
   SyncPoint::GetInstance()->LoadDependency(
       {{"TitanDBTest::GCAfterDropCF:AfterDropCF",
         "TitanDBImpl::BackgroundCallGC:BeforeGCRunning"},
-       {"TitanDBImpl::BackgroundGC:Finish",
+       {"TitanDBImpl::BackgroundCallGC:AfterGCRunning",
         "TitanDBTest::GCAfterDropCF:WaitGC"}});
   SyncPoint::GetInstance()->SetCallBack(
       "TitanDBImpl::BackgroundGC:CFDropped",
@@ -2122,6 +2122,7 @@ TEST_F(TitanDBTest, OnlineChangeMinBlobSize) {
 }
 
 TEST_F(TitanDBTest, OnlineChangeCompressionType) {
+#ifdef LZ4
   const uint64_t kNumKeys = 100;
   std::map<std::string, std::string> data;
   Open();
@@ -2183,6 +2184,7 @@ TEST_F(TitanDBTest, OnlineChangeCompressionType) {
       ASSERT_GT(first_blob_file_size, pair.second.lock()->file_size());
     }
   }
+#endif
 }
 
 TEST_F(TitanDBTest, OnlineChangeBlobFileDiscardableRatio) {

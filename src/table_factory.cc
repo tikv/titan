@@ -1,5 +1,7 @@
 #include "table_factory.h"
 
+#include <iostream>
+
 #include "db_impl.h"
 #include "table_builder.h"
 
@@ -18,6 +20,7 @@ Status TitanTableFactory::NewTableReader(
 
 TableBuilder *TitanTableFactory::NewTableBuilder(
     const TableBuilderOptions &options, WritableFileWriter *file) const {
+  std::cout << "Titan Facotry new tbale builder" << std::endl;
   std::unique_ptr<TableBuilder> base_builder(
       base_factory_->NewTableBuilder(options, file));
   // When opening base DB, it may trigger flush L0. But blob_file_set_ is not

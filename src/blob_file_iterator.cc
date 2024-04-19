@@ -1,3 +1,5 @@
+#include "iostream"
+
 #include "blob_file_iterator.h"
 
 #include "table/block_based/block_based_table_reader.h"
@@ -111,7 +113,7 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
   uint64_t total_length = 0;
   FixedSlice<kRecordHeaderSize> header_buffer;
   iterate_offset_ = header_size_;
-  for (; iterate_offset_ < offset; iterate_offset_ += total_length) {
+  for (; iterate_offset_ < offset;) {
     // With for_compaction=true, rate_limiter is enabled. Since
     // BlobFileIterator is only used for GC, we always set for_compaction to
     // true.
@@ -122,6 +124,13 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
     status_ = decoder_.DecodeHeader(&header_buffer);
     if (!status_.ok()) return;
     total_length = kRecordHeaderSize + decoder_.GetRecordSize();
+    iterate_offset_ += total_length;
+    uint64_t padding = 0;
+    if (alignment_size_ != 0) {
+      padding = alignment_size_ - (iterate_offset_ % alignment_size_);
+    }
+    iterate_offset_ += padding;
+    total_length += padding;
   }
 
   if (iterate_offset_ > offset) iterate_offset_ -= total_length;
@@ -145,22 +154,22 @@ bool BlobFileIterator::GetBlobRecord() {
                         &header_buffer, header_buffer.get(),
                         nullptr /*aligned_buf*/, true /*for_compaction*/);
   if (!status_.ok()) return false;
-  status_ = decoder_.DecodeHeader(&header_buffer);
-  if (!status_.ok()) return false;
   // If the header buffer is all zero, it means the record is deleted (punch
   // hole).
-  bool deleted = true;
-  for (size_t i = 0; i < kRecordHeaderSize; i++) {
-    if (header_buffer[i] != 0) {
-      deleted = false;
-      break;
-    }
-  }
-  if (deleted) {
-    AdjustOffsetToNextAlignment();
-    return false;
-  }
+  // bool deleted = true;
+  // for (size_t i = 0; i < kRecordHeaderSize; i++) {
+  //   if (header_buffer[i] != 0) {
+  //     deleted = false;
+  //     break;
+  //   }
+  // }
+  // if (deleted) {
+  //   AdjustOffsetToNextAlignment();
+  //   return false;
+  // }
 
+  status_ = decoder_.DecodeHeader(&header_buffer);
+  if (!status_.ok()) return false;
   Slice record_slice;
   auto record_size = decoder_.GetRecordSize();
   buffer_.resize(record_size);

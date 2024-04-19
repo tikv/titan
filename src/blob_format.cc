@@ -1,3 +1,5 @@
+#include "iostream"
+
 #include "blob_format.h"
 
 #include "test_util/sync_point.h"
@@ -155,7 +157,7 @@ Status BlobFileMeta::DecodeFromLegacy(Slice* src) {
   return Status::OK();
 }
 
-Status BlobFileMeta::DecodeFrom(Slice* src) {
+Status BlobFileMeta::DecodeFromV2(Slice* src) {
   if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) ||
       !GetVarint64(src, &file_entries_) || !GetVarint32(src, &file_level_)) {
     return Status::Corruption("BlobFileMeta decode failed");
@@ -174,7 +176,7 @@ Status BlobFileMeta::DecodeFrom(Slice* src) {
   return Status::OK();
 }
 
-Status BlobFileMeta::DecodeFromV3(Slice* src) {
+Status BlobFileMeta::DecodeFrom(Slice* src) {
   if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) ||
       !GetVarint64(src, &file_entries_) || !GetVarint32(src, &file_level_)) {
     return Status::Corruption("BlobFileMeta decode failed");
@@ -314,7 +316,7 @@ void BlobFileHeader::EncodeTo(std::string* dst) const {
   PutFixed32(dst, kHeaderMagicNumber);
   PutFixed32(dst, version);
 
-  if (version == BlobFileHeader::kVersion2) {
+  if (version >= BlobFileHeader::kVersion2) {
     PutFixed32(dst, flags);
   }
 }

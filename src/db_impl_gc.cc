@@ -172,7 +172,7 @@ void TitanDBImpl::MaybeScheduleGC() {
 
   if (shuting_down_.load(std::memory_order_acquire)) return;
 
-  while ((gc_queue_.empty() || punch_hole_gc_queue_.empty()) &&
+  while ((!gc_queue_.empty() || !punch_hole_gc_queue_.empty()) &&
          bg_gc_scheduled_ < db_options_.max_background_gc) {
     bg_gc_scheduled_++;
     thread_pool_->SubmitJob(std::bind(&TitanDBImpl::BGWorkGC, this));
@@ -250,29 +250,34 @@ void TitanDBImpl::BackgroundCallGC() {
               std::make_shared<BasicBlobGCPicker>(db_options_, cf_options,
                                                   cf_id, stats_.get());
           blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get());
-          if (blob_gc->use_punch_hole()) {
-            auto snapshot = db_->GetSnapshot();
-            blob_gc->SetSnapshot(snapshot);
-          }
-          if (blob_gc->use_punch_hole() &&
-              blob_gc->snapshot()->GetSequenceNumber() >
-                  GetOldestSnapshotSequence()) {
-            punch_hole_gc_queue_.push_back(std::move(blob_gc));
-          } else {
-            LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
-                                 db_options_.info_log.get());
-            BackgroundGC(&log_buffer, std::move(blob_gc));
-            {
-              mutex_.Unlock();
-              log_buffer.FlushBufferToLog();
-              LogFlush(db_options_.info_log.get());
-              mutex_.Lock();
+          if (blob_gc != nullptr) {
+            if (blob_gc->use_punch_hole()) {
+              auto snapshot = db_->GetSnapshot();
+              blob_gc->SetSnapshot(snapshot);
+            }
+            cfh = db_impl_->GetColumnFamilyHandleUnlocked(cf_id);
+            blob_gc->SetColumnFamily(cfh.get());
+            if (blob_gc->use_punch_hole() &&
+                blob_gc->snapshot()->GetSequenceNumber() >
+                    GetOldestSnapshotSequence()) {
+              punch_hole_gc_queue_.push_back(std::move(blob_gc));
+            } else {
+              LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
+                                   db_options_.info_log.get());
+              BackgroundGC(&log_buffer, std::move(blob_gc));
+              {
+                mutex_.Unlock();
+                log_buffer.FlushBufferToLog();
+                LogFlush(db_options_.info_log.get());
+                mutex_.Lock();
+              }
             }
           }
         }
       }
     }
 
+    TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:AfterGCRunning");
     bg_gc_running_--;
     bg_gc_scheduled_--;
     MaybeScheduleGC();
@@ -376,18 +381,20 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
           std::make_shared<BasicBlobGCPicker>(db_options_, cf_options,
                                               column_family_id, stats_.get());
       blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get());
-      if (blob_gc->use_punch_hole()) {
-        if (blob_gc->snapshot()->GetSequenceNumber() >
-            GetOldestSnapshotSequence()) {
-          punch_hole_gc_queue_.push_back(std::move(blob_gc));
-        } else {
-          cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
-          assert(column_family_id == cfh->GetID());
-          blob_gc->SetColumnFamily(cfh.get());
+      if (blob_gc != nullptr) {
+        cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
+        blob_gc->SetColumnFamily(cfh.get());
+        if (blob_gc->use_punch_hole()) {
+          if (blob_gc->snapshot()->GetSequenceNumber() >
+              GetOldestSnapshotSequence()) {
+            punch_hole_gc_queue_.push_back(std::move(blob_gc));
+          } else {
+            blob_gc->SetColumnFamily(cfh.get());
+          }
         }
-      }
 
-      s = BackgroundGC(&log_buffer, std::move(blob_gc));
+        s = BackgroundGC(&log_buffer, std::move(blob_gc));
+      }
     }
 
     {

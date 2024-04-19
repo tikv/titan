@@ -5,6 +5,7 @@
 #endif
 
 #include <cinttypes>
+#include <iostream>
 
 #include "monitoring/statistics.h"
 
@@ -25,6 +26,7 @@ TitanTableBuilder::NewCachedRecordContext(const ParsedInternalKey& ikey,
 }
 
 void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
+  std::cout << "Add: " << key.ToString() << std::endl;
   if (!ok()) return;
 
   ParsedInternalKey ikey;
@@ -71,8 +73,10 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     bool is_small_kv = value.size() < cf_options_.min_blob_size;
     if (is_small_kv) {
+      std::cout << "AddBase: " << ikey.user_key.ToString() << std::endl;
       AddBase(key, ikey, value);
     } else {
+      std::cout << "AddBlob: " << ikey.user_key.ToString() << std::endl;
       // We write to blob file and insert index
       AddBlob(ikey, value);
     }
@@ -90,6 +94,7 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
     assert(storage != nullptr);
     auto blob_file = storage->FindFile(index.file_number).lock();
     if (ShouldMerge(blob_file)) {
+      std::cout << "Merge blob file: " << index.file_number << std::endl;
       BlobRecord record;
       PinnableSlice buffer;
       Status get_status = GetBlobRecord(index, &record, &buffer);
@@ -100,8 +105,15 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
         gc_num_keys_relocated_++;
         gc_bytes_relocated_ += record.value.size();
         AddBlob(ikey, record.value);
-        if (ok()) return;
+        if (ok()) {
+          return;
+        } else {
+          std::cout << "Write blob file error during level merge: "
+                    << status_.ToString().c_str() << std::endl;
+        }
       } else {
+        std::cout << "Read file error during level merge: "
+                  << get_status.ToString().c_str() << std::endl;
         ++error_read_cnt_;
         TITAN_LOG_DEBUG(db_options_.info_log,
                         "Read file %" PRIu64 " error during level merge: %s",
@@ -346,6 +358,11 @@ bool TitanTableBuilder::ShouldMerge(
   // 1. Corresponding keys are being compacted to last two level from lower
   // level
   // 2. Blob file is marked by GC or range merge
+  std::cout << "file number " << file->file_number()
+            << " file->file_level(): " << file->file_level() << " target "
+            << target_level_ << " state: "
+            << (file->file_state() == BlobFileMeta::FileState::kToMerge)
+            << std::endl;
   return file != nullptr &&
          (static_cast<int>(file->file_level()) < target_level_ ||
           file->file_state() == BlobFileMeta::FileState::kToMerge);

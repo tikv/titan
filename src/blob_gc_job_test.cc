@@ -1,5 +1,7 @@
 #include "blob_gc_job.h"
 
+#include <iostream>
+
 #include "rocksdb/convenience.h"
 #include "test_util/testharness.h"
 
@@ -217,13 +219,13 @@ class BlobGCJobTest : public testing::Test {
     auto rewrite_status = base_db_->Write(WriteOptions(), &wb);
 
     std::vector<std::shared_ptr<BlobFileMeta>> tmp;
-    BlobGC blob_gc(std::move(tmp), TitanCFOptions(), false /*trigger_next*/);
+    BlobGC blob_gc(std::move(tmp), TitanCFOptions(), false /*trigger_next*/, 0);
     blob_gc.SetColumnFamily(cfh);
     BlobGCJob blob_gc_job(&blob_gc, base_db_, mutex_, TitanDBOptions(),
                           Env::Default(), EnvOptions(), nullptr, blob_file_set_,
                           nullptr, nullptr, nullptr);
     bool discardable = false;
-    ASSERT_OK(blob_gc_job.DiscardEntry(key, blob_index, &discardable));
+    ASSERT_OK(blob_gc_job.DiscardEntry(key, blob_index, nullptr, &discardable));
     ASSERT_FALSE(discardable);
   }
 
@@ -861,6 +863,7 @@ TEST_F(BlobGCJobTest, RangeMerge) {
     if (i % 2 == 0) {
       ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kObsolete);
     } else {
+      std::cout << "file " << i << std::endl;
       ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kToMerge);
     }
   }
