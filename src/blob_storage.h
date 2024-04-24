@@ -58,6 +58,8 @@ class BlobStorage {
     return _cf_options;
   }
 
+  // Only files with gc score larger than blob_file_discardable_ratio will be
+  // returned.
   const std::vector<GCScore> gc_score() {
     MutexLock l(&mutex_);
     return gc_score_;

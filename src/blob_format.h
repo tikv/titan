@@ -250,6 +250,9 @@ class BlobFileMeta {
 
   void set_live_data_size(uint64_t size) { live_data_size_ = size; }
   void set_live_blocks(uint64_t size) { live_blocks_ = size; }
+  void set_hole_punchable_blocks(uint64_t size) {
+    hole_punchable_blocks_ = size;
+  }
 
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }
@@ -281,6 +284,14 @@ class BlobFileMeta {
       return 0;
     }
     // TODO: Exclude meta blocks from file size
+    if (alignment_size_ > 0) {
+      return 1 -
+             std::min(
+                 1.0,
+                 static_cast<double>(live_blocks_ - hole_punchable_blocks_) *
+                     1024 * 4 /
+                     (file_size_ - kBlobMaxHeaderSize - kBlobFooterSize));
+    }
     return 1 - (static_cast<double>(live_data_size_) /
                 (file_size_ - kBlobMaxHeaderSize - kBlobFooterSize));
   }
@@ -288,18 +299,13 @@ class BlobFileMeta {
   double GetPunchHoleScore() const {
     // Only hole-punch a file if we can at least reclaim 256 blocks and
     // the remaining live data is more than 20% of the file size.
-    if (hole_punchable_blocks_ > 256 &&
-        double((live_blocks_ - hole_punchable_blocks_)) * 1024 * 4 /
-                file_size_ >
-            0.2) {
-      return hole_punchable_blocks_ * 1024 * 4 / file_size_;
+    if (hole_punchable_blocks_ > 256) {
+      return static_cast<double>(hole_punchable_blocks_) * 1024 * 4 /
+             (file_size_ - kBlobMaxHeaderSize - kBlobFooterSize);
     }
     return 0.0;
   }
 
-  void set_hole_punchable_blocks(uint64_t size) {
-    hole_punchable_blocks_ = size;
-  }
   TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
   void Dump(bool with_keys) const;
 

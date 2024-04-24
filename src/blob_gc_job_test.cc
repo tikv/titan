@@ -33,7 +33,7 @@ class BlobGCJobTest : public testing::Test {
   TitanDBImpl* tdb_;
   BlobFileSet* blob_file_set_;
   TitanOptions options_;
-  port::Mutex* mutex_;
+  rocksdb::port::Mutex* mutex_;
 
   BlobGCJobTest() : dbname_(test::TmpDir()) {
     options_.dirname = dbname_ + "/titandb";
@@ -289,6 +289,81 @@ class BlobGCJobTest : public testing::Test {
 TEST_F(BlobGCJobTest, DiscardEntry) { TestDiscardEntry(); }
 
 TEST_F(BlobGCJobTest, RunGC) { TestRunGC(); }
+
+TEST_F(BlobGCJobTest, PunchHole) {
+  rocksdb::SyncPoint::GetInstance()->LoadDependency({
+      {"BlobGCJobTest::PunchHole:AfterCompact",
+       "TitanDBImpl::BackgroundCallGC:BeforeGCRunning"},
+      {"TitanDBImpl::BackgroundCallGC:AfterGCRunning",
+       "BlobGCJobTest::PunchHole:BeforeVerify"},
+  });
+  rocksdb::SyncPoint::GetInstance()->EnableProcessing();
+
+  DisableMergeSmall();
+  options_.hole_punching_gc = true;
+  options_.disable_background_gc = false;
+  options_.disable_auto_compactions = false;
+
+  NewDB();
+  auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
+  for (int i = 0; i < MAX_KEY_NUM; i++) {
+    db_->Put(WriteOptions(), GenKey(i), GenValue(i));
+  }
+  Flush();
+  std::map<uint64_t, std::weak_ptr<BlobFileMeta>> files;
+  b->ExportBlobFiles(files);
+  ASSERT_EQ(files.size(), 1);
+  auto file_size = files.begin()->second.lock()->file_size();
+
+  std::string result;
+  for (int i = 0; i < MAX_KEY_NUM; i++) {
+    if (i % 3 == 0) continue;
+    db_->Delete(WriteOptions(), GenKey(i));
+  }
+  Flush();
+  CompactAll();
+  TEST_SYNC_POINT("BlobGCJobTest::PunchHole:AfterCompact");
+  TEST_SYNC_POINT("BlobGCJobTest::PunchHole:BeforeVerify");
+
+  files.clear();
+  b->ExportBlobFiles(files);
+  ASSERT_EQ(files.size(), 1);
+  auto post_punch_hole_file_size = files.begin()->second.lock()->file_size();
+  ASSERT_LE(post_punch_hole_file_size, file_size);
+
+  // ASSERT_EQ(b->files_.size(), 1);
+  // auto old = b->files_.begin()->first;
+  // std::unique_ptr<BlobFileIterator> iter;
+  // ASSERT_OK(NewIterator(b->files_.begin()->second->file_number(),
+  //                       b->files_.begin()->second->file_size(), &iter));
+  // iter->SeekToFirst();
+  // for (int i = 0; i < MAX_KEY_NUM; i++, iter->Next()) {
+  //   ASSERT_OK(iter->status());
+  //   ASSERT_TRUE(iter->Valid());
+  //   ASSERT_TRUE(iter->key().compare(Slice(GenKey(i))) == 0);
+  // }
+  // RunGC(true);
+  // b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
+  // ASSERT_EQ(b->files_.size(), 1);
+  // auto new1 = b->files_.begin()->first;
+  // ASSERT_TRUE(old != new1);
+  // ASSERT_OK(NewIterator(b->files_.begin()->second->file_number(),
+  //                       b->files_.begin()->second->file_size(), &iter));
+  // iter->SeekToFirst();
+  // auto* db_iter = db_->NewIterator(ReadOptions(),
+  // db_->DefaultColumnFamily()); db_iter->SeekToFirst(); for (int i = 0; i <
+  // MAX_KEY_NUM; i++) {
+  //   if (i % 3 != 0) continue;
+  //   ASSERT_OK(iter->status());
+  //   ASSERT_TRUE(iter->Valid());
+  //   ASSERT_TRUE(iter->key().compare(Slice(GenKey(i))) == 0);
+  //   ASSERT_TRUE(iter->value().compare(Slice(GenValue(i))) == 0);
+  //   ASSERT_OK(db_->Get(ReadOptions(), iter->key(), &result));
+  //   ASSERT_TRUE(iter->value().size() == result.size());
+  //   ASSERT_TRUE(iter->value().compare(result) == 0);
+  // }
+  // delete db_iter;
+}
 
 TEST_F(BlobGCJobTest, GCLimiter) {
   class TestLimiter : public RateLimiter {

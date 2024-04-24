@@ -255,17 +255,6 @@ void BlobStorage::ComputeGCScore() {
       continue;
     }
 
-    if (cf_options_.hole_punching_gc) {
-      auto punch_hole_score = file.second->GetPunchHoleScore();
-      if (punch_hole_score > 0) {
-        GCScore gc_score = {};
-        punch_hole_score_.emplace_back(GCScore{
-            .file_number = file.first,
-            .score = punch_hole_score,
-        });
-        continue;
-      }
-    }
     double score;
     if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
       // for the small file or file with gc mark (usually the file that just
@@ -276,6 +265,19 @@ void BlobStorage::ComputeGCScore() {
     } else {
       score = file.second->GetDiscardableRatio();
     }
+    if (score < cf_options_.blob_file_discardable_ratio &&
+        cf_options_.hole_punching_gc) {
+      auto punch_hole_score = file.second->GetPunchHoleScore();
+      if (punch_hole_score > 0) {
+        GCScore gc_score = {};
+        punch_hole_score_.emplace_back(GCScore{
+            .file_number = file.first,
+            .score = punch_hole_score,
+        });
+        continue;
+      }
+    }
+
     gc_score_.emplace_back(GCScore{
         .file_number = file.first,
         .score = score,
