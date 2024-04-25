@@ -109,6 +109,8 @@ class BlobFileBuilder {
   const std::string& GetLargestKey() { return largest_key_; }
 
   uint64_t live_data_size() const { return live_data_size_; }
+  uint64_t live_blocks() const { return live_blocks_; }
+  uint64_t alignment_size() const { return alignment_size_; }
 
  private:
   BuilderState builder_state_;

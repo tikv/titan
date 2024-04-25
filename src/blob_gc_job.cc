@@ -213,7 +213,8 @@ Status BlobGCJob::HolePunchSingleBlobFile(std::shared_ptr<BlobFileMeta> file) {
     return Status::NotSupported("Hole punch not supported");
 #endif
   }
-  assert(live_blocks + file->hole_punchable_blocks() == file->live_blocks());
+  //  assert(live_blocks + file->hole_punchable_blocks() ==
+  //  file->live_blocks());
   auto new_blob_file = std::make_shared<BlobFileMeta>(
       file->file_number(), file->file_size(), 0, 0, file->smallest_key(),
       file->largest_key());

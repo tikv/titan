@@ -26,7 +26,6 @@ TitanTableBuilder::NewCachedRecordContext(const ParsedInternalKey& ikey,
 }
 
 void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
-  std::cout << "Add: " << key.ToString() << std::endl;
   if (!ok()) return;
 
   ParsedInternalKey ikey;
@@ -250,7 +249,8 @@ void TitanTableBuilder::FinishBlobFile() {
       std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
           blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(),
           blob_builder_->NumEntries(), target_level_,
-          blob_builder_->GetSmallestKey(), blob_builder_->GetLargestKey());
+          blob_builder_->GetSmallestKey(), blob_builder_->GetLargestKey(),
+          blob_builder_->alignment_size(), blob_builder_->live_blocks());
       file->set_live_data_size(blob_builder_->live_data_size());
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
       finished_blobs_.push_back({file, std::move(blob_handle_)});

@@ -314,11 +314,22 @@ TEST_F(BlobGCJobTest, PunchHole) {
   b->ExportBlobFiles(files);
   ASSERT_EQ(files.size(), 1);
   auto file_size = files.begin()->second.lock()->file_size();
-
+  auto live_blocks = files.begin()->second.lock()->live_blocks();
   std::string result;
+  std::cout << "Result: === " << result << std::endl;
+  Status s;
   for (int i = 0; i < MAX_KEY_NUM; i++) {
-    if (i % 3 == 0) continue;
-    db_->Delete(WriteOptions(), GenKey(i));
+    s = db_->Get(ReadOptions(), GenKey(i), &result);
+    if (!s.ok()) {
+      std::cout << "Error: " << s.ToString() << std::endl;
+    }
+    std::cout << "Result: " << result << std::endl;
+  }
+
+  for (int i = 0; i < MAX_KEY_NUM; i++) {
+    if (i % 3 == 0) {
+      db_->Delete(WriteOptions(), GenKey(i));
+    }
   }
   Flush();
   CompactAll();
@@ -329,7 +340,10 @@ TEST_F(BlobGCJobTest, PunchHole) {
   b->ExportBlobFiles(files);
   ASSERT_EQ(files.size(), 1);
   auto post_punch_hole_file_size = files.begin()->second.lock()->file_size();
-  ASSERT_LE(post_punch_hole_file_size, file_size);
+  auto post_punch_hole_live_blocks =
+      files.begin()->second.lock()->live_blocks();
+  ASSERT_EQ(post_punch_hole_file_size, file_size);
+  ASSERT_LT(post_punch_hole_live_blocks, live_blocks);
 
   // ASSERT_EQ(b->files_.size(), 1);
   // auto old = b->files_.begin()->first;

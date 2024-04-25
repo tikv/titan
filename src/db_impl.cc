@@ -22,6 +22,7 @@
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc.h"
+#include "blob_live_blocks_collector.h"
 #include "compaction_filter.h"
 #include "db_iter.h"
 #include "table_factory.h"
@@ -302,6 +303,8 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
     cf_opts.disable_auto_compactions = true;
     cf_opts.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
+    cf_opts.table_properties_collector_factories.emplace_back(
+        std::make_shared<BlobLiveBlocksCollectorFactory>());
     titan_table_factories.push_back(std::make_shared<TitanTableFactory>(
         db_options_, desc.options, blob_manager_, &mutex_, blob_file_set_.get(),
         stats_.get()));
@@ -478,6 +481,8 @@ Status TitanDBImpl::CreateColumnFamilies(
     options.table_factory = titan_table_factory.back();
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
+    options.table_properties_collector_factories.emplace_back(
+        std::make_shared<BlobLiveBlocksCollectorFactory>());
     if (options.compaction_filter != nullptr ||
         options.compaction_filter_factory != nullptr) {
       std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
@@ -974,9 +979,11 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
 
   auto cf_id = column_family->GetID();
   std::map<uint64_t, int64_t> blob_file_size_diff;
+  std::map<uint64_t, int64_t> blob_live_blocks_diff;
   for (auto& prop : props) {
     Status gc_stats_status = ExtractGCStatsFromTableProperty(
-        prop.second, false /*to_add*/, &blob_file_size_diff);
+        prop.second, false /*to_add*/, &blob_file_size_diff,
+        &blob_live_blocks_diff);
     if (!gc_stats_status.ok()) {
       // TODO: Should treat it as background error and make DB read-only.
       TITAN_LOG_ERROR(db_options_.info_log,
@@ -985,6 +992,7 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
       assert(false);
     }
   }
+  bool has_live_blocks_diff = !blob_live_blocks_diff.empty();
 
   // Here could be a running compaction install a new version after obtain
   // current and before we call DeleteFilesInRange for the base DB. In this case
@@ -1011,12 +1019,15 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   for (const auto& file_size : blob_file_size_diff) {
     uint64_t file_number = file_size.first;
     int64_t delta = file_size.second;
+    int64_t live_blocks_delta =
+        has_live_blocks_diff ? blob_live_blocks_diff[file_number] : 0;
     auto file = bs->FindFile(file_number).lock();
     if (!file || file->is_obsolete()) {
       // file has been gc out
       continue;
     }
     file->UpdateLiveDataSize(delta);
+    file->UpdateHolePunchableBlocks(live_blocks_delta);
     if (file->file_state() == BlobFileMeta::FileState::kPendingInit) {
       // When uninitialized, only update the live data size.
       continue;
@@ -1279,8 +1290,10 @@ void TitanDBImpl::OnFlushCompleted(const FlushJobInfo& flush_job_info) {
   TEST_SYNC_POINT("TitanDBImpl::OnFlushCompleted:Begin1");
   TEST_SYNC_POINT("TitanDBImpl::OnFlushCompleted:Begin");
   std::map<uint64_t, int64_t> blob_file_size_diff;
+  std::map<uint64_t, int64_t> blob_live_blocks_diff;
   Status s = ExtractGCStatsFromTableProperty(
-      flush_job_info.table_properties, true /*to_add*/, &blob_file_size_diff);
+      flush_job_info.table_properties, true /*to_add*/, &blob_file_size_diff,
+      &blob_live_blocks_diff);
   if (!s.ok()) {
     // TODO: Should treat it as background error and make DB read-only.
     TITAN_LOG_ERROR(db_options_.info_log,
@@ -1355,6 +1368,7 @@ void TitanDBImpl::OnCompactionCompleted(
     return;
   }
   std::map<uint64_t, int64_t> blob_file_size_diff;
+  std::map<uint64_t, int64_t> blob_live_blocks_diff;
   const TablePropertiesCollection& prop_collection =
       compaction_job_info.table_properties;
   auto update_diff = [&](const std::vector<std::string>& files, bool to_add) {
@@ -1368,7 +1382,8 @@ void TitanDBImpl::OnCompactionCompleted(
         continue;
       }
       Status gc_stats_status = ExtractGCStatsFromTableProperty(
-          prop_iter->second, to_add, &blob_file_size_diff);
+          prop_iter->second, to_add, &blob_file_size_diff,
+          &blob_live_blocks_diff);
       if (!gc_stats_status.ok()) {
         // TODO: Should treat it as background error and make DB read-only.
         TITAN_LOG_ERROR(db_options_.info_log,
@@ -1403,10 +1418,16 @@ void TitanDBImpl::OnCompactionCompleted(
         cf_options.level_merge && cf_options.range_merge &&
         cf_options.num_levels - 1 == compaction_job_info.output_level;
     std::cout << "count sorted run: " << count_sorted_run << std::endl;
+    bool has_live_blocks_diff = !blob_live_blocks_diff.empty();
+    if (has_live_blocks_diff) {
+      assert(blob_live_blocks_diff.size() == blob_file_size_diff.size());
+    }
 
     for (const auto& file_diff : blob_file_size_diff) {
       uint64_t file_number = file_diff.first;
       int64_t delta = file_diff.second;
+      int64_t live_blocks_delta =
+          has_live_blocks_diff ? blob_live_blocks_diff[file_number] : 0;
       std::shared_ptr<BlobFileMeta> file = bs->FindFile(file_number).lock();
       if (file == nullptr || file->is_obsolete()) {
         // File has been GC out.
@@ -1416,6 +1437,7 @@ void TitanDBImpl::OnCompactionCompleted(
       if (file->file_state() == BlobFileMeta::FileState::kPendingInit) {
         // When uninitialized, only update the live data size.
         file->UpdateLiveDataSize(delta);
+        file->UpdateHolePunchableBlocks(live_blocks_delta);
         continue;
       }
 
@@ -1434,6 +1456,7 @@ void TitanDBImpl::OnCompactionCompleted(
         // So here only update live data size when negative.
         if (delta < 0) {
           file->UpdateLiveDataSize(delta);
+          file->UpdateHolePunchableBlocks(-live_blocks_delta);
         }
         file->FileStateTransit(BlobFileMeta::FileEvent::kCompactionCompleted);
         if (file->NoLiveData()) {
@@ -1462,6 +1485,7 @@ void TitanDBImpl::OnCompactionCompleted(
                   << " delta:" << delta
                   << " live data: " << file->live_data_size() << std::endl;
         file->UpdateLiveDataSize(delta);
+        file->UpdateHolePunchableBlocks(-live_blocks_delta);
         if (cf_options.level_merge) {
           // After level merge, most entries of merged blob files are written
           // to new blob files. Delete blob files which have no live data.

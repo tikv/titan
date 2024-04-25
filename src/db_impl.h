@@ -260,11 +260,13 @@ class TitanDBImpl : public TitanDB {
 
   Status ExtractGCStatsFromTableProperty(
       const std::shared_ptr<const TableProperties>& table_properties,
-      bool to_add, std::map<uint64_t, int64_t>* blob_file_size_diff);
+      bool to_add, std::map<uint64_t, int64_t>* blob_file_size_diff,
+      std::map<uint64_t, int64_t>* blob_live_blocks_diff);
 
   Status ExtractGCStatsFromTableProperty(
       const TableProperties& table_properties, bool to_add,
-      std::map<uint64_t, int64_t>* blob_file_size_diff);
+      std::map<uint64_t, int64_t>* blob_file_size_diff,
+      std::map<uint64_t, int64_t>* blob_live_blocks_diff);
 
   // REQUIRE: mutex_ held
   void AddToGCQueue(uint32_t column_family_id) {

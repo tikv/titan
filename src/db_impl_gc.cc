@@ -4,6 +4,7 @@
 #include "blob_file_size_collector.h"
 #include "blob_gc_job.h"
 #include "blob_gc_picker.h"
+#include "blob_live_blocks_collector.h"
 #include "db/version_set.h"
 #include "db_impl.h"
 #include "titan_logging.h"
@@ -14,19 +15,22 @@ namespace titandb {
 
 Status TitanDBImpl::ExtractGCStatsFromTableProperty(
     const std::shared_ptr<const TableProperties>& table_properties, bool to_add,
-    std::map<uint64_t, int64_t>* blob_file_size_diff) {
+    std::map<uint64_t, int64_t>* blob_file_size_diff,
+    std::map<uint64_t, int64_t>* blob_live_blocks_diff) {
   assert(blob_file_size_diff != nullptr);
   if (table_properties == nullptr) {
     // No table property found. File may not contain blob indices.
     return Status::OK();
   }
   return ExtractGCStatsFromTableProperty(*table_properties.get(), to_add,
-                                         blob_file_size_diff);
+                                         blob_file_size_diff,
+                                         blob_live_blocks_diff);
 }
 
 Status TitanDBImpl::ExtractGCStatsFromTableProperty(
     const TableProperties& table_properties, bool to_add,
-    std::map<uint64_t, int64_t>* blob_file_size_diff) {
+    std::map<uint64_t, int64_t>* blob_file_size_diff,
+    std::map<uint64_t, int64_t>* blob_live_blocks_diff) {
   assert(blob_file_size_diff != nullptr);
   auto& prop = table_properties.user_collected_properties;
   auto prop_iter = prop.find(BlobFileSizeCollector::kPropertiesName);
@@ -46,6 +50,23 @@ Status TitanDBImpl::ExtractGCStatsFromTableProperty(
       diff = -diff;
     }
     (*blob_file_size_diff)[file_number] += diff;
+  }
+  prop_iter = prop.find(BlobLiveBlocksCollector::kPropertiesName);
+  if (prop_iter != prop.end()) {
+    Slice live_blocks_prop_slice(prop_iter->second);
+    std::map<uint64_t, uint64_t> blob_live_blocks;
+    if (!BlobLiveBlocksCollector::Decode(&live_blocks_prop_slice,
+                                         &blob_live_blocks)) {
+      return Status::Corruption("Failed to decode blob live blocks property.");
+    }
+    for (const auto& blob_live_block : blob_live_blocks) {
+      uint64_t file_number = blob_live_block.first;
+      int64_t diff = static_cast<int64_t>(blob_live_block.second);
+      if (!to_add) {
+        diff = -diff;
+      }
+      (*blob_live_blocks_diff)[file_number] += diff;
+    }
   }
   return Status::OK();
 }
@@ -112,9 +133,11 @@ Status TitanDBImpl::AsyncInitializeGC(
       }
 
       std::map<uint64_t, int64_t> blob_file_size_diff;
+      std::map<uint64_t, int64_t> blob_live_blocks_diff;
       for (auto& file : collection) {
         s = ExtractGCStatsFromTableProperty(file.second, true /*to_add*/,
-                                            &blob_file_size_diff);
+                                            &blob_file_size_diff,
+                                            &blob_live_blocks_diff);
         if (!s.ok()) {
           MutexLock l(&mutex_);
           this->SetBGError(s);
@@ -323,6 +346,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     if (s.ok()) {
       s = blob_gc_job.Finish();
     }
+    blob_gc->ReleaseSnapshot(db_);
     blob_gc->ReleaseGcFiles();
 
     if (blob_gc->trigger_next() &&

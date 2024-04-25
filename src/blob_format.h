@@ -271,6 +271,9 @@ class BlobFileMeta {
 
   void FileStateTransit(const FileEvent& event);
   void UpdateLiveDataSize(int64_t delta) { live_data_size_ += delta; }
+  void UpdateHolePunchableBlocks(int64_t delta) {
+    hole_punchable_blocks_ += delta;
+  }
   bool NoLiveData() {
     if (state_ == FileState::kPendingInit || state_ == FileState::kNone) {
       // File is not initialized yet, so the live_data_size is not accurate now.
