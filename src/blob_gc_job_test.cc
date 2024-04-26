@@ -1,7 +1,5 @@
 #include "blob_gc_job.h"
 
-#include <iostream>
-
 #include "rocksdb/convenience.h"
 #include "test_util/testharness.h"
 
@@ -315,17 +313,6 @@ TEST_F(BlobGCJobTest, PunchHole) {
   ASSERT_EQ(files.size(), 1);
   auto file_size = files.begin()->second.lock()->file_size();
   auto live_blocks = files.begin()->second.lock()->live_blocks();
-  std::string result;
-  std::cout << "Result: === " << result << std::endl;
-  Status s;
-  for (int i = 0; i < MAX_KEY_NUM; i++) {
-    s = db_->Get(ReadOptions(), GenKey(i), &result);
-    if (!s.ok()) {
-      std::cout << "Error: " << s.ToString() << std::endl;
-    }
-    std::cout << "Result: " << result << std::endl;
-  }
-
   for (int i = 0; i < MAX_KEY_NUM; i++) {
     if (i % 3 == 0) {
       db_->Delete(WriteOptions(), GenKey(i));
@@ -344,6 +331,9 @@ TEST_F(BlobGCJobTest, PunchHole) {
       files.begin()->second.lock()->live_blocks();
   ASSERT_EQ(post_punch_hole_file_size, file_size);
   ASSERT_LT(post_punch_hole_live_blocks, live_blocks);
+  options_.hole_punching_gc = false;
+  options_.disable_background_gc = true;
+  options_.disable_auto_compactions = true;
 
   // ASSERT_EQ(b->files_.size(), 1);
   // auto old = b->files_.begin()->first;
@@ -952,7 +942,6 @@ TEST_F(BlobGCJobTest, RangeMerge) {
     if (i % 2 == 0) {
       ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kObsolete);
     } else {
-      std::cout << "file " << i << std::endl;
       ASSERT_EQ(blob->file_state(), BlobFileMeta::FileState::kToMerge);
     }
   }

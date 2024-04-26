@@ -5,7 +5,6 @@
 #endif
 
 #include <cinttypes>
-#include <iostream>
 
 #include "db/arena_wrapped_db_iter.h"
 #include "logging/log_buffer.h"
@@ -1090,11 +1089,6 @@ void TitanDBImpl::MarkFileIfNeedMerge(
     return (cmp == 0) ? (!end1.second && end2.second) : (cmp < 0);
   };
   std::sort(blob_ends.begin(), blob_ends.end(), blob_ends_cmp);
-  for (const auto& file : files) {
-    std::cout << "file: " << file->file_number()
-              << " smallest: " << file->smallest_key()
-              << " largest: " << file->largest_key() << std::endl;
-  }
 
   std::unordered_set<BlobFileMeta*> set;
   for (auto& end : blob_ends) {
@@ -1102,7 +1096,6 @@ void TitanDBImpl::MarkFileIfNeedMerge(
       set.insert(end.first);
       if (set.size() > static_cast<size_t>(max_sorted_runs)) {
         for (auto file : set) {
-          std::cout << "exceeds sorted runs: " << std::endl;
           RecordTick(statistics(stats_.get()), TITAN_GC_LEVEL_MERGE_MARK, 1);
           file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
         }
@@ -1417,7 +1410,6 @@ void TitanDBImpl::OnCompactionCompleted(
     bool count_sorted_run =
         cf_options.level_merge && cf_options.range_merge &&
         cf_options.num_levels - 1 == compaction_job_info.output_level;
-    std::cout << "count sorted run: " << count_sorted_run << std::endl;
     bool has_live_blocks_diff = !blob_live_blocks_diff.empty();
     if (has_live_blocks_diff) {
       assert(blob_live_blocks_diff.size() == blob_file_size_diff.size());
@@ -1481,9 +1473,6 @@ void TitanDBImpl::OnCompactionCompleted(
                          " live size increase after compaction.",
                          compaction_job_info.job_id, file_number);
         }
-        std::cout << "On compaction complete, file: " << file->file_number()
-                  << " delta:" << delta
-                  << " live data: " << file->live_data_size() << std::endl;
         file->UpdateLiveDataSize(delta);
         file->UpdateHolePunchableBlocks(-live_blocks_delta);
         if (cf_options.level_merge) {
@@ -1501,11 +1490,6 @@ void TitanDBImpl::OnCompactionCompleted(
                          cf_options.num_levels - 2 &&
                      file->GetDiscardableRatio() >
                          cf_options.blob_file_discardable_ratio) {
-            std::cout << "file: " << file->file_number()
-                      << " discardable ratio: " << file->GetDiscardableRatio()
-                      << " file size: " << file->file_size()
-                      << " blob_file_discardable_ratio: "
-                      << cf_options.blob_file_discardable_ratio << std::endl;
             RecordTick(statistics(stats_.get()), TITAN_GC_LEVEL_MERGE_MARK, 1);
             file->FileStateTransit(BlobFileMeta::FileEvent::kNeedMerge);
           } else if (count_sorted_run) {

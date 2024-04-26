@@ -643,7 +643,7 @@ TEST_F(TitanDBTest, NewColumnFamilyHasBlobFileSizeCollector) {
   Open();
   AddCF("new_cf");
   Options opt = db_->GetOptions(cf_handles_.back());
-  ASSERT_EQ(1, opt.table_properties_collector_factories.size());
+  ASSERT_EQ(2, opt.table_properties_collector_factories.size());
   std::unique_ptr<BlobFileSizeCollectorFactory> prop_collector_factory(
       new BlobFileSizeCollectorFactory());
   ASSERT_EQ(std::string(prop_collector_factory->Name()),

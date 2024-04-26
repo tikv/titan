@@ -277,11 +277,12 @@ void BlobStorage::ComputeGCScore() {
         continue;
       }
     }
-
-    gc_score_.emplace_back(GCScore{
-        .file_number = file.first,
-        .score = score,
-    });
+    if (score >= cf_options_.blob_file_discardable_ratio) {
+      gc_score_.emplace_back(GCScore{
+          .file_number = file.first,
+          .score = score,
+      });
+    }
   }
 
   std::sort(gc_score_.begin(), gc_score_.end(),

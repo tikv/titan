@@ -1,7 +1,5 @@
 #include "table_builder.h"
 
-#include <iostream>
-
 #include "file/filename.h"
 #include "table/table_builder.h"
 #include "table/table_reader.h"
@@ -672,7 +670,6 @@ TEST_F(TableBuilderTest, LevelMerge) {
     std::string key(1, i + 'a');
     InternalKey ikey(key, 1, kTypeValue);
     std::string value(kMinBlobSize, i + 'a');
-    std::cout << "key: " << key << " value: " << value << std::endl;
     table_builder->Add(ikey.Encode(), value);
   }
   ASSERT_OK(table_builder->Finish());
@@ -699,9 +696,6 @@ TEST_F(TableBuilderTest, LevelMerge) {
     ASSERT_TRUE(first_iter->Valid());
     ParsedInternalKey first_ikey;
     ASSERT_OK(ParseInternalKey(first_iter->key(), &first_ikey, false));
-    std::cout << "key: " << first_iter->key().ToString()
-              << " user key: " << first_ikey.user_key.ToString()
-              << " value: " << first_iter->value().ToString() << std::endl;
     ASSERT_EQ(first_ikey.type, kTypeBlobIndex);
     table_builder->Add(first_iter->key(), first_iter->value());
     first_iter->Next();
