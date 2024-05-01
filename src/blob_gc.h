@@ -70,12 +70,5 @@ struct GCScore {
   double score;
 };
 
-struct PunchHoleScore {
-  uint64_t file_number;
-  uint64_t file_size;
-  uint64_t live_blocks;
-  uint64_t hole_punchable_blocks;
-};
-
 }  // namespace titandb
 }  // namespace rocksdb

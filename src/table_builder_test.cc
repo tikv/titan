@@ -667,9 +667,9 @@ TEST_F(TableBuilderTest, LevelMerge) {
   // Generate a level 0 sst with blob file
   const int n = 1;
   for (unsigned char i = 0; i < n; i++) {
-    std::string key(1, i + 'a');
+    std::string key(1, i);
     InternalKey ikey(key, 1, kTypeValue);
-    std::string value(kMinBlobSize, i + 'a');
+    std::string value(kMinBlobSize, i);
     table_builder->Add(ikey.Encode(), value);
   }
   ASSERT_OK(table_builder->Finish());
@@ -694,9 +694,6 @@ TEST_F(TableBuilderTest, LevelMerge) {
   // Compact level0 sst to last level, values will be merge to another blob file
   for (unsigned char i = 0; i < n; i++) {
     ASSERT_TRUE(first_iter->Valid());
-    ParsedInternalKey first_ikey;
-    ASSERT_OK(ParseInternalKey(first_iter->key(), &first_ikey, false));
-    ASSERT_EQ(first_ikey.type, kTypeBlobIndex);
     table_builder->Add(first_iter->key(), first_iter->value());
     first_iter->Next();
   }

@@ -156,17 +156,18 @@ bool BlobFileIterator::GetBlobRecord() {
   if (!status_.ok()) return false;
   // If the header buffer is all zero, it means the record is deleted (punch
   // hole).
-  // bool deleted = true;
-  // for (size_t i = 0; i < kRecordHeaderSize; i++) {
-  //   if (header_buffer[i] != 0) {
-  //     deleted = false;
-  //     break;
-  //   }
-  // }
-  // if (deleted) {
-  //   AdjustOffsetToNextAlignment();
-  //   return false;
-  // }
+  bool deleted = true;
+  for (size_t i = 0; i < kRecordHeaderSize; i++) {
+    if (header_buffer[i] != 0) {
+      deleted = false;
+      break;
+    }
+  }
+  if (deleted) {
+    iterate_offset_ += alignment_size_;
+    AdjustOffsetToNextAlignment();
+    return false;
+  }
 
   status_ = decoder_.DecodeHeader(&header_buffer);
   if (!status_.ok()) return false;

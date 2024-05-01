@@ -469,10 +469,6 @@ Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
 Status BlobGCJob::Finish() {
   Status s;
   {
-    // Close all the files to make sure the data is sync to disk.
-    // for (auto& blob_file : hole_punch_worthy_files_) {
-    //   close(std::get<1>(blob_file.second));
-    // }
     mutex_->Unlock();
     s = InstallOutputBlobFiles();
     if (s.ok()) {
@@ -498,18 +494,6 @@ Status BlobGCJob::Finish() {
     s = DeleteInputBlobFiles();
   }
   TEST_SYNC_POINT("BlobGCJob::Finish::AfterRewriteValidKeyToLSM");
-
-  // if (s.ok()) {
-  //   VersionEdit edit;
-  //   for (auto& file : hole_punch_worthy_files_) {
-  //     auto meta = std::get<2>(file.second);
-  //     auto file_number = file.first;
-  //     if (live_blocks_by_file_.find(file_number) !=
-  //         live_blocks_by_file_.end()) {
-  //       meta->set_live_blocks(live_blocks_by_file_[file_number]);
-  //     }
-  //   }
-  // }
 
   if (s.ok()) {
     UpdateInternalOpStats();
