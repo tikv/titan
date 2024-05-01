@@ -213,13 +213,18 @@ Status BlobGCJob::HolePunchSingleBlobFile(std::shared_ptr<BlobFileMeta> file) {
     return Status::NotSupported("Hole punch not supported");
 #endif
   }
-  //  assert(live_blocks + file->hole_punchable_blocks() ==
-  //  file->live_blocks());
+  // Becuase blob references' liveness is determined from a snapshot, it is
+  // possible that not all hole punchable blocks are hole punched. We need
+  // to update the hole_punchable_blocks to reflect the actual value instead
+  // of resetting it to 0.
+  // TODO: test this case.
+  auto hole_punched_blocks = live_blocks - file->live_blocks();
   auto new_blob_file = std::make_shared<BlobFileMeta>(
       file->file_number(), file->file_size(), 0, 0, file->smallest_key(),
       file->largest_key());
   new_blob_file->set_live_blocks(live_blocks);
-  new_blob_file->set_hole_punchable_blocks(0);
+  new_blob_file->set_hole_punchable_blocks(file->hole_punchable_blocks() -
+                                           hole_punched_blocks);
   new_blob_file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
   hole_punched_files_.emplace_back(new_blob_file);
 

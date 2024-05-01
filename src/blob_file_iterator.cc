@@ -85,6 +85,9 @@ void BlobFileIterator::SeekToFirst() {
   if (!init_ && !Init()) return;
   status_ = Status::OK();
   iterate_offset_ = header_size_;
+  if (alignment_size_ != 0) {
+    AdjustOffsetToNextAlignment();
+  }
   PrefetchAndGet();
 }
 

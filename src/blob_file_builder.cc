@@ -50,6 +50,9 @@ void BlobFileBuilder::WriteHeader() {
   std::string buffer;
   header.EncodeTo(&buffer);
   status_ = file_->Append(buffer);
+  if (alignment_size_ > 0) {
+    FillBlockWithPadding();
+  }
 }
 
 void BlobFileBuilder::Add(const BlobRecord& record,
