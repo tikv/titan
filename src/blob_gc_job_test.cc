@@ -304,8 +304,10 @@ TEST_F(BlobGCJobTest, PunchHole) {
 
   NewDB();
   auto b = GetBlobStorage(base_db_->DefaultColumnFamily()->GetID()).lock();
+  std::vector<std::string> values(MAX_KEY_NUM);
   for (int i = 0; i < MAX_KEY_NUM; i++) {
-    db_->Put(WriteOptions(), GenKey(i), GenValue(i));
+    values.push_back(GenValue(i));
+    db_->Put(WriteOptions(), GenKey(i), values[i]);
   }
   Flush();
   std::map<uint64_t, std::weak_ptr<BlobFileMeta>> files;
@@ -331,6 +333,13 @@ TEST_F(BlobGCJobTest, PunchHole) {
       files.begin()->second.lock()->live_blocks();
   ASSERT_EQ(post_punch_hole_file_size, file_size);
   ASSERT_LT(post_punch_hole_live_blocks, live_blocks);
+  for (int i = 0; i < MAX_KEY_NUM; i++) {
+    if (i % 3 == 0) {
+      std::string value;
+      db_->Get(ReadOptions(), GenKey(i), &value);
+      ASSERT_EQ(value, values[i]);
+    }
+  }
   options_.hole_punching_gc = false;
   options_.disable_background_gc = true;
   options_.disable_auto_compactions = true;
