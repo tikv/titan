@@ -288,7 +288,7 @@ class TitanDBImpl : public TitanDB {
 
   static void BGWorkGC(void* db);
   void BackgroundCallGC();
-  Status BackgroundGC(LogBuffer* log_buffer, std::unique_ptr<BlobGC> blob_gc);
+  Status BackgroundGC(LogBuffer* log_buffer, BlobGC* blob_gc);
 
   void PurgeObsoleteFiles();
   Status PurgeObsoleteFilesImpl();
@@ -380,7 +380,13 @@ class TitanDBImpl : public TitanDB {
   std::deque<uint32_t> gc_queue_;
 
   // REQUIRE: mutex_ held.
-  std::deque<std::unique_ptr<BlobGC>> punch_hole_gc_queue_;
+  // This is not a queue, since punch hole GC is only runnable when its owned
+  // snapshot is the oldest one. So we can't really multi-thread it.
+  std::unique_ptr<BlobGC> scheduled_punch_hole_gc_;
+  // REQUIRE: mutex_ held.
+  // Indicates whether the scheduled punch hole GC is running, in case multiple
+  // threads are trying to work on the same job at the same time.
+  bool punch_hole_gc_running_ = false;
 
   // REQUIRE: mutex_ held.
   int bg_gc_scheduled_ = 0;

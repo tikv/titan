@@ -21,8 +21,8 @@ BasicBlobGCPicker::BasicBlobGCPicker(TitanDBOptions db_options,
 
 BasicBlobGCPicker::~BasicBlobGCPicker() {}
 
-std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
-    BlobStorage* blob_storage) {
+std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(BlobStorage* blob_storage,
+                                                      bool allow_punch_hole) {
   Status s;
   std::vector<std::shared_ptr<BlobFileMeta>> blob_files;
 
@@ -33,37 +33,38 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
   uint64_t next_gc_size = 0;
   bool in_fallback = cf_options_.blob_run_mode == TitanBlobRunMode::kFallback;
 
-  for (auto& score : blob_storage->punch_hole_score()) {
-    if (score.score >= cf_options_.blob_file_discardable_ratio) {
-      break;
-    }
-    auto blob_file = blob_storage->FindFile(score.file_number).lock();
-    if (!CheckBlobFile(blob_file.get())) {
-      // Skip this file id this file is being GCed
-      // or this file had
-      TITAN_LOG_INFO(db_options_.info_log, "Blob file %" PRIu64 " no need gc",
-                     blob_file->file_number());
-      continue;
-    }
-    if (!stop_picking) {
-      blob_files.emplace_back(blob_file);
-      batch_size += blob_file->file_size();
-      if (batch_size >= cf_options_.max_gc_batch_size) {
-        // Stop pick file for this gc, but still check file for whether need
-        // trigger gc after this
-        stop_picking = true;
+  if (allow_punch_hole) {
+    for (auto& score : blob_storage->punch_hole_score()) {
+      if (score.score >= cf_options_.blob_file_discardable_ratio) {
+        break;
       }
-    } else {
-      maybe_continue_next_time = true;
-      break;
+      auto blob_file = blob_storage->FindFile(score.file_number).lock();
+      if (!CheckBlobFile(blob_file.get())) {
+        // Skip this file id this file is being GCed
+        // or this file had
+        TITAN_LOG_INFO(db_options_.info_log, "Blob file %" PRIu64 " no need gc",
+                       blob_file->file_number());
+        continue;
+      }
+      if (!stop_picking) {
+        blob_files.emplace_back(blob_file);
+        batch_size += blob_file->file_size();
+        if (batch_size >= cf_options_.max_gc_batch_size) {
+          // Stop pick file for this gc, but still check file for whether need
+          // trigger gc after this
+          stop_picking = true;
+        }
+      } else {
+        maybe_continue_next_time = true;
+        break;
+      }
+    }
+    if (!blob_files.empty()) {
+      return std::unique_ptr<BlobGC>(
+          new BlobGC(std::move(blob_files), std::move(cf_options_),
+                     maybe_continue_next_time, cf_id_, /*punch_hole=*/true));
     }
   }
-  if (!blob_files.empty()) {
-    return std::unique_ptr<BlobGC>(
-        new BlobGC(std::move(blob_files), std::move(cf_options_),
-                   maybe_continue_next_time, cf_id_, /*punch_hole=*/true));
-  }
-
   for (auto& gc_score : blob_storage->gc_score()) {
     // in fallback mode, only gc files that all blobs are discarded
     if (in_fallback && std::abs(1.0 - gc_score.score) >

@@ -50,6 +50,8 @@ Status BlobFileSizeCollector::AddUserKey(const Slice& /* key */,
   if (type != kEntryBlobIndex) {
     return Status::OK();
   }
+  // In case there are other collectors that need the original value.
+  // Make a copy of the value because BlobIndex::DecodeFrom will modify it.
   Slice copy = value;
 
   BlobIndex index;

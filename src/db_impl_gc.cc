@@ -1,10 +1,10 @@
 #include "test_util/sync_point.h"
 
+#include "blob_aligned_blocks_collector.h"
 #include "blob_file_iterator.h"
 #include "blob_file_size_collector.h"
 #include "blob_gc_job.h"
 #include "blob_gc_picker.h"
-#include "blob_live_blocks_collector.h"
 #include "db/version_set.h"
 #include "db_impl.h"
 #include "titan_logging.h"
@@ -16,7 +16,7 @@ namespace titandb {
 Status TitanDBImpl::ExtractGCStatsFromTableProperty(
     const std::shared_ptr<const TableProperties>& table_properties, bool to_add,
     std::map<uint64_t, int64_t>* blob_file_size_diff,
-    std::map<uint64_t, int64_t>* blob_live_blocks_diff) {
+    std::map<uint64_t, int64_t>* hole_punchable_blocks_diff) {
   assert(blob_file_size_diff != nullptr);
   if (table_properties == nullptr) {
     // No table property found. File may not contain blob indices.
@@ -24,13 +24,13 @@ Status TitanDBImpl::ExtractGCStatsFromTableProperty(
   }
   return ExtractGCStatsFromTableProperty(*table_properties.get(), to_add,
                                          blob_file_size_diff,
-                                         blob_live_blocks_diff);
+                                         hole_punchable_blocks_diff);
 }
 
 Status TitanDBImpl::ExtractGCStatsFromTableProperty(
     const TableProperties& table_properties, bool to_add,
     std::map<uint64_t, int64_t>* blob_file_size_diff,
-    std::map<uint64_t, int64_t>* blob_live_blocks_diff) {
+    std::map<uint64_t, int64_t>* hole_punchable_blocks_diff) {
   assert(blob_file_size_diff != nullptr);
   auto& prop = table_properties.user_collected_properties;
   auto prop_iter = prop.find(BlobFileSizeCollector::kPropertiesName);
@@ -51,21 +51,24 @@ Status TitanDBImpl::ExtractGCStatsFromTableProperty(
     }
     (*blob_file_size_diff)[file_number] += diff;
   }
-  prop_iter = prop.find(BlobLiveBlocksCollector::kPropertiesName);
+  // We need to extract hole punchable blocks from the table property
+  // iff we are removing the file.
+  prop_iter = prop.find(BlobAlignedBlocksCollector::kPropertiesName);
   if (prop_iter != prop.end()) {
-    Slice live_blocks_prop_slice(prop_iter->second);
-    std::map<uint64_t, uint64_t> blob_live_blocks;
-    if (!BlobLiveBlocksCollector::Decode(&live_blocks_prop_slice,
-                                         &blob_live_blocks)) {
+    Slice hole_punchable_blocks_prop_slice(prop_iter->second);
+    std::map<uint64_t, uint64_t> hole_punchable_blocks;
+    if (!BlobAlignedBlocksCollector::Decode(&hole_punchable_blocks_prop_slice,
+                                            &hole_punchable_blocks)) {
       return Status::Corruption("Failed to decode blob live blocks property.");
     }
-    for (const auto& blob_live_block : blob_live_blocks) {
-      uint64_t file_number = blob_live_block.first;
-      int64_t diff = static_cast<int64_t>(blob_live_block.second);
-      if (!to_add) {
+    for (const auto& hole_punchable_block : hole_punchable_blocks) {
+      uint64_t file_number = hole_punchable_block.first;
+      int64_t diff = static_cast<int64_t>(hole_punchable_block.second);
+      if (to_add) {
+        // Add means some blocks are not hole punchable.
         diff = -diff;
       }
-      (*blob_live_blocks_diff)[file_number] += diff;
+      (*hole_punchable_blocks_diff)[file_number] += diff;
     }
   }
   return Status::OK();
@@ -133,11 +136,15 @@ Status TitanDBImpl::AsyncInitializeGC(
       }
 
       std::map<uint64_t, int64_t> blob_file_size_diff;
-      std::map<uint64_t, int64_t> blob_live_blocks_diff;
+      std::map<uint64_t, int64_t>
+          _hole_punchable_blocks_diff;  // Not used, this is not required while
+                                        // initializing GC. The initial state of
+                                        // punch hole GC is determined by
+                                        // BlobFileMeta (in MANIFEST).
       for (auto& file : collection) {
         s = ExtractGCStatsFromTableProperty(file.second, true /*to_add*/,
                                             &blob_file_size_diff,
-                                            &blob_live_blocks_diff);
+                                            &_hole_punchable_blocks_diff);
         if (!s.ok()) {
           MutexLock l(&mutex_);
           this->SetBGError(s);
@@ -195,7 +202,8 @@ void TitanDBImpl::MaybeScheduleGC() {
 
   if (shuting_down_.load(std::memory_order_acquire)) return;
 
-  while ((!gc_queue_.empty() || !punch_hole_gc_queue_.empty()) &&
+  while ((!gc_queue_.empty() ||
+          (scheduled_punch_hole_gc_ != nullptr && !punch_hole_gc_running_)) &&
          bg_gc_scheduled_ < db_options_.max_background_gc) {
     bg_gc_scheduled_++;
     thread_pool_->SubmitJob(std::bind(&TitanDBImpl::BGWorkGC, this));
@@ -217,34 +225,29 @@ void TitanDBImpl::BackgroundCallGC() {
     bg_gc_running_++;
 
     TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeBackgroundGC");
-    std::unique_ptr<BlobGC> blob_gc;
-    while (!punch_hole_gc_queue_.empty()) {
-      blob_gc = std::move(punch_hole_gc_queue_.front());
-      punch_hole_gc_queue_.pop_front();
-      if (blob_file_set_->IsColumnFamilyObsolete(blob_gc->cf_id())) {
-        TITAN_LOG_INFO(db_options_.info_log,
-                       "GC skip dropped colum family [%s].",
-                       cf_info_[blob_gc->cf_id()].name.c_str());
-        blob_gc->ReleaseGcFiles();
-        blob_gc->ReleaseSnapshot(db_);
-        continue;
-      }
-      if (blob_gc->snapshot()->GetSequenceNumber() >
-          GetOldestSnapshotSequence()) {
-        // Move the gc back to the queue
-        punch_hole_gc_queue_.push_front(std::move(blob_gc));
-      }
-      break;
-    }
-    if (blob_gc != nullptr) {
-      LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
-                           db_options_.info_log.get());
-      BackgroundGC(&log_buffer, std::move(blob_gc));
-      {
-        mutex_.Unlock();
-        log_buffer.FlushBufferToLog();
-        LogFlush(db_options_.info_log.get());
-        mutex_.Lock();
+    if (scheduled_punch_hole_gc_ != nullptr && !punch_hole_gc_running_) {
+      if (blob_file_set_->IsColumnFamilyObsolete(
+              scheduled_punch_hole_gc_->cf_id())) {
+        TITAN_LOG_INFO(
+            db_options_.info_log, "GC skip dropped colum family [%s].",
+            cf_info_[scheduled_punch_hole_gc_->cf_id()].name.c_str());
+        scheduled_punch_hole_gc_->ReleaseGcFiles();
+        scheduled_punch_hole_gc_->ReleaseSnapshot(db_);
+        scheduled_punch_hole_gc_.reset();
+      } else if (scheduled_punch_hole_gc_->snapshot()->GetSequenceNumber() ==
+                 GetOldestSnapshotSequence()) {
+        std::unique_ptr<BlobGC> blob_gc = std::move(scheduled_punch_hole_gc_);
+        punch_hole_gc_running_ = true;
+        LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
+                             db_options_.info_log.get());
+        BackgroundGC(&log_buffer, blob_gc.get());
+        punch_hole_gc_running_ = false;
+        {
+          mutex_.Unlock();
+          log_buffer.FlushBufferToLog();
+          LogFlush(db_options_.info_log.get());
+          mutex_.Lock();
+        }
       }
     } else if (!gc_queue_.empty()) {
       // If there is no scheduled punch hole gc, do normal gc.
@@ -272,8 +275,10 @@ void TitanDBImpl::BackgroundCallGC() {
           std::shared_ptr<BlobGCPicker> blob_gc_picker =
               std::make_shared<BasicBlobGCPicker>(db_options_, cf_options,
                                                   cf_id, stats_.get());
-          blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get());
+          auto blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get(),
+                                                    !punch_hole_gc_running_);
           if (blob_gc != nullptr) {
+            assert(!blob_gc->use_punch_hole() || !punch_hole_gc_running_);
             if (blob_gc->use_punch_hole()) {
               auto snapshot = db_->GetSnapshot();
               blob_gc->SetSnapshot(snapshot);
@@ -283,11 +288,17 @@ void TitanDBImpl::BackgroundCallGC() {
             if (blob_gc->use_punch_hole() &&
                 blob_gc->snapshot()->GetSequenceNumber() >
                     GetOldestSnapshotSequence()) {
-              punch_hole_gc_queue_.push_back(std::move(blob_gc));
+              scheduled_punch_hole_gc_ = std::move(blob_gc);
             } else {
+              if (blob_gc->use_punch_hole()) {
+                punch_hole_gc_running_ = true;
+              }
               LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
                                    db_options_.info_log.get());
-              BackgroundGC(&log_buffer, std::move(blob_gc));
+              BackgroundGC(&log_buffer, blob_gc.get());
+              if (blob_gc->use_punch_hole()) {
+                punch_hole_gc_running_ = false;
+              }
               {
                 mutex_.Unlock();
                 log_buffer.FlushBufferToLog();
@@ -318,8 +329,7 @@ void TitanDBImpl::BackgroundCallGC() {
   }
 }
 
-Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
-                                 std::unique_ptr<BlobGC> blob_gc) {
+Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer, BlobGC* blob_gc) {
   mutex_.AssertHeld();
 
   Status s;
@@ -331,7 +341,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
   } else {
     StopWatch gc_sw(env_->GetSystemClock().get(), statistics(stats_.get()),
                     TITAN_GC_MICROS);
-    BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,
+    BlobGCJob blob_gc_job(blob_gc, db_, &mutex_, db_options_, env_,
                           env_options_, blob_manager_.get(),
                           blob_file_set_.get(), log_buffer, &shuting_down_,
                           stats_.get());
@@ -404,20 +414,19 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
       std::shared_ptr<BlobGCPicker> blob_gc_picker =
           std::make_shared<BasicBlobGCPicker>(db_options_, cf_options,
                                               column_family_id, stats_.get());
-      blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get());
+      blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get(),
+                                           !punch_hole_gc_running_);
       if (blob_gc != nullptr) {
+        assert(!blob_gc->use_punch_hole() || !punch_hole_gc_running_);
         cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
         blob_gc->SetColumnFamily(cfh.get());
-        if (blob_gc->use_punch_hole()) {
-          if (blob_gc->snapshot()->GetSequenceNumber() >
-              GetOldestSnapshotSequence()) {
-            punch_hole_gc_queue_.push_back(std::move(blob_gc));
-          } else {
-            blob_gc->SetColumnFamily(cfh.get());
-          }
+        if (blob_gc->use_punch_hole() &&
+            blob_gc->snapshot()->GetSequenceNumber() >
+                GetOldestSnapshotSequence()) {
+          scheduled_punch_hole_gc_ = std::move(blob_gc);
+        } else {
+          s = BackgroundGC(&log_buffer, blob_gc.get());
         }
-
-        s = BackgroundGC(&log_buffer, std::move(blob_gc));
       }
     }
 
