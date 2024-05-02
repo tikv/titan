@@ -209,7 +209,7 @@ Status BlobGCJob::HolePunchSingleBlobFile(std::shared_ptr<BlobFileMeta> file) {
     if (err != 0) {
       return Status::IOError("Hole punch failed", strerror(err));
     }
-#elif
+#else
     return Status::NotSupported("Hole punch not supported");
 #endif
   }
