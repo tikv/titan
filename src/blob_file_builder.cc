@@ -36,7 +36,7 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
 #endif
   }
   // alignment_size_ = cf_options_.alignment_size;
-  alignment_size_ = cf_options.hole_punching_gc ? 4 * 1024 : 0;
+  alignment_size_ = cf_options.enable_punch_hole_gc ? 4 * 1024 : 0;
   WriteHeader();
 }
 

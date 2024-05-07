@@ -298,7 +298,7 @@ TEST_F(BlobGCJobTest, PunchHole) {
   rocksdb::SyncPoint::GetInstance()->EnableProcessing();
 
   DisableMergeSmall();
-  options_.hole_punching_gc = true;
+  options_.enable_punch_hole_gc = true;
   options_.disable_background_gc = false;
   options_.disable_auto_compactions = false;
 
@@ -340,7 +340,7 @@ TEST_F(BlobGCJobTest, PunchHole) {
       ASSERT_EQ(value, values[i]);
     }
   }
-  options_.hole_punching_gc = false;
+  options_.enable_punch_hole_gc = false;
   options_.disable_background_gc = true;
   options_.disable_auto_compactions = true;
 }

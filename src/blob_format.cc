@@ -302,8 +302,11 @@ TitanInternalStats::StatsType BlobFileMeta::GetDiscardableRatioLevel() const {
 }
 
 void BlobFileMeta::Dump(bool with_keys) const {
-  fprintf(stdout, "file %" PRIu64 ", size %" PRIu64 ", level %" PRIu32,
-          file_number_, file_size_, file_level_);
+  fprintf(stdout,
+          "file %" PRIu64 ", size %" PRIu64 ", level %" PRIu32
+          "live blocks %" PRIu64 ", hole punchable blocks %" PRIu64,
+          file_number_, file_size_, file_level_, live_blocks_.load(),
+          hole_punchable_blocks_.load());
   if (with_keys) {
     fprintf(stdout, ", smallest key: %s, largest key: %s",
             Slice(smallest_key_).ToString(true /*hex*/).c_str(),

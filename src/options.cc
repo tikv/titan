@@ -43,7 +43,8 @@ TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
       merge_small_file_threshold(immutable_opts.merge_small_file_threshold),
       blob_run_mode(mutable_opts.blob_run_mode),
       skip_value_in_compaction_filter(
-          immutable_opts.skip_value_in_compaction_filter) {}
+          immutable_opts.skip_value_in_compaction_filter),
+      enable_punch_hole_gc(immutable_opts.enable_punch_hole_gc) {}
 
 void TitanCFOptions::Dump(Logger* logger) const {
   TITAN_LOG_HEADER(logger,
@@ -94,6 +95,8 @@ void TitanCFOptions::Dump(Logger* logger) const {
   }
   TITAN_LOG_HEADER(logger, "TitanCFOptions.blob_run_mode                : %s",
                    blob_run_mode_str.c_str());
+  TITAN_LOG_HEADER(logger, "TitanCFOptions.enable_punch_hole_gc         : %s",
+                   enable_punch_hole_gc ? "true" : "false");
 }
 
 void TitanCFOptions::UpdateMutableOptions(

@@ -266,7 +266,7 @@ void BlobStorage::ComputeGCScore() {
       score = file.second->GetDiscardableRatio();
     }
     if (score < cf_options_.blob_file_discardable_ratio &&
-        cf_options_.hole_punching_gc) {
+        cf_options_.enable_punch_hole_gc) {
       auto punch_hole_score = file.second->GetPunchHoleScore();
       if (punch_hole_score > 0) {
         GCScore gc_score = {};

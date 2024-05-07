@@ -309,6 +309,11 @@ class EditCollector {
                   file.second);
         }
       }
+      for (auto& file : updated_files_) {
+        if (deleted_files_.count(file.first) == 0) {
+          file.second->Dump(with_keys);
+        }
+      }
     }
 
    private:

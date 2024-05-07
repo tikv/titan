@@ -339,6 +339,8 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer, BlobGC* blob_gc) {
     // Nothing to do
     TITAN_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
   } else {
+    TITAN_LOG_BUFFER(log_buffer, "Titan GC start, using punch hole: %s",
+                     blob_gc->use_punch_hole());
     StopWatch gc_sw(env_->GetSystemClock().get(), statistics(stats_.get()),
                     TITAN_GC_MICROS);
     BlobGCJob blob_gc_job(blob_gc, db_, &mutex_, db_options_, env_,
