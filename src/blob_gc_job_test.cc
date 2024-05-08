@@ -289,12 +289,15 @@ TEST_F(BlobGCJobTest, DiscardEntry) { TestDiscardEntry(); }
 TEST_F(BlobGCJobTest, RunGC) { TestRunGC(); }
 
 TEST_F(BlobGCJobTest, PunchHole) {
-  rocksdb::SyncPoint::GetInstance()->LoadDependency({
-      {"BlobGCJobTest::PunchHole:AfterCompact",
-       "TitanDBImpl::BackgroundCallGC:BeforeGCRunning"},
-      {"TitanDBImpl::BackgroundCallGC:AfterGCRunning",
-       "BlobGCJobTest::PunchHole:BeforeVerify"},
-  });
+  rocksdb::SyncPoint::GetInstance()->LoadDependency(
+      {{"BlobGCJobTest::PunchHole:AfterCompact",
+        "TitanDBImpl::BackgroundCallGC:BeforeGCRunning"},
+       {"TitanDBImpl::BackgroundCallGC:AfterGCRunning",
+        "BlobGCJobTest::PunchHole:BeforeCheckPunchHoleGCIsQueued"},
+       {"BlobGCJobTest::PunchHole:AfterReleaseSnapshot",
+        "TitanDBImpl::BackgroundCallGC:BeforeRunScheduledPunchHoleGC"},
+       {"TitanDBImpl::BackgroundCallGC:AfterRunScheduledPunchHoleGC",
+        "BlobGCJobTest::PunchHole:BeforeCheckPunchHoleGCIsFinished"}});
   rocksdb::SyncPoint::GetInstance()->EnableProcessing();
 
   DisableMergeSmall();
@@ -322,17 +325,36 @@ TEST_F(BlobGCJobTest, PunchHole) {
   }
   Flush();
   CompactAll();
+
+  files.clear();
+  b->ExportBlobFiles(files);
+  ASSERT_EQ(files.size(), 1);
+  ASSERT_EQ(files.begin()->second.lock()->hole_punchable_blocks(), 334);
+  ASSERT_EQ(files.begin()->second.lock()->live_blocks(), 1000);
+
+  auto snapshot = db_->GetSnapshot();
+  db_->Put(WriteOptions(), GenKey(100000), GenValue(1));
+
   TEST_SYNC_POINT("BlobGCJobTest::PunchHole:AfterCompact");
-  TEST_SYNC_POINT("BlobGCJobTest::PunchHole:BeforeVerify");
+  TEST_SYNC_POINT("BlobGCJobTest::PunchHole:BeforeCheckPunchHoleGCIsQueued");
+
+  files.clear();
+  b->ExportBlobFiles(files);
+  ASSERT_EQ(files.size(), 1);
+  ASSERT_EQ(files.begin()->second.lock()->hole_punchable_blocks(), 334);
+  ASSERT_EQ(files.begin()->second.lock()->live_blocks(), 1000);
+
+  db_->ReleaseSnapshot(snapshot);
+  TEST_SYNC_POINT("BlobGCJobTest::PunchHole:AfterReleaseSnapshot");
+  TEST_SYNC_POINT("BlobGCJobTest::PunchHole:BeforeCheckPunchHoleGCIsFinished");
 
   files.clear();
   b->ExportBlobFiles(files);
   ASSERT_EQ(files.size(), 1);
   auto post_punch_hole_file_size = files.begin()->second.lock()->file_size();
-  auto post_punch_hole_live_blocks =
-      files.begin()->second.lock()->live_blocks();
   ASSERT_EQ(post_punch_hole_file_size, file_size);
-  ASSERT_LT(post_punch_hole_live_blocks, live_blocks);
+  ASSERT_EQ(files.begin()->second.lock()->live_blocks(), 666);
+  ASSERT_EQ(files.begin()->second.lock()->hole_punchable_blocks(), 0);
   for (int i = 0; i < MAX_KEY_NUM; i++) {
     if (i % 3 == 0) {
       std::string value;

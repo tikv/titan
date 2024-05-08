@@ -1,6 +1,7 @@
 #include "blob_aligned_blocks_collector.h"
 
 #include "base_db_listener.h"
+#include "titan_logging.h"
 
 namespace rocksdb {
 namespace titandb {
@@ -8,7 +9,7 @@ namespace titandb {
 TablePropertiesCollector*
 BlobAlignedBlocksCollectorFactory::CreateTablePropertiesCollector(
     rocksdb::TablePropertiesCollectorFactory::Context /* context */) {
-  return new BlobAlignedBlocksCollector();
+  return new BlobAlignedBlocksCollector(info_logger_);
 }
 
 const std::string BlobAlignedBlocksCollector::kPropertiesName =
@@ -73,6 +74,12 @@ Status BlobAlignedBlocksCollector::AddUserKey(const Slice& /* key */,
 Status BlobAlignedBlocksCollector::Finish(UserCollectedProperties* properties) {
   if (aligned_blocks_.empty()) {
     return Status::OK();
+  }
+  if (info_logger_ != nullptr) {
+    TITAN_LOG_INFO(
+        info_logger_,
+        "BlobAlignedBlocksCollector::Finish: aligned_blocks size %zu",
+        aligned_blocks_.size());
   }
 
   std::string res;

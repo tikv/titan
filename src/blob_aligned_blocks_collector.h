@@ -24,6 +24,16 @@ class BlobAlignedBlocksCollectorFactory final
       TablePropertiesCollectorFactory::Context context) override;
 
   const char* Name() const override { return "BlobAlignedBlocksCollector"; }
+
+  explicit BlobAlignedBlocksCollectorFactory(
+      std::shared_ptr<Logger> info_logger)
+      : info_logger_(info_logger) {}
+  BlobAlignedBlocksCollectorFactory(const BlobAlignedBlocksCollectorFactory&) =
+      delete;
+  BlobAlignedBlocksCollectorFactory& operator=(
+      const BlobAlignedBlocksCollectorFactory&) = delete;
+
+  std::shared_ptr<Logger> info_logger_;
 };
 
 class BlobAlignedBlocksCollector final : public TablePropertiesCollector {
@@ -43,8 +53,12 @@ class BlobAlignedBlocksCollector final : public TablePropertiesCollector {
   }
   const char* Name() const override { return "BlobAlignedBlocksCollector"; }
 
+  BlobAlignedBlocksCollector(std::shared_ptr<Logger> info_logger)
+      : info_logger_(info_logger) {}
+
  private:
   std::map<uint64_t, uint64_t> aligned_blocks_;
+  std::shared_ptr<Logger> info_logger_;
 };
 
 }  // namespace titandb

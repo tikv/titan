@@ -218,7 +218,7 @@ Status BlobGCJob::HolePunchSingleBlobFile(std::shared_ptr<BlobFileMeta> file) {
   // to update the hole_punchable_blocks to reflect the actual value instead
   // of resetting it to 0.
   // TODO: test this case.
-  auto hole_punched_blocks = live_blocks - file->live_blocks();
+  auto hole_punched_blocks = file->live_blocks() - live_blocks;
   auto new_blob_file = std::make_shared<BlobFileMeta>(
       file->file_number(), file->file_size(), 0, 0, file->smallest_key(),
       file->largest_key());

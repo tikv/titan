@@ -303,7 +303,8 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
     cf_opts.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
     cf_opts.table_properties_collector_factories.emplace_back(
-        std::make_shared<BlobAlignedBlocksCollectorFactory>());
+        std::make_shared<BlobAlignedBlocksCollectorFactory>(
+            db_options_.info_log));
     titan_table_factories.push_back(std::make_shared<TitanTableFactory>(
         db_options_, desc.options, blob_manager_, &mutex_, blob_file_set_.get(),
         stats_.get()));
@@ -481,7 +482,8 @@ Status TitanDBImpl::CreateColumnFamilies(
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
     options.table_properties_collector_factories.emplace_back(
-        std::make_shared<BlobAlignedBlocksCollectorFactory>());
+        std::make_shared<BlobAlignedBlocksCollectorFactory>(
+            db_options_.info_log));
     if (options.compaction_filter != nullptr ||
         options.compaction_filter_factory != nullptr) {
       std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
@@ -1413,7 +1415,16 @@ void TitanDBImpl::OnCompactionCompleted(
         cf_options.num_levels - 1 == compaction_job_info.output_level;
     bool has_live_blocks_diff = !hole_punchable_blocks_diff.empty();
     if (has_live_blocks_diff) {
+      TITAN_LOG_INFO(db_options_.info_log,
+                     "OnCompactionCompleted[%d]: blob_file_size_diff.size=%zu, "
+                     "hole_punchable_blocks_diff.size=%zu",
+                     compaction_job_info.job_id, blob_file_size_diff.size(),
+                     hole_punchable_blocks_diff.size());
       assert(hole_punchable_blocks_diff.size() == blob_file_size_diff.size());
+    } else {
+      TITAN_LOG_INFO(db_options_.info_log,
+                     "OnCompactionCompleted[%d]: blob_file_size_diff.size=%zu",
+                     compaction_job_info.job_id, blob_file_size_diff.size());
     }
 
     for (const auto& file_diff : blob_file_size_diff) {
