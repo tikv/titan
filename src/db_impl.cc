@@ -841,6 +841,24 @@ void TitanDBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
   // TODO:
   // We can record here whether the oldest snapshot is released.
   // If not, we can just skip the next round of purging obsolete files.
+  {
+    MutexLock l(&mutex_);
+    if (scheduled_punch_hole_gc_ != nullptr && !punch_hole_gc_running_ &&
+        scheduled_punch_hole_gc_->snapshot()->GetSequenceNumber() ==
+            GetOldestSnapshotSequence() &&
+        bg_gc_scheduled_ < db_options_.max_background_gc) {
+      if (db_options_.disable_background_gc) return;
+
+      if (!initialized_.load(std::memory_order_acquire)) return;
+
+      if (shuting_down_.load(std::memory_order_acquire)) return;
+
+      TITAN_LOG_INFO(db_options_.info_log,
+                     "Titan schedule punch hole GC after releasing snapshot");
+      bg_gc_scheduled_++;
+      thread_pool_->SubmitJob(std::bind(&TitanDBImpl::BGWorkGC, this));
+    }
+  }
   db_->ReleaseSnapshot(snapshot);
 }
 
@@ -1421,6 +1439,14 @@ void TitanDBImpl::OnCompactionCompleted(
                      compaction_job_info.job_id, blob_file_size_diff.size(),
                      hole_punchable_blocks_diff.size());
       assert(hole_punchable_blocks_diff.size() == blob_file_size_diff.size());
+      std::string debug;
+      for (const auto& file_diff : hole_punchable_blocks_diff) {
+        debug += "[" + std::to_string(file_diff.first) + ":" +
+                 std::to_string(file_diff.second) + "]";
+      }
+      TITAN_LOG_INFO(db_options_.info_log,
+                     "OnCompactionCompleted[%d]: hole_punchable_blocks_diff=%s",
+                     compaction_job_info.job_id, debug.c_str());
     } else {
       TITAN_LOG_INFO(db_options_.info_log,
                      "OnCompactionCompleted[%d]: blob_file_size_diff.size=%zu",

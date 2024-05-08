@@ -41,6 +41,7 @@ class BasicBlobGCPicker final : public BlobGCPicker {
   TitanCFOptions cf_options_;
   uint32_t cf_id_;
   TitanStats* stats_;
+  std::shared_ptr<Logger> info_logger_;
 
   // Check if blob_file needs to gc, return true means we need pick this
   // file for gc

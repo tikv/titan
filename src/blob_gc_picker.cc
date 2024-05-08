@@ -35,6 +35,10 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(BlobStorage* blob_storage,
 
   if (allow_punch_hole) {
     for (auto& score : blob_storage->punch_hole_score()) {
+      if (info_logger_ != nullptr) {
+        TITAN_LOG_INFO(info_logger_, "Punch hole score %" PRIu64 " %.2f",
+                       score.file_number, score.score);
+      }
       if (score.score >= cf_options_.blob_file_discardable_ratio) {
         break;
       }
