@@ -103,10 +103,16 @@ void BlobStorage::HolePunchBlobFile(std::shared_ptr<BlobFileMeta>& file) {
                     file->file_number());
     files_.emplace(std::make_pair(file->file_number(), file));
   }
-  auto it = blob_ranges_.equal_range(file->smallest_key()).second;
-  if (it->second->file_number() == file->file_number()) {
-    it->second = file;
-  } else {
+  bool found = false;
+  auto p = blob_ranges_.equal_range(file->smallest_key());
+  for (auto it = p.first; it != p.second; it++) {
+    if (it->second->file_number() == file->file_number()) {
+      it->second = file;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
     TITAN_LOG_ERROR(db_options_.info_log,
                     "Hole punch blob file %" PRIu64
                     " failed, file not found in BlobStorage.",
