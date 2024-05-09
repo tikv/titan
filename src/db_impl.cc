@@ -128,6 +128,12 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     Status s = Status::OK();
     VersionEdit edit;
     for (const auto& file : files) {
+      TITAN_LOG_INFO(db_->db_options_.info_log,
+                     "Titan updating blob file [%" PRIu64
+                     "] live blocks: %" PRIu64
+                     ", hole punchable blocks :%" PRIu64 ".",
+                     file->file_number(), file->live_blocks(),
+                     file->hole_punchable_blocks());
       edit.HolePunchBlobFile(file);
     }
     {

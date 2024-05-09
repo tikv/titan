@@ -234,9 +234,6 @@ void TitanTableBuilder::FinishBlobFile() {
     AddBlobResultsToBase(contexts);
 
     if (s.ok() && ok()) {
-      TITAN_LOG_INFO(db_options_.info_log,
-                     "Titan table builder finish output file %" PRIu64 ".",
-                     blob_handle_->GetNumber());
       std::shared_ptr<BlobFileMeta> file = std::make_shared<BlobFileMeta>(
           blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(),
           blob_builder_->NumEntries(), target_level_,

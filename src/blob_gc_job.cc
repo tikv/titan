@@ -494,7 +494,8 @@ Status BlobGCJob::Finish() {
     mutex_->Lock();
   }
 
-  if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
+  if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped() &&
+      !blob_gc_->use_punch_hole()) {
     TEST_SYNC_POINT("BlobGCJob::Finish::BeforeDeleteInputBlobFiles");
     s = DeleteInputBlobFiles();
   }
