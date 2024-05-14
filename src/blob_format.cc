@@ -269,7 +269,7 @@ void BlobFileMeta::FileStateTransit(const FileEvent& event) {
       break;
     case FileEvent::kPunchHoleOutput:
       assert(state_ == FileState::kBeingGC);
-      state_ = FileState::kNormal;
+      state_ = FileState::kPendingGC;
       break;
     case FileEvent::kReset:
       state_ = FileState::kNormal;

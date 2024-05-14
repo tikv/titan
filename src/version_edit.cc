@@ -21,7 +21,7 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     PutVarint32Varint64(dst, kDeletedBlobFile, file.first);
   }
   for (auto& file : updated_files_) {
-    PutVarint32(dst, kHolePunchedBlobFile);
+    PutVarint32(dst, kUpdatedBlobFile);
     file->EncodeTo(dst);
   }
 }
@@ -87,11 +87,11 @@ Status VersionEdit::DecodeFrom(Slice* src) {
           error = "deleted blob file";
         }
         break;
-      case kHolePunchedBlobFile:
+      case kUpdatedBlobFile:
         blob_file = std::make_shared<BlobFileMeta>();
         s = blob_file->DecodeFrom(src);
         if (s.ok()) {
-          HolePunchBlobFile(blob_file);
+          UpdateBlobFile(blob_file);
         } else {
           error = s.ToString().c_str();
         }
@@ -145,6 +145,12 @@ void VersionEdit::Dump(bool with_keys) const {
     for (auto& file : deleted_files_) {
       fprintf(stdout, "file %" PRIu64 ", seq %" PRIu64 "\n", file.first,
               file.second);
+    }
+  }
+  if (!updated_files_.empty()) {
+    fprintf(stdout, "update files:\n");
+    for (auto& file : updated_files_) {
+      file->Dump(with_keys);
     }
   }
 }

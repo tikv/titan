@@ -170,9 +170,11 @@ class EditCollector {
 
     Status UpdateFile(const std::shared_ptr<BlobFileMeta>& file) {
       auto number = file->file_number();
-      if (added_files_.count(number) > 0) {
-        TITAN_LOG_INFO(info_log_,
-                       "blob file %" PRIu64 " has been added before\n", number);
+      if (added_files_.count(number) == 0) {
+        TITAN_LOG_ERROR(
+            info_log_, "blob file %" PRIu64 " has been added before\n", number);
+      } else {
+        assert(added_files_[number].get() == file.get());
       }
       if (deleted_files_.count(number) > 0) {
         TITAN_LOG_ERROR(info_log_,
@@ -183,7 +185,10 @@ class EditCollector {
                                     " has been deleted before");
         }
       }
-      updated_files_.emplace(number, file);
+      if (updated_files_.count(number) > 0) {
+        assert(updated_files_[number].get() == file.get());
+      }
+
       return Status::OK();
     }
 
@@ -263,23 +268,26 @@ class EditCollector {
         storage->AddBlobFile(file.second);
       }
 
+      for (auto& file : updated_files_) {
+        if (deleted_files_.count(file.first) > 0) {
+          continue;
+        }
+        storage->HolePunchBlobFile(file.second);
+      }
+
       for (auto& file : deleted_files_) {
         auto number = file.first;
         // just skip paired added and deleted files
         if (added_files_.count(number) > 0) {
           continue;
         }
+        if (updated_files_.count(number) > 0) {
+          continue;
+        }
         if (!storage->MarkFileObsolete(number, file.second)) {
           return Status::NotFound("Invalid file number " +
                                   std::to_string(number));
         }
-      }
-
-      for (auto& file : updated_files_) {
-        if (deleted_files_.count(file.first) > 0) {
-          continue;
-        }
-        storage->HolePunchBlobFile(file.second);
       }
 
       storage->ComputeGCScore();

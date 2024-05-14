@@ -213,21 +213,7 @@ Status BlobGCJob::HolePunchSingleBlobFile(std::shared_ptr<BlobFileMeta> file) {
     return Status::NotSupported("Hole punch not supported");
 #endif
   }
-  // Becuase blob references' liveness is determined from a snapshot, it is
-  // possible that not all hole punchable blocks are hole punched. We need
-  // to update the hole_punchable_blocks to reflect the actual value instead
-  // of resetting it to 0.
-  // TODO: test this case.
-  auto hole_punched_blocks = file->live_blocks() - live_blocks;
-  auto new_blob_file = std::make_shared<BlobFileMeta>(
-      file->file_number(), file->file_size(), 0, 0, file->smallest_key(),
-      file->largest_key());
-  new_blob_file->set_live_blocks(live_blocks);
-  new_blob_file->set_hole_punchable_blocks(file->hole_punchable_blocks() -
-                                           hole_punched_blocks);
-  new_blob_file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
-  hole_punched_files_.emplace_back(new_blob_file);
-
+  hole_punched_files_map_[file->file_number()] = live_blocks;
   return Status::OK();
 }
 
@@ -493,6 +479,30 @@ Status BlobGCJob::Finish() {
     }
     mutex_->Lock();
   }
+  // It is possible that while processing the GC job, the input blob files'
+  // liveness or number of hole punchable blocks have changed. So, we need to
+  // deal with the meta data update with mutex locked.
+  // TODO: test this case.
+  std::vector<std::shared_ptr<BlobFileMeta>> hole_punched_files;
+  for (auto& file : blob_gc_->inputs()) {
+    if (file->is_obsolete()) {
+      continue;
+    }
+    auto it = hole_punched_files_map_.find(file->file_number());
+    if (it == hole_punched_files_map_.end()) {
+      continue;
+    }
+    auto live_blocks = it->second;
+    auto hole_punched_blocks = file->live_blocks() - live_blocks;
+    file->set_live_blocks(live_blocks);
+    file->set_hole_punchable_blocks(file->hole_punchable_blocks() -
+                                    hole_punched_blocks);
+    file->FileStateTransit(BlobFileMeta::FileEvent::kPunchHoleOutput);
+    hole_punched_files.emplace_back(file);
+  }
+  if (!hole_punched_files.empty()) {
+    s = blob_file_manager_->BatchUpdateFiles(hole_punched_files);
+  }
 
   if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped() &&
       !blob_gc_->use_punch_hole()) {
@@ -574,10 +584,6 @@ Status BlobGCJob::InstallOutputBlobFiles() {
                      "Delete GC output files[%s] failed: %s",
                      to_delete_files.c_str(), status.ToString().c_str());
     }
-  }
-
-  if (!hole_punched_files_.empty()) {
-    s = blob_file_manager_->BatchUpdateFiles(hole_punched_files_);
   }
 
   return s;

@@ -95,7 +95,7 @@ void BlobStorage::HolePunchBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   // Update the file in files_ and blob_ranges_.
   auto f_it = files_.find(file->file_number());
   if (f_it != files_.end()) {
-    f_it->second = file;
+    assert(f_it->second.get() == file.get());
   } else {
     TITAN_LOG_ERROR(db_options_.info_log,
                     "Hole punch blob file %" PRIu64
@@ -107,7 +107,7 @@ void BlobStorage::HolePunchBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   auto p = blob_ranges_.equal_range(file->smallest_key());
   for (auto it = p.first; it != p.second; it++) {
     if (it->second->file_number() == file->file_number()) {
-      it->second = file;
+      assert(it->second.get() == file.get());
       found = true;
       break;
     }

@@ -19,7 +19,7 @@ enum Tag {
   kAddedBlobFileV2 = 13,  // Comparing to kAddedBlobFile, it newly includes
                           // smallest_key and largest_key of blob file
   kAddedBlobFileV3 = 14,  // Add live blocks and dead blocks info
-  kHolePunchedBlobFile = 15,  // Update hole punched blob file meta
+  kUpdatedBlobFile = 15,  // Update hole punched blob file meta
 };
 
 class VersionEdit {
@@ -39,7 +39,7 @@ class VersionEdit {
     deleted_files_.emplace_back(std::make_pair(file_number, obsolete_sequence));
   }
 
-  void HolePunchBlobFile(std::shared_ptr<BlobFileMeta> meta) {
+  void UpdateBlobFile(std::shared_ptr<BlobFileMeta> meta) {
     updated_files_.push_back(meta);
   }
 

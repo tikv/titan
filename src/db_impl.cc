@@ -125,6 +125,10 @@ class TitanDBImpl::FileManager : public BlobFileManager {
 
   Status BatchUpdateFiles(
       const std::vector<std::shared_ptr<BlobFileMeta>>& files) override {
+    // Since files are being in-place updated, it has to make sure that the
+    // BlobFileMeta are not modified by compactions or activities other than
+    // punch hole GC, between the time BlobFileMeta are
+    db_->mutex_.AssertHeld();
     Status s = Status::OK();
     VersionEdit edit;
     for (const auto& file : files) {
@@ -134,14 +138,11 @@ class TitanDBImpl::FileManager : public BlobFileManager {
                      ", hole punchable blocks :%" PRIu64 ".",
                      file->file_number(), file->live_blocks(),
                      file->hole_punchable_blocks());
-      edit.HolePunchBlobFile(file);
+      edit.UpdateBlobFile(file);
     }
-    {
-      MutexLock l(&db_->mutex_);
-      s = db_->blob_file_set_->LogAndApply(edit);
-      if (!s.ok()) {
-        db_->SetBGError(s);
-      }
+    s = db_->blob_file_set_->LogAndApply(edit);
+    if (!s.ok()) {
+      db_->SetBGError(s);
     }
     return s;
   }
