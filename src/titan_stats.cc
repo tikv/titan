@@ -38,6 +38,8 @@ static const std::string num_discardable_ratio_le80_file =
     "num-discardable-ratio-le80-file";
 static const std::string num_discardable_ratio_le100_file =
     "num-discardable-ratio-le100-file";
+static const std::string num_hole_punchable_blocks =
+    "num-hole-punchable-blocks";
 
 const std::string TitanDB::Properties::kNumBlobFilesAtLevelPrefix =
     titandb_prefix + num_blob_files_at_level_prefix;
@@ -61,6 +63,8 @@ const std::string TitanDB::Properties::kNumDiscardableRatioLE80File =
     titandb_prefix + num_discardable_ratio_le80_file;
 const std::string TitanDB::Properties::kNumDiscardableRatioLE100File =
     titandb_prefix + num_discardable_ratio_le100_file;
+const std::string TitanDB::Properties::kNumHolePunchableBlocks =
+    titandb_prefix + num_hole_punchable_blocks;
 
 const std::unordered_map<
     std::string, std::function<uint64_t(const TitanInternalStats*, Slice)>>
@@ -105,6 +109,10 @@ const std::unordered_map<
         {TitanDB::Properties::kNumDiscardableRatioLE100File,
          std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
                    TitanInternalStats::NUM_DISCARDABLE_RATIO_LE100,
+                   std::placeholders::_2)},
+        {TitanDB::Properties::kNumHolePunchableBlocks,
+         std::bind(&TitanInternalStats::HandleStatsValue, std::placeholders::_1,
+                   TitanInternalStats::NUM_HOLE_PUNCHABLE_BLOCKS,
                    std::placeholders::_2)},
 };
 

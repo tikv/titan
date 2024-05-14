@@ -201,6 +201,8 @@ class TitanDB : public StackableDB {
     //  "rocksdb.titandb.discardable_ratio_le100_file_num" - returns count of
     //      file whose discardable ratio is less or equal to 100%.
     static const std::string kNumDiscardableRatioLE100File;
+
+    static const std::string kNumHolePunchableBlocks;
   };
 
   bool GetProperty(ColumnFamilyHandle* column_family, const Slice& property,

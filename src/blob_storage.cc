@@ -156,8 +156,16 @@ bool BlobStorage::RemoveFile(uint64_t file_number) {
       break;
     }
   }
+  auto removed_size = 0;
+  if (file->second->alignment_size() > 0) {
+    // +1 header block
+    auto num_blocks = file->second->live_blocks() + 1;
+    removed_size = num_blocks * file->second->alignment_size();
+  } else {
+    removed_size = file->second->file_size();
+  }
   SubStats(stats_, cf_id_, TitanInternalStats::OBSOLETE_BLOB_FILE_SIZE,
-           file->second->file_size());
+           removed_size);
   SubStats(stats_, cf_id_, TitanInternalStats::NUM_OBSOLETE_BLOB_FILE, 1);
   files_.erase(file_number);
   file_cache_->Evict(file_number);
@@ -209,7 +217,8 @@ void BlobStorage::UpdateStats() {
 
   levels_file_count_.clear();
   levels_file_count_.assign(cf_options_.num_levels, 0);
-  uint64_t live_blob_file_size = 0, num_live_blob_file = 0;
+  uint64_t live_blob_file_size = 0, num_live_blob_file = 0,
+           num_hole_punchable_blocks = 0;
   uint64_t obsolete_blob_file_size = 0, num_obsolete_blob_file = 0;
   std::unordered_map<int, uint64_t> ratio_levels;
 
@@ -217,7 +226,13 @@ void BlobStorage::UpdateStats() {
   for (auto& file : files_) {
     if (file.second->is_obsolete()) {
       num_obsolete_blob_file += 1;
-      obsolete_blob_file_size += file.second->file_size();
+      if (file.second->alignment_size() > 0) {
+        // +1 header block
+        auto num_blocks = file.second->live_blocks() + 1;
+        obsolete_blob_file_size += num_blocks * file.second->alignment_size();
+      } else {
+        obsolete_blob_file_size += file.second->file_size();
+      }
       continue;
     }
     num_live_blob_file += 1;
@@ -225,9 +240,16 @@ void BlobStorage::UpdateStats() {
 
     // If the file is initialized yet, skip it
     if (file.second->file_state() != BlobFileMeta::FileState::kPendingInit) {
-      live_blob_file_size += file.second->file_size();
       ratio_levels[static_cast<int>(file.second->GetDiscardableRatioLevel())] +=
           1;
+      if (file.second->alignment_size() > 0) {
+        // +1 header block
+        auto num_blocks = file.second->live_blocks() + 1;
+        num_hole_punchable_blocks += file.second->hole_punchable_blocks();
+        live_blob_file_size += num_blocks * file.second->alignment_size();
+      } else {
+        live_blob_file_size += file.second->file_size();
+      }
     }
   }
 
@@ -245,6 +267,8 @@ void BlobStorage::UpdateStats() {
     SetStats(stats_, cf_id_, static_cast<TitanInternalStats::StatsType>(i),
              ratio_levels[i]);
   }
+  SetStats(stats_, cf_id_, TitanInternalStats::NUM_HOLE_PUNCHABLE_BLOCKS,
+           num_hole_punchable_blocks);
 }
 void BlobStorage::ComputeGCScore() {
   UpdateStats();
