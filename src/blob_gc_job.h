@@ -60,7 +60,6 @@ class BlobGCJob {
   std::vector<std::pair<WriteBatch, GarbageCollectionWriteCallback>>
       rewrite_batches_;
 
-  std::vector<std::shared_ptr<BlobFileMeta>> hole_punched_files_;
   // Maps file number to live blocks.
   std::unordered_map<uint64_t, uint64_t> hole_punched_files_map_;
 

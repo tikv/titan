@@ -170,12 +170,6 @@ class EditCollector {
 
     Status UpdateFile(const std::shared_ptr<BlobFileMeta>& file) {
       auto number = file->file_number();
-      if (added_files_.count(number) == 0) {
-        TITAN_LOG_ERROR(
-            info_log_, "blob file %" PRIu64 " has been added before\n", number);
-      } else {
-        assert(added_files_[number].get() == file.get());
-      }
       if (deleted_files_.count(number) > 0) {
         TITAN_LOG_ERROR(info_log_,
                         "blob file %" PRIu64 " has been deleted before\n",

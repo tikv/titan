@@ -141,9 +141,9 @@ Status BlobGCJob::Run() {
     }
     tmp.append(std::to_string(f->file_number()));
   }
-  TITAN_LOG_BUFFER(log_buffer_, "[%s] Titan GC candidates[%s]",
-                   blob_gc_->column_family_handle()->GetName().c_str(),
-                   tmp.c_str());
+  TITAN_LOG_INFO(db_options_.info_log, "[%s] Titan GC inputs: [%s]",
+                 blob_gc_->column_family_handle()->GetName().c_str(),
+                 tmp.c_str());
 
   if (blob_gc_->use_punch_hole()) {
     return HolePunchBlobFiles();
@@ -157,10 +157,18 @@ Status BlobGCJob::HolePunchBlobFiles() {
     if (IsShutingDown()) {
       return Status::ShutdownInProgress();
     }
+    TITAN_LOG_INFO(db_options_.info_log, "Hole punch file %" PRIu64,
+                   file->file_number());
     Status s = HolePunchSingleBlobFile(file);
     if (!s.ok()) {
+      TITAN_LOG_INFO(db_options_.info_log,
+                     "Hole punch file %" PRIu64 " failed: %s",
+                     file->file_number(), s.ToString().c_str());
+
       return s;
     }
+    TITAN_LOG_INFO(db_options_.info_log, "Hole punch file %" PRIu64 " done",
+                   file->file_number());
   }
   return Status::OK();
 }
@@ -479,31 +487,34 @@ Status BlobGCJob::Finish() {
     }
     mutex_->Lock();
   }
-  // It is possible that while processing the GC job, the input blob files'
-  // liveness or number of hole punchable blocks have changed. So, we need to
-  // deal with the meta data update with mutex locked.
-  // TODO: test this case.
-  std::vector<std::shared_ptr<BlobFileMeta>> hole_punched_files;
-  for (auto& file : blob_gc_->inputs()) {
-    if (file->is_obsolete()) {
-      continue;
+  if (blob_gc_->use_punch_hole()) {
+    TITAN_LOG_INFO(db_options_.info_log,
+                   "Titan GC job finished, before batch updates");
+    // It is possible that while processing the GC job, the input blob files'
+    // liveness or number of hole punchable blocks have changed. So, we need to
+    // deal with the meta data update with mutex locked.
+    // TODO: test this case.
+    std::vector<std::shared_ptr<BlobFileMeta>> hole_punched_files;
+    for (auto& file : blob_gc_->inputs()) {
+      if (file->is_obsolete()) {
+        continue;
+      }
+      auto it = hole_punched_files_map_.find(file->file_number());
+      if (it == hole_punched_files_map_.end()) {
+        continue;
+      }
+      auto live_blocks = it->second;
+      auto hole_punched_blocks = file->live_blocks() - live_blocks;
+      file->set_live_blocks(live_blocks);
+      file->set_hole_punchable_blocks(file->hole_punchable_blocks() -
+                                      hole_punched_blocks);
+      file->FileStateTransit(BlobFileMeta::FileEvent::kPunchHoleOutput);
+      hole_punched_files.emplace_back(file);
     }
-    auto it = hole_punched_files_map_.find(file->file_number());
-    if (it == hole_punched_files_map_.end()) {
-      continue;
+    if (!hole_punched_files.empty()) {
+      s = blob_file_manager_->BatchUpdateFiles(hole_punched_files);
     }
-    auto live_blocks = it->second;
-    auto hole_punched_blocks = file->live_blocks() - live_blocks;
-    file->set_live_blocks(live_blocks);
-    file->set_hole_punchable_blocks(file->hole_punchable_blocks() -
-                                    hole_punched_blocks);
-    file->FileStateTransit(BlobFileMeta::FileEvent::kPunchHoleOutput);
-    hole_punched_files.emplace_back(file);
   }
-  if (!hole_punched_files.empty()) {
-    s = blob_file_manager_->BatchUpdateFiles(hole_punched_files);
-  }
-
   if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped() &&
       !blob_gc_->use_punch_hole()) {
     TEST_SYNC_POINT("BlobGCJob::Finish::BeforeDeleteInputBlobFiles");

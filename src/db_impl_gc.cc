@@ -398,6 +398,9 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer, BlobGC* blob_gc) {
     }
     if (s.ok()) {
       s = blob_gc_job.Finish();
+    } else {
+      TITAN_LOG_ERROR(db_options_.info_log, "Titan GC error: %s",
+                      s.ToString().c_str());
     }
     blob_gc->ReleaseSnapshot(db_);
     blob_gc->ReleaseGcFiles();

@@ -35,10 +35,6 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(BlobStorage* blob_storage,
 
   if (allow_punch_hole) {
     for (auto& score : blob_storage->punch_hole_score()) {
-      if (info_logger_ != nullptr) {
-        TITAN_LOG_INFO(info_logger_, "Punch hole score %" PRIu64 " %.2f",
-                       score.file_number, score.score);
-      }
       if (score.score >= cf_options_.blob_file_discardable_ratio) {
         break;
       }
@@ -64,6 +60,12 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(BlobStorage* blob_storage,
       }
     }
     if (!blob_files.empty()) {
+      std::string all_candidates;
+      for (auto& blob_file : blob_files) {
+        all_candidates += std::to_string(blob_file->file_number()) + " ";
+      }
+      TITAN_LOG_INFO(db_options_.info_log, "Punch hole gc candidates files: %s",
+                     all_candidates.c_str());
       return std::unique_ptr<BlobGC>(
           new BlobGC(std::move(blob_files), std::move(cf_options_),
                      maybe_continue_next_time, cf_id_, /*punch_hole=*/true));
