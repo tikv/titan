@@ -187,7 +187,14 @@ Status BlobGCJob::HolePunchSingleBlobFile(std::shared_ptr<BlobFileMeta> file) {
   std::unique_ptr<BlobFileIterator> iter(
       new BlobFileIterator(std::move(file_reader), file->file_number(),
                            file->file_size(), blob_gc_->titan_cf_options()));
-  for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+  iter->SeekToFirst();
+  if (!iter->status().ok()) {
+    return iter->status();
+  }
+  TITAN_LOG_INFO(db_options_.info_log,
+                 "Hole punch file %" PRIu64 " iterator created",
+                 file->file_number());
+  for (; iter->Valid(); iter->Next()) {
     if (IsShutingDown()) {
       return Status::ShutdownInProgress();
     }
@@ -220,6 +227,9 @@ Status BlobGCJob::HolePunchSingleBlobFile(std::shared_ptr<BlobFileMeta> file) {
 #else
     return Status::NotSupported("Hole punch not supported");
 #endif
+  }
+  if (!iter->status().ok()) {
+    return iter->status();
   }
   hole_punched_files_map_[file->file_number()] = live_blocks;
   return Status::OK();
@@ -467,7 +477,7 @@ Status BlobGCJob::DiscardEntry(const Slice& key, const BlobIndex& blob_index,
 // added to db before we rewrite any key to LSM
 Status BlobGCJob::Finish() {
   Status s;
-  {
+  if (!blob_gc_->use_punch_hole()) {
     mutex_->Unlock();
     s = InstallOutputBlobFiles();
     if (s.ok()) {
@@ -486,8 +496,12 @@ Status BlobGCJob::Finish() {
                       s.ToString().c_str());
     }
     mutex_->Lock();
-  }
-  if (blob_gc_->use_punch_hole()) {
+    if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped()) {
+      TEST_SYNC_POINT("BlobGCJob::Finish::BeforeDeleteInputBlobFiles");
+      s = DeleteInputBlobFiles();
+    }
+    TEST_SYNC_POINT("BlobGCJob::Finish::AfterRewriteValidKeyToLSM");
+  } else {
     TITAN_LOG_INFO(db_options_.info_log,
                    "Titan GC job finished, before batch updates");
     // It is possible that while processing the GC job, the input blob files'
@@ -515,13 +529,6 @@ Status BlobGCJob::Finish() {
       s = blob_file_manager_->BatchUpdateFiles(hole_punched_files);
     }
   }
-  if (s.ok() && !blob_gc_->GetColumnFamilyData()->IsDropped() &&
-      !blob_gc_->use_punch_hole()) {
-    TEST_SYNC_POINT("BlobGCJob::Finish::BeforeDeleteInputBlobFiles");
-    s = DeleteInputBlobFiles();
-  }
-  TEST_SYNC_POINT("BlobGCJob::Finish::AfterRewriteValidKeyToLSM");
-
   if (s.ok()) {
     UpdateInternalOpStats();
   }

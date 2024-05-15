@@ -216,7 +216,8 @@ void BlobFileIterator::PrefetchAndGet() {
       while (readahead_end_offset_ + readahead_size_ <= min_blob_size &&
              readahead_size_ < kMaxReadaheadSize)
         readahead_size_ <<= 1;
-      file_->Prefetch(readahead_end_offset_, readahead_size_);
+      status_ = file_->Prefetch(readahead_end_offset_, readahead_size_);
+      if (!status_.ok()) return;
       readahead_end_offset_ += readahead_size_;
       readahead_size_ = std::min(kMaxReadaheadSize, readahead_size_ << 1);
     }
