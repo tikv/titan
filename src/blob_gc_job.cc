@@ -554,7 +554,8 @@ Status BlobGCJob::InstallOutputBlobFiles() {
 
     auto file = std::make_shared<BlobFileMeta>(
         builder.first->GetNumber(), builder.first->GetFile()->GetFileSize(), 0,
-        0, builder.second->GetSmallestKey(), builder.second->GetLargestKey());
+        0, builder.second->GetSmallestKey(), builder.second->GetLargestKey(),
+        builder.second->alignment_size(), builder.second->live_blocks());
     file->set_live_data_size(builder.second->live_data_size());
     file->FileStateTransit(BlobFileMeta::FileEvent::kGCOutput);
     RecordInHistogram(statistics(stats_), TITAN_GC_OUTPUT_FILE_SIZE,

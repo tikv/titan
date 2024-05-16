@@ -208,6 +208,9 @@ bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs) {
           lhs.file_size_ == rhs.file_size_ &&
           lhs.file_entries_ == rhs.file_entries_ &&
           lhs.file_level_ == rhs.file_level_ &&
+          lhs.alignment_size_ == rhs.alignment_size_ &&
+          lhs.hole_punchable_blocks_.load() ==
+              rhs.hole_punchable_blocks_.load() &&
           lhs.live_blocks_.load() == rhs.live_blocks_.load());
 }
 
