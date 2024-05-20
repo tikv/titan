@@ -141,9 +141,10 @@ Status BlobGCJob::Run() {
     }
     tmp.append(std::to_string(f->file_number()));
   }
-  TITAN_LOG_INFO(db_options_.info_log, "[%s] Titan GC inputs: [%s]",
-                 blob_gc_->column_family_handle()->GetName().c_str(),
-                 tmp.c_str());
+  TITAN_LOG_BUFFER(log_buffer_,
+                   "[%s] Titan GC inputs: [%s], use punch hole: %s",
+                   blob_gc_->column_family_handle()->GetName().c_str(),
+                   tmp.c_str(), blob_gc_->use_punch_hole() ? "true" : "false");
 
   if (blob_gc_->use_punch_hole()) {
     return HolePunchBlobFiles();
@@ -157,18 +158,14 @@ Status BlobGCJob::HolePunchBlobFiles() {
     if (IsShutingDown()) {
       return Status::ShutdownInProgress();
     }
-    TITAN_LOG_INFO(db_options_.info_log, "Hole punch file %" PRIu64,
-                   file->file_number());
     Status s = HolePunchSingleBlobFile(file);
     if (!s.ok()) {
-      TITAN_LOG_INFO(db_options_.info_log,
-                     "Hole punch file %" PRIu64 " failed: %s",
-                     file->file_number(), s.ToString().c_str());
+      TITAN_LOG_ERROR(db_options_.info_log,
+                      "Hole punch file %" PRIu64 " failed: %s",
+                      file->file_number(), s.ToString().c_str());
 
       return s;
     }
-    TITAN_LOG_INFO(db_options_.info_log, "Hole punch file %" PRIu64 " done",
-                   file->file_number());
   }
   return Status::OK();
 }
@@ -191,9 +188,6 @@ Status BlobGCJob::HolePunchSingleBlobFile(std::shared_ptr<BlobFileMeta> file) {
   if (!iter->status().ok()) {
     return iter->status();
   }
-  TITAN_LOG_INFO(db_options_.info_log,
-                 "Hole punch file %" PRIu64 " iterator created",
-                 file->file_number());
   for (; iter->Valid(); iter->Next()) {
     if (IsShutingDown()) {
       return Status::ShutdownInProgress();
@@ -502,8 +496,6 @@ Status BlobGCJob::Finish() {
     }
     TEST_SYNC_POINT("BlobGCJob::Finish::AfterRewriteValidKeyToLSM");
   } else {
-    TITAN_LOG_INFO(db_options_.info_log,
-                   "Titan GC job finished, before batch updates");
     // It is possible that while processing the GC job, the input blob files'
     // liveness or number of hole punchable blocks have changed. So, we need to
     // deal with the meta data update with mutex locked.

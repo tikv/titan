@@ -42,8 +42,6 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(BlobStorage* blob_storage,
       if (!CheckBlobFile(blob_file.get())) {
         // Skip this file id this file is being GCed
         // or this file had
-        TITAN_LOG_INFO(db_options_.info_log, "Blob file %" PRIu64 " no need gc",
-                       blob_file->file_number());
         continue;
       }
       if (!stop_picking) {
@@ -64,8 +62,6 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(BlobStorage* blob_storage,
       for (auto& blob_file : blob_files) {
         all_candidates += std::to_string(blob_file->file_number()) + " ";
       }
-      TITAN_LOG_INFO(db_options_.info_log, "Punch hole gc candidates files: %s",
-                     all_candidates.c_str());
       return std::unique_ptr<BlobGC>(
           new BlobGC(std::move(blob_files), std::move(cf_options_),
                      maybe_continue_next_time, cf_id_, /*punch_hole=*/true));

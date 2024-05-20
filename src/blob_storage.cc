@@ -93,12 +93,6 @@ void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
 void BlobStorage::HolePunchBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   MutexLock l(&mutex_);
   // Update the file in files_ and blob_ranges_.
-  TITAN_LOG_INFO(db_options_.info_log,
-                 "Hole punch blob file %" PRIu64
-                 " successfully. Post hole punch stats: %" PRIu64
-                 " live blocks, %" PRIu64 " hole punchable blocks.",
-                 file->file_number(), file->live_blocks(),
-                 file->hole_punchable_blocks());
   auto f_it = files_.find(file->file_number());
   if (f_it != files_.end()) {
     assert(f_it->second.get() == file.get());

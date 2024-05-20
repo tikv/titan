@@ -216,7 +216,7 @@ void TitanDBImpl::MaybeScheduleGC() {
 
   while (!gc_queue_.empty() &&
          bg_gc_scheduled_ < db_options_.max_background_gc) {
-    TITAN_LOG_INFO(db_options_.info_log, "Titan schedule GC");
+    TITAN_LOG_DEBUG(db_options_.info_log, "Titan schedule GC");
     bg_gc_scheduled_++;
     thread_pool_->SubmitJob(std::bind(&TitanDBImpl::BGWorkGC, this));
   }
@@ -227,11 +227,11 @@ void TitanDBImpl::BGWorkGC(void* db) {
 }
 
 void TitanDBImpl::BackgroundCallGC() {
-  TITAN_LOG_INFO(db_options_.info_log,
-                 "Titan background GC thread start, is punch hole gc running "
-                 "%d, has punch hole gc scheduled %s",
-                 punch_hole_gc_running_,
-                 scheduled_punch_hole_gc_ != nullptr ? "true" : "false");
+  TITAN_LOG_DEBUG(db_options_.info_log,
+                  "Titan background GC thread start, is punch hole gc running "
+                  "%d, has punch hole gc scheduled %s",
+                  punch_hole_gc_running_,
+                  scheduled_punch_hole_gc_ != nullptr ? "true" : "false");
   TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeGCRunning");
   {
     MutexLock l(&mutex_);
@@ -256,8 +256,8 @@ void TitanDBImpl::BackgroundCallGC() {
                  GetOldestSnapshotSequence()) {
         TEST_SYNC_POINT(
             "TitanDBImpl::BackgroundCallGC:BeforeRunScheduledPunchHoleGC");
-        TITAN_LOG_INFO(db_options_.info_log,
-                       "Titan start scheduled punch hole GC");
+        TITAN_LOG_DEBUG(db_options_.info_log,
+                        "Titan start scheduled punch hole GC");
         std::unique_ptr<BlobGC> blob_gc = std::move(scheduled_punch_hole_gc_);
         auto cfh = db_impl_->GetColumnFamilyHandleUnlocked(blob_gc->cf_id());
         blob_gc->SetColumnFamily(cfh.get());
@@ -276,9 +276,9 @@ void TitanDBImpl::BackgroundCallGC() {
           mutex_.Lock();
         }
       } else {
-        TITAN_LOG_INFO(db_options_.info_log,
-                       "Titan skip scheduled punch hole GC due to not holding "
-                       "the oldest snapshot");
+        TITAN_LOG_DEBUG(db_options_.info_log,
+                        "Titan skip scheduled punch hole GC due to not holding "
+                        "the oldest snapshot");
       }
     }
     if (!run_punch_hole_gc && !gc_queue_.empty()) {
@@ -306,23 +306,20 @@ void TitanDBImpl::BackgroundCallGC() {
           std::shared_ptr<BlobGCPicker> blob_gc_picker =
               std::make_shared<BasicBlobGCPicker>(db_options_, cf_options,
                                                   cf_id, stats_.get());
-          TITAN_LOG_INFO(db_options_.info_log,
-                         "Titan picking candidate files for GC");
           auto blob_gc = blob_gc_picker->PickBlobGC(
               blob_storage.get(),
               !punch_hole_gc_running_ && scheduled_punch_hole_gc_ == nullptr);
           if (blob_gc != nullptr) {
             assert(!blob_gc->use_punch_hole() || !punch_hole_gc_running_);
             if (blob_gc->use_punch_hole()) {
-              TITAN_LOG_INFO(db_options_.info_log,
-                             "Titan picked punch hole GC");
               auto snapshot = db_->GetSnapshot();
               blob_gc->SetSnapshot(snapshot);
             }
             if (blob_gc->use_punch_hole() &&
                 blob_gc->snapshot()->GetSequenceNumber() >
                     GetOldestSnapshotSequence()) {
-              TITAN_LOG_INFO(db_options_.info_log, "Titan queue punch hole GC");
+              TITAN_LOG_DEBUG(db_options_.info_log,
+                              "Titan queue punch hole GC");
               assert(scheduled_punch_hole_gc_ == nullptr);
               scheduled_punch_hole_gc_ = std::move(blob_gc);
             } else {
@@ -331,7 +328,7 @@ void TitanDBImpl::BackgroundCallGC() {
               }
               auto cfh = db_impl_->GetColumnFamilyHandleUnlocked(cf_id);
               blob_gc->SetColumnFamily(cfh.get());
-              TITAN_LOG_INFO(db_options_.info_log, "Titan start GC directly");
+              TITAN_LOG_DEBUG(db_options_.info_log, "Titan start GC directly");
               LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
                                    db_options_.info_log.get());
               BackgroundGC(&log_buffer, blob_gc.get());
@@ -346,7 +343,7 @@ void TitanDBImpl::BackgroundCallGC() {
               }
             }
           } else {
-            TITAN_LOG_INFO(db_options_.info_log, "Titan GC nothing to do");
+            TITAN_LOG_DEBUG(db_options_.info_log, "Titan GC nothing to do");
           }
         }
       }

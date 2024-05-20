@@ -310,8 +310,7 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
     cf_opts.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
     cf_opts.table_properties_collector_factories.emplace_back(
-        std::make_shared<BlobAlignedBlocksCollectorFactory>(
-            db_options_.info_log));
+        std::make_shared<BlobAlignedBlocksCollectorFactory>());
     titan_table_factories.push_back(std::make_shared<TitanTableFactory>(
         db_options_, desc.options, blob_manager_, &mutex_, blob_file_set_.get(),
         stats_.get()));
@@ -489,8 +488,7 @@ Status TitanDBImpl::CreateColumnFamilies(
     options.table_properties_collector_factories.emplace_back(
         std::make_shared<BlobFileSizeCollectorFactory>());
     options.table_properties_collector_factories.emplace_back(
-        std::make_shared<BlobAlignedBlocksCollectorFactory>(
-            db_options_.info_log));
+        std::make_shared<BlobAlignedBlocksCollectorFactory>());
     if (options.compaction_filter != nullptr ||
         options.compaction_filter_factory != nullptr) {
       std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
