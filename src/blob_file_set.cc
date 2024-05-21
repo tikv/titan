@@ -3,6 +3,7 @@
 #include <cinttypes>
 
 #include "edit_collector.h"
+#include "rocksdb/cache.h"
 #include "titan_logging.h"
 
 namespace rocksdb {
@@ -23,7 +24,10 @@ BlobFileSet::BlobFileSet(const TitanDBOptions& options, TitanStats* stats,
   if (file_cache_size < 0) {
     file_cache_size = kMaxFileCacheSize;
   }
-  file_cache_ = NewLRUCache(file_cache_size);
+  LRUCacheOptions cache_options;
+  cache_options.capacity = file_cache_size;
+  cache_options.metadata_charge_policy = kDontChargeCacheMetadata;
+  file_cache_ = NewLRUCache(cache_options);
 }
 
 Status BlobFileSet::Open(
