@@ -1,5 +1,7 @@
 #include "blob_format.h"
 
+#include <cinttypes>
+
 #include "test_util/sync_point.h"
 #include "util/crc32c.h"
 

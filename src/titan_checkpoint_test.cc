@@ -386,8 +386,8 @@ TEST_F(CheckpointTest, CheckpointCF) {
   CreateAndReopenWithCF({"one", "two", "three", "four", "five", "six"},
                         options);
   rocksdb::SyncPoint::GetInstance()->LoadDependency(
-      {{"CheckpointTest::CheckpointCF:2", "DBImpl::GetLiveFiles:2"},
-       {"DBImpl::GetLiveFiles:1", "CheckpointTest::CheckpointCF:1"}});
+      {{"CheckpointTest::CheckpointCF:2", "DBImpl::FlushAllColumnFamilies:2"},
+       {"DBImpl::FlushAllColumnFamilies:1", "CheckpointTest::CheckpointCF:1"}});
 
   rocksdb::SyncPoint::GetInstance()->EnableProcessing();
 

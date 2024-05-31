@@ -103,7 +103,7 @@ Status TitanDBImpl::AsyncInitializeGC(
                      cf_handle->GetName().c_str());
       TablePropertiesCollection collection;
       // this operation may be slow
-      s = cf.second->GetPropertiesOfAllTables(&collection);
+      s = cf.second->GetPropertiesOfAllTables(ReadOptions(), &collection);
       unref(cf.second);
       if (!s.ok()) {
         MutexLock l(&mutex_);

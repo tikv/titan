@@ -71,9 +71,12 @@ Status Uncompress(const UncompressionInfo& info, const Slice& input,
 void UnrefCacheHandle(void* cache, void* handle);
 
 template <class T>
-void DeleteCacheValue(const Slice&, void* value) {
+void DeleteCacheValue(void* value, MemoryAllocator*) {
   delete reinterpret_cast<T*>(value);
 }
+
+const Cache::CacheItemHelper kBlobValueCacheItemHelper(
+    CacheEntryRole::kBlobValue, &DeleteCacheValue<OwnedSlice>);
 
 Status SyncTitanManifest(TitanStats* stats,
                          const ImmutableDBOptions* db_options,

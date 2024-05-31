@@ -64,7 +64,7 @@ class BlobEncoder {
   BlobEncoder(CompressionType compression, CompressionOptions compression_opt,
               const CompressionDict* compression_dict)
       : compression_opt_(compression_opt),
-        compression_ctx_(compression),
+        compression_ctx_(compression, compression_opt_),
         compression_dict_(compression_dict),
         compression_info_(new CompressionInfo(
             compression_opt_, compression_ctx_, *compression_dict_, compression,
@@ -347,7 +347,7 @@ struct BlobFileHeader {
     if (ver != BlobFileHeader::kVersion1 && ver != BlobFileHeader::kVersion2 &&
         ver != BlobFileHeader::kVersion3) {
       return Status::InvalidArgument("unrecognized blob file version " +
-                                     ToString(ver));
+                                     std::to_string(ver));
     }
     return Status::OK();
   }

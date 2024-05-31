@@ -22,8 +22,7 @@ class BlobFileCache {
   // bytes. The provided buffer is used to store the record data, so
   // the buffer must be valid when the record is used.
   Status Get(const ReadOptions& options, uint64_t file_number,
-             const BlobHandle& handle, BlobRecord* record, OwnedSlice* buffer,
-             bool for_compaction = false);
+             const BlobHandle& handle, BlobRecord* record, OwnedSlice* buffer);
 
   // Creates a prefetcher for the specified file number.
   Status NewPrefetcher(uint64_t file_number,
