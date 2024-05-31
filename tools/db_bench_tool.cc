@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <iostream>
 
 #include <atomic>
 #include <cinttypes>
@@ -36,9 +37,8 @@
 #include "db/db_impl/db_impl.h"
 #include "db/malloc_stats.h"
 #include "db/version_set.h"
-#include "hdfs/env_hdfs.h"
 #include "monitoring/histogram.h"
-#include "monitoring/statistics.h"
+#include "monitoring/statistics_impl.h"
 #include "options/cf_options.h"
 #include "port/port.h"
 #include "port/stack_trace.h"
@@ -500,9 +500,6 @@ DEFINE_int32(file_opening_threads, rocksdb::Options().max_file_opening_threads,
              "If open_files is set to -1, this option set the number of "
              "threads that will be used to open files during DB::Open()");
 
-DEFINE_bool(new_table_reader_for_compaction_inputs, true,
-            "If true, uses a separate file handle for compaction inputs");
-
 DEFINE_int32(compaction_readahead_size, 0, "Compaction readahead size");
 
 DEFINE_int32(random_access_max_buffer_size, 1024 * 1024,
@@ -940,10 +937,6 @@ static bool ValidateRateLimit(const char* flagname, double value) {
   }
   return true;
 }
-DEFINE_double(soft_rate_limit, 0.0, "DEPRECATED");
-
-DEFINE_double(hard_rate_limit, 0.0, "DEPRECATED");
-
 DEFINE_uint64(soft_pending_compaction_bytes_limit, 64ull * 1024 * 1024 * 1024,
               "Slowdown writes if pending compaction bytes exceed this number");
 
@@ -1252,12 +1245,6 @@ DEFINE_bool(report_file_operations, false,
             "if report number of file "
             "operations");
 DEFINE_int32(readahead_size, 0, "Iterator readahead size");
-
-static const bool FLAGS_soft_rate_limit_dummy __attribute__((__unused__)) =
-    RegisterFlagValidator(&FLAGS_soft_rate_limit, &ValidateRateLimit);
-
-static const bool FLAGS_hard_rate_limit_dummy __attribute__((__unused__)) =
-    RegisterFlagValidator(&FLAGS_hard_rate_limit, &ValidateRateLimit);
 
 static const bool FLAGS_prefix_size_dummy __attribute__((__unused__)) =
     RegisterFlagValidator(&FLAGS_prefix_size, &ValidatePrefixSize);
@@ -1619,9 +1606,9 @@ class ReporterAgent {
       auto secs_elapsed =
           (env_->NowMicros() - time_started + kMicrosInSecond / 2) /
           kMicrosInSecond;
-      std::string report = ToString(secs_elapsed) + "," +
-                           ToString(total_ops_done_snapshot - last_report_) +
-                           "\n";
+      std::string report =
+          std::to_string(secs_elapsed) + "," +
+          std::to_string(total_ops_done_snapshot - last_report_) + "\n";
       auto s = report_file_->Append(report);
       if (s.ok()) {
         s = report_file_->Flush();
@@ -1867,7 +1854,7 @@ class Stats {
                     if (db->GetProperty(
                             db_with_cfh->cfh[i],
                             "rocksdb.aggregated-table-properties-at-level" +
-                                ToString(level),
+                                std::to_string(level),
                             &stats)) {
                       if (stats.find("# entries=0") == std::string::npos) {
                         fprintf(stderr, "Level[%d]: %s\n", level,
@@ -1885,7 +1872,7 @@ class Stats {
                 for (int level = 0; level < FLAGS_num_levels; ++level) {
                   if (db->GetProperty(
                           "rocksdb.aggregated-table-properties-at-level" +
-                              ToString(level),
+                              std::to_string(level),
                           &stats)) {
                     if (stats.find("# entries=0") == std::string::npos) {
                       fprintf(stderr, "Level[%d]: %s\n", level, stats.c_str());
@@ -2314,7 +2301,7 @@ class Benchmark {
       std::string input_str(len, 'y');
       std::string compressed;
       CompressionOptions opts;
-      CompressionContext context(FLAGS_compression_type_e);
+      CompressionContext context(FLAGS_compression_type_e, opts);
       CompressionInfo info(opts, context, CompressionDict::GetEmptyDict(),
                            FLAGS_compression_type_e,
                            FLAGS_sample_for_compression);
@@ -2372,9 +2359,9 @@ class Benchmark {
         Slice val = TrimSpace(Slice(sep + 1));
         if (key == "model name") {
           ++num_cpus;
-          cpu_type = val.ToString();
+          cpu_type = val.std::to_string();
         } else if (key == "cache size") {
-          cache_size = val.ToString();
+          cache_size = val.std::to_string();
         }
       }
       fclose(cpuinfo);
@@ -2628,7 +2615,7 @@ class Benchmark {
       }
 #endif
     }
-    return base_name + ToString(id);
+    return base_name + std::to_string(id);
   }
 
   void VerifyDBFromDB(std::string& truth_db_name) {
@@ -3207,7 +3194,7 @@ class Benchmark {
   void Crc32c(ThreadState* thread) {
     // Checksum about 500MB of data total
     const int size = FLAGS_block_size;  // use --block_size option for db_bench
-    std::string labels = "(" + ToString(FLAGS_block_size) + " per op)";
+    std::string labels = "(" + std::to_string(FLAGS_block_size) + " per op)";
     const char* label = labels.c_str();
 
     std::string data(size, 'x');
@@ -3268,7 +3255,7 @@ class Benchmark {
     bool ok = true;
     std::string compressed;
     CompressionOptions opts;
-    CompressionContext context(FLAGS_compression_type_e);
+    CompressionContext context(FLAGS_compression_type_e, opts);
     CompressionInfo info(opts, context, CompressionDict::GetEmptyDict(),
                          FLAGS_compression_type_e,
                          FLAGS_sample_for_compression);
@@ -3297,8 +3284,9 @@ class Benchmark {
     Slice input = gen.Generate(FLAGS_block_size);
     std::string compressed;
 
-    CompressionContext compression_ctx(FLAGS_compression_type_e);
     CompressionOptions compression_opts;
+    CompressionContext compression_ctx(FLAGS_compression_type_e,
+                                       compression_opts);
     CompressionInfo compression_info(
         compression_opts, compression_ctx, CompressionDict::GetEmptyDict(),
         FLAGS_compression_type_e, FLAGS_sample_for_compression);
@@ -3337,8 +3325,8 @@ class Benchmark {
     DBOptions db_opts;
     std::vector<ColumnFamilyDescriptor> cf_descs;
     if (FLAGS_options_file != "") {
-      auto s = LoadOptionsFromFile(FLAGS_options_file, Env::Default(), &db_opts,
-                                   &cf_descs);
+      auto s = LoadOptionsFromFile(ConfigOptions(), FLAGS_options_file,
+                                   &db_opts, &cf_descs);
       if (s.ok()) {
         *opts = Options(db_opts, cf_descs[0].options);
         return true;
@@ -3411,8 +3399,6 @@ class Benchmark {
     }
     options.bloom_locality = FLAGS_bloom_locality;
     options.max_file_opening_threads = FLAGS_file_opening_threads;
-    options.new_table_reader_for_compaction_inputs =
-        FLAGS_new_table_reader_for_compaction_inputs;
     options.compaction_readahead_size = FLAGS_compaction_readahead_size;
     options.random_access_max_buffer_size = FLAGS_random_access_max_buffer_size;
     options.writable_file_max_buffer_size = FLAGS_writable_file_max_buffer_size;
@@ -3537,7 +3523,6 @@ class Benchmark {
             true;
       }
       block_based_options.block_cache = cache_;
-      block_based_options.block_cache_compressed = compressed_cache_;
       block_based_options.block_size = FLAGS_block_size;
       block_based_options.block_restart_interval = FLAGS_block_restart_interval;
       block_based_options.index_block_restart_interval =
@@ -3632,8 +3617,6 @@ class Benchmark {
         options.compression_per_level[i] = FLAGS_compression_type_e;
       }
     }
-    options.soft_rate_limit = FLAGS_soft_rate_limit;
-    options.hard_rate_limit = FLAGS_hard_rate_limit;
     options.soft_pending_compaction_bytes_limit =
         FLAGS_soft_pending_compaction_bytes_limit;
     options.hard_pending_compaction_bytes_limit =
@@ -3649,8 +3632,6 @@ class Benchmark {
     options.unordered_write = FLAGS_unordered_write;
     options.write_thread_max_yield_usec = FLAGS_write_thread_max_yield_usec;
     options.write_thread_slow_yield_usec = FLAGS_write_thread_slow_yield_usec;
-    options.rate_limit_delay_max_milliseconds =
-        FLAGS_rate_limit_delay_max_milliseconds;
     options.table_cache_numshardbits = FLAGS_table_cache_numshardbits;
     options.max_compaction_bytes = FLAGS_max_compaction_bytes;
     options.disable_auto_compactions = FLAGS_disable_auto_compactions;
@@ -3772,13 +3753,6 @@ class Benchmark {
     }
 
     if (FLAGS_rate_limiter_bytes_per_sec > 0) {
-      if (FLAGS_rate_limit_bg_reads &&
-          !FLAGS_new_table_reader_for_compaction_inputs) {
-        fprintf(stderr,
-                "rate limit compaction reads must have "
-                "new_table_reader_for_compaction_inputs set\n");
-        exit(1);
-      }
       options.rate_limiter.reset(NewGenericRateLimiter(
           FLAGS_rate_limiter_bytes_per_sec, 100 * 1000 /* refill_period_us */,
           10 /* fairness */,
@@ -6290,7 +6264,8 @@ class Benchmark {
     }
 
     std::unique_ptr<StatsHistoryIterator> shi;
-    Status s = db->GetStatsHistory(0, port::kMaxUint64, &shi);
+    Status s =
+        db->GetStatsHistory(0, std::numeric_limits<uint64_t>::max(), &shi);
     if (!s.ok()) {
       fprintf(stdout, "%s\n", s.ToString().c_str());
       return;
@@ -6428,7 +6403,8 @@ int db_bench_tool(int argc, char** argv) {
     fprintf(stderr, "Cannot provide both --hdfs and --env_uri.\n");
     exit(1);
   } else if (!FLAGS_env_uri.empty()) {
-    Status s = Env::LoadEnv(FLAGS_env_uri, &FLAGS_env);
+    Status s =
+        Env::CreateFromString(ConfigOptions(), FLAGS_env_uri, &FLAGS_env);
     if (FLAGS_env == nullptr) {
       fprintf(stderr, "No Env registered for URI: %s\n", FLAGS_env_uri.c_str());
       exit(1);
@@ -6440,10 +6416,6 @@ int db_bench_tool(int argc, char** argv) {
             "`-use_existing_db` must be true for `-use_existing_keys` to be "
             "settable\n");
     exit(1);
-  }
-
-  if (!FLAGS_hdfs.empty()) {
-    FLAGS_env = new rocksdb::HdfsEnv(FLAGS_hdfs);
   }
 
   if (!strcasecmp(FLAGS_compaction_fadvice.c_str(), "NONE"))

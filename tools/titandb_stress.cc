@@ -43,7 +43,6 @@ int main() {
 
 #include "db/db_impl/db_impl.h"
 #include "db/version_set.h"
-#include "hdfs/env_hdfs.h"
 #include "logging/logging.h"
 #include "monitoring/histogram.h"
 #include "options/options_helper.h"
@@ -54,7 +53,7 @@ int main() {
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
 #include "rocksdb/statistics.h"
-#include "rocksdb/utilities/backupable_db.h"
+#include "rocksdb/utilities/backup_engine.h"
 #include "rocksdb/utilities/checkpoint.h"
 #include "rocksdb/utilities/db_ttl.h"
 #include "rocksdb/utilities/debug.h"
@@ -1478,20 +1477,20 @@ class StressTest {
 
     std::unordered_map<std::string, std::vector<std::string> > options_tbl = {
         {"write_buffer_size",
-         {ToString(options_.write_buffer_size),
-          ToString(options_.write_buffer_size * 2),
-          ToString(options_.write_buffer_size * 4)}},
+         {std::to_string(options_.write_buffer_size),
+          std::to_string(options_.write_buffer_size * 2),
+          std::to_string(options_.write_buffer_size * 4)}},
         {"max_write_buffer_number",
-         {ToString(options_.max_write_buffer_number),
-          ToString(options_.max_write_buffer_number * 2),
-          ToString(options_.max_write_buffer_number * 4)}},
+         {std::to_string(options_.max_write_buffer_number),
+          std::to_string(options_.max_write_buffer_number * 2),
+          std::to_string(options_.max_write_buffer_number * 4)}},
         {"arena_block_size",
          {
-             ToString(options_.arena_block_size),
-             ToString(options_.write_buffer_size / 4),
-             ToString(options_.write_buffer_size / 8),
+             std::to_string(options_.arena_block_size),
+             std::to_string(options_.write_buffer_size / 4),
+             std::to_string(options_.write_buffer_size / 8),
          }},
-        {"memtable_huge_page_size", {"0", ToString(2 * 1024 * 1024)}},
+        {"memtable_huge_page_size", {"0", std::to_string(2 * 1024 * 1024)}},
         {"max_successive_merges", {"0", "2", "4"}},
         {"inplace_update_num_locks", {"100", "200", "300"}},
         // TODO(ljin): enable test for this option
@@ -1500,49 +1499,49 @@ class StressTest {
         {"hard_rate_limit", {"0", "1.1", "2.0"}},
         {"level0_file_num_compaction_trigger",
          {
-             ToString(options_.level0_file_num_compaction_trigger),
-             ToString(options_.level0_file_num_compaction_trigger + 2),
-             ToString(options_.level0_file_num_compaction_trigger + 4),
+             std::to_string(options_.level0_file_num_compaction_trigger),
+             std::to_string(options_.level0_file_num_compaction_trigger + 2),
+             std::to_string(options_.level0_file_num_compaction_trigger + 4),
          }},
         {"level0_slowdown_writes_trigger",
          {
-             ToString(options_.level0_slowdown_writes_trigger),
-             ToString(options_.level0_slowdown_writes_trigger + 2),
-             ToString(options_.level0_slowdown_writes_trigger + 4),
+             std::to_string(options_.level0_slowdown_writes_trigger),
+             std::to_string(options_.level0_slowdown_writes_trigger + 2),
+             std::to_string(options_.level0_slowdown_writes_trigger + 4),
          }},
         {"level0_stop_writes_trigger",
          {
-             ToString(options_.level0_stop_writes_trigger),
-             ToString(options_.level0_stop_writes_trigger + 2),
-             ToString(options_.level0_stop_writes_trigger + 4),
+             std::to_string(options_.level0_stop_writes_trigger),
+             std::to_string(options_.level0_stop_writes_trigger + 2),
+             std::to_string(options_.level0_stop_writes_trigger + 4),
          }},
         {"max_compaction_bytes",
          {
-             ToString(options_.target_file_size_base * 5),
-             ToString(options_.target_file_size_base * 15),
-             ToString(options_.target_file_size_base * 100),
+             std::to_string(options_.target_file_size_base * 5),
+             std::to_string(options_.target_file_size_base * 15),
+             std::to_string(options_.target_file_size_base * 100),
          }},
         {"target_file_size_base",
          {
-             ToString(options_.target_file_size_base),
-             ToString(options_.target_file_size_base * 2),
-             ToString(options_.target_file_size_base * 4),
+             std::to_string(options_.target_file_size_base),
+             std::to_string(options_.target_file_size_base * 2),
+             std::to_string(options_.target_file_size_base * 4),
          }},
         {"target_file_size_multiplier",
          {
-             ToString(options_.target_file_size_multiplier),
+             std::to_string(options_.target_file_size_multiplier),
              "1",
              "2",
          }},
         {"max_bytes_for_level_base",
          {
-             ToString(options_.max_bytes_for_level_base / 2),
-             ToString(options_.max_bytes_for_level_base),
-             ToString(options_.max_bytes_for_level_base * 2),
+             std::to_string(options_.max_bytes_for_level_base / 2),
+             std::to_string(options_.max_bytes_for_level_base),
+             std::to_string(options_.max_bytes_for_level_base * 2),
          }},
         {"max_bytes_for_level_multiplier",
          {
-             ToString(options_.max_bytes_for_level_multiplier),
+             std::to_string(options_.max_bytes_for_level_multiplier),
              "1",
              "2",
          }},
@@ -1863,7 +1862,8 @@ class StressTest {
     if (snap_state.status != s) {
       return Status::Corruption(
           "The snapshot gave inconsistent results for key " +
-          ToString(Hash(snap_state.key.c_str(), snap_state.key.size(), 0)) +
+          std::to_string(
+              Hash(snap_state.key.c_str(), snap_state.key.size(), 0)) +
           " in cf " + cf->GetName() + ": (" + snap_state.status.ToString() +
           ") vs. (" + s.ToString() + ")");
     }
@@ -2162,8 +2162,9 @@ class StressTest {
       if (FLAGS_compact_range_one_in > 0 &&
           thread->rand.Uniform(FLAGS_compact_range_one_in) == 0) {
         int64_t end_key_num;
-        if (port::kMaxInt64 - rand_key < FLAGS_compact_range_width) {
-          end_key_num = port::kMaxInt64;
+        if (std::numeric_limits<int64_t>::max() - rand_key <
+            FLAGS_compact_range_width) {
+          end_key_num = std::numeric_limits<int64_t>::max();
         } else {
           end_key_num = FLAGS_compact_range_width + rand_key;
         }
@@ -2473,18 +2474,21 @@ class StressTest {
     // dropped while the locks for `rand_keys` are held. So we should not have
     // to worry about accessing those column families throughout this function.
     assert(rand_column_families.size() == rand_keys.size());
-    std::string backup_dir = FLAGS_db + "/.backup" + ToString(thread->tid);
-    std::string restore_dir = FLAGS_db + "/.restore" + ToString(thread->tid);
-    BackupableDBOptions backup_opts(backup_dir);
+    std::string backup_dir =
+        FLAGS_db + "/.backup" + std::to_string(thread->tid);
+    std::string restore_dir =
+        FLAGS_db + "/.restore" + std::to_string(thread->tid);
+    BackupEngineOptions backup_engine_opts(backup_dir);
     BackupEngine* backup_engine = nullptr;
-    Status s = BackupEngine::Open(FLAGS_env, backup_opts, &backup_engine);
+    Status s =
+        BackupEngine::Open(FLAGS_env, backup_engine_opts, &backup_engine);
     if (s.ok()) {
       s = backup_engine->CreateNewBackup(db_);
     }
     if (s.ok()) {
       delete backup_engine;
       backup_engine = nullptr;
-      s = BackupEngine::Open(FLAGS_env, backup_opts, &backup_engine);
+      s = BackupEngine::Open(FLAGS_env, backup_engine_opts, &backup_engine);
     }
     if (s.ok()) {
       s = backup_engine->RestoreDBFromLatestBackup(restore_dir /* db_dir */,
@@ -2561,7 +2565,7 @@ class StressTest {
     // to worry about accessing those column families throughout this function.
     assert(rand_column_families.size() == rand_keys.size());
     std::string checkpoint_dir =
-        FLAGS_db + "/.checkpoint" + ToString(thread->tid);
+        FLAGS_db + "/.checkpoint" + std::to_string(thread->tid);
     DestroyDB(checkpoint_dir, Options());
     Checkpoint* checkpoint = nullptr;
     Status s = Checkpoint::Create(db_, &checkpoint);
@@ -2745,7 +2749,6 @@ class StressTest {
       block_based_options.block_cache = cache_;
       block_based_options.cache_index_and_filter_blocks =
           FLAGS_cache_index_and_filter_blocks;
-      block_based_options.block_cache_compressed = compressed_cache_;
       block_based_options.checksum = FLAGS_checksum_type_e;
       block_based_options.block_size = FLAGS_block_size;
       block_based_options.format_version =
@@ -2824,7 +2827,7 @@ class StressTest {
 #else
       DBOptions db_options;
       std::vector<ColumnFamilyDescriptor> cf_descriptors;
-      Status s = LoadOptionsFromFile(FLAGS_options_file, Env::Default(),
+      Status s = LoadOptionsFromFile(ConfigOptions(), FLAGS_options_file,
                                      &db_options, &cf_descriptors);
       if (!s.ok()) {
         fprintf(stderr, "Unable to load options file %s --- %s\n",
@@ -2841,9 +2844,6 @@ class StressTest {
           10 /* fairness */,
           FLAGS_rate_limit_bg_reads ? RateLimiter::Mode::kReadsOnly
                                     : RateLimiter::Mode::kWritesOnly));
-      if (FLAGS_rate_limit_bg_reads) {
-        options_.new_table_reader_for_compaction_inputs = true;
-      }
     }
 
     if (FLAGS_prefix_size == 0 && FLAGS_rep_factory == kHashSkipList) {
@@ -2929,7 +2929,7 @@ class StressTest {
         cf_descriptors.emplace_back(name, ColumnFamilyOptions(options_));
       }
       while (cf_descriptors.size() < (size_t)FLAGS_column_families) {
-        std::string name = ToString(new_column_family_name_.load());
+        std::string name = std::to_string(new_column_family_name_.load());
         new_column_family_name_++;
         cf_descriptors.emplace_back(name, ColumnFamilyOptions(options_));
         column_family_names_.push_back(name);
@@ -3215,7 +3215,8 @@ class NonBatchedOpsStressTest : public StressTest {
       if (thread->rand.OneIn(FLAGS_clear_column_family_one_in)) {
         // drop column family and then create it again (can't drop default)
         int cf = thread->rand.Next() % (FLAGS_column_families - 1) + 1;
-        std::string new_name = ToString(new_column_family_name_.fetch_add(1));
+        std::string new_name =
+            std::to_string(new_column_family_name_.fetch_add(1));
         {
           MutexLock l(thread->shared->GetMutex());
           fprintf(
@@ -3592,7 +3593,7 @@ class NonBatchedOpsStressTest : public StressTest {
       ThreadState* thread, const std::vector<int>& rand_column_families,
       const std::vector<int64_t>& rand_keys, std::unique_ptr<MutexLock>& lock) {
     const std::string sst_filename =
-        FLAGS_db + "/." + ToString(thread->tid) + ".sst";
+        FLAGS_db + "/." + std::to_string(thread->tid) + ".sst";
     Status s;
     if (FLAGS_env->FileExists(sst_filename).ok()) {
       // Maybe we terminated abnormally before, so cleanup to give this file
@@ -4283,7 +4284,7 @@ class CfConsistencyStressTest : public StressTest {
       ThreadState* thread, const std::vector<int>& /* rand_column_families */,
       const std::vector<int64_t>& /* rand_keys */) {
     std::string checkpoint_dir =
-        FLAGS_db + "/.checkpoint" + ToString(thread->tid);
+        FLAGS_db + "/.checkpoint" + std::to_string(thread->tid);
     DestroyDB(checkpoint_dir, Options());
     Checkpoint* checkpoint = nullptr;
     Status s = Checkpoint::Create(db_, &checkpoint);
@@ -4507,9 +4508,6 @@ int main(int argc, char** argv) {
   FLAGS_compression_type_e =
       StringToCompressionType(FLAGS_compression_type.c_str());
   FLAGS_checksum_type_e = StringToChecksumType(FLAGS_checksum_type.c_str());
-  if (!FLAGS_hdfs.empty()) {
-    FLAGS_env = new rocksdb::HdfsEnv(FLAGS_hdfs);
-  }
   FLAGS_rep_factory = StringToRepFactory(FLAGS_memtablerep.c_str());
 
   // The number of background threads should be at least as much the

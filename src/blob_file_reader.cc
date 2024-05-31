@@ -142,8 +142,8 @@ Status BlobFileReader::Get(const ReadOptions& _options,
   }
   if (handle.size != static_cast<uint64_t>(blob.size())) {
     return Status::Corruption(
-        "ReadRecord actual size: " + ToString(blob.size()) +
-        " not equal to blob size " + ToString(handle.size));
+        "ReadRecord actual size: " + std::to_string(blob.size()) +
+        " not equal to blob size " + std::to_string(handle.size));
   }
 
   BlobDecoder decoder(uncompression_dict_ == nullptr
@@ -165,7 +165,9 @@ Status BlobFilePrefetcher::Get(const ReadOptions& options,
     last_offset_ = handle.offset + handle.size;
     if (handle.offset + handle.size > readahead_limit_) {
       readahead_size_ = std::max(handle.size, readahead_size_);
-      reader_->file_->Prefetch(handle.offset, readahead_size_);
+      IOOptions io_options;
+      io_options.rate_limiter_priority = Env::IOPriority::IO_HIGH;
+      reader_->file_->Prefetch(io_options, handle.offset, readahead_size_);
       readahead_limit_ = handle.offset + readahead_size_;
       readahead_size_ = std::min(kMaxReadaheadSize, readahead_size_ * 2);
     }

@@ -3,6 +3,7 @@
 #include <map>
 #include <unordered_map>
 
+#include "rocksdb/advanced_cache.h"
 #include "rocksdb/options.h"
 
 namespace rocksdb {

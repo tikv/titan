@@ -1,6 +1,7 @@
 #include "blob_file_cache.h"
 
 #include "file/filename.h"
+#include "rocksdb/advanced_cache.h"
 
 #include "util.h"
 
@@ -8,6 +9,9 @@ namespace rocksdb {
 namespace titandb {
 
 namespace {
+
+const Cache::CacheItemHelper kBlobFileReaderCacheItemHelper(
+    CacheEntryRole::kBlockBasedTableReader, &DeleteCacheValue<BlobFileReader>);
 
 Slice EncodeFileNumber(const uint64_t* number) {
   return Slice(reinterpret_cast<const char*>(number), sizeof(*number));
@@ -87,8 +91,8 @@ Status BlobFileCache::GetBlobFileReaderHandle(uint64_t file_number,
                            stats_);
   if (!s.ok()) return s;
 
-  cache_->Insert(cache_key, reader.release(), 1,
-                 &DeleteCacheValue<BlobFileReader>, handle);
+  cache_->Insert(cache_key, reader.release(), &kBlobFileReaderCacheItemHelper,
+                 1, handle);
   return s;
 }
 

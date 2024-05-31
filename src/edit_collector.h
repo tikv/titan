@@ -46,10 +46,10 @@ class EditCollector {
 
     if (edit.has_next_file_number_) {
       if (edit.next_file_number_ < next_file_number_) {
-        status_ =
-            Status::Corruption("Edit has a smaller next file number " +
-                               ToString(edit.next_file_number_) +
-                               " than current " + ToString(next_file_number_));
+        status_ = Status::Corruption("Edit has a smaller next file number " +
+                                     std::to_string(edit.next_file_number_) +
+                                     " than current " +
+                                     std::to_string(next_file_number_));
         return status_;
       }
       next_file_number_ = edit.next_file_number_;
@@ -138,7 +138,7 @@ class EditCollector {
                         "blob file %" PRIu64 " has been deleted twice\n",
                         number);
         if (paranoid_check_) {
-          return Status::Corruption("Blob file " + ToString(number) +
+          return Status::Corruption("Blob file " + std::to_string(number) +
                                     " has been added twice");
         } else {
           return Status::OK();
@@ -154,7 +154,7 @@ class EditCollector {
                         "blob file %" PRIu64 " has been deleted twice\n",
                         number);
         if (paranoid_check_) {
-          return Status::Corruption("Blob file " + ToString(number) +
+          return Status::Corruption("Blob file " + std::to_string(number) +
                                     " has been deleted twice");
         } else {
           return Status::OK();
@@ -173,14 +173,14 @@ class EditCollector {
             TITAN_LOG_ERROR(storage->db_options().info_log,
                             "blob file %" PRIu64 " has been deleted before\n",
                             number);
-            return Status::Corruption("Blob file " + ToString(number) +
+            return Status::Corruption("Blob file " + std::to_string(number) +
                                       " has been deleted before");
           } else {
             TITAN_LOG_ERROR(storage->db_options().info_log,
                             "blob file %" PRIu64 " has been added before\n",
                             number);
 
-            return Status::Corruption("Blob file " + ToString(number) +
+            return Status::Corruption("Blob file " + std::to_string(number) +
                                       " has been added before");
           }
         }
@@ -196,14 +196,14 @@ class EditCollector {
           TITAN_LOG_ERROR(storage->db_options().info_log,
                           "blob file %" PRIu64 " doesn't exist before\n",
                           number);
-          return Status::Corruption("Blob file " + ToString(number) +
+          return Status::Corruption("Blob file " + std::to_string(number) +
                                     " doesn't exist before");
         } else if (blob->is_obsolete()) {
           TITAN_LOG_ERROR(storage->db_options().info_log,
                           "blob file %" PRIu64 " has been deleted already\n",
                           number);
           if (paranoid_check_) {
-            return Status::Corruption("Blob file " + ToString(number) +
+            return Status::Corruption("Blob file " + std::to_string(number) +
                                       " has been deleted already");
           }
         }

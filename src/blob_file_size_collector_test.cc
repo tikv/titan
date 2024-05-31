@@ -78,7 +78,7 @@ class BlobFileSizeCollectorTest : public testing::Test {
   void NewTableReader(std::unique_ptr<RandomAccessFileReader>&& file,
                       std::unique_ptr<TableReader>* result) {
     TableReaderOptions options(ioptions_, prefix_extractor_, env_options_,
-                               cf_ioptions_.internal_comparator);
+                               cf_ioptions_.internal_comparator, 0);
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file->file_name(), &file_size));
     ASSERT_TRUE(file_size > 0);

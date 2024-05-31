@@ -4,7 +4,6 @@
 #include <map>
 #include <string>
 
-#include "monitoring/statistics.h"
 #include "monitoring/statistics_impl.h"
 
 #include "blob_file_set.h"

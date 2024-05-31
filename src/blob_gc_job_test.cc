@@ -33,16 +33,22 @@ class BlobGCJobTest : public testing::Test {
   TitanOptions options_;
   port::Mutex* mutex_;
 
-  BlobGCJobTest() : dbname_(test::TmpDir()) {
+  void ResetOptions() {
     options_.dirname = dbname_ + "/titandb";
     options_.create_if_missing = true;
     options_.disable_background_gc = true;
     options_.min_blob_size = 0;
     options_.disable_auto_compactions = true;
+    options_.level_compaction_dynamic_level_bytes = false;
     options_.env->CreateDirIfMissing(dbname_);
     options_.env->CreateDirIfMissing(options_.dirname);
   }
-  ~BlobGCJobTest() { Close(); }
+
+  BlobGCJobTest() : dbname_(test::TmpDir()) { ResetOptions(); }
+  ~BlobGCJobTest() {
+    Close();
+    ResetOptions();
+  }
 
   void DisableMergeSmall() { options_.merge_small_file_threshold = 0; }
 

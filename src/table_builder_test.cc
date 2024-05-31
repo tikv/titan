@@ -240,7 +240,7 @@ class TableBuilderTest : public testing::Test {
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file->file_name(), &file_size));
     TableReaderOptions options(ioptions_, prefix_extractor_, env_options_,
-                               cf_ioptions_.internal_comparator);
+                               cf_ioptions_.internal_comparator, 0);
     options.cur_file_num = file_number;
     ASSERT_OK(table_factory_->NewTableReader(options, std::move(file),
                                              file_size, result));
@@ -261,7 +261,7 @@ class TableBuilderTest : public testing::Test {
         ioptions_, cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
         kNoCompression, compression_opts, 0 /*column_family_id*/,
         kDefaultColumnFamilyName, target_level, false,
-        TableFileCreationReason::kMisc, 0, 0, 0, "", "", 0, file_number);
+        TableFileCreationReason::kMisc, 0, 0, "", "", 0, file_number);
     result->reset(table_factory_->NewTableBuilder(options, file));
   }
 

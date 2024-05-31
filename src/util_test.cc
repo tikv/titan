@@ -12,7 +12,7 @@ TEST(UtilTest, Compression) {
   for (auto compression :
        {kSnappyCompression, kZlibCompression, kLZ4Compression, kZSTD}) {
     CompressionOptions compression_opt;
-    CompressionContext compression_ctx(compression);
+    CompressionContext compression_ctx(compression, compression_opt);
     CompressionInfo compression_info(
         compression_opt, compression_ctx, CompressionDict::GetEmptyDict(),
         compression, 0 /* sample_for_compression */);

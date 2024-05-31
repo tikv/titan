@@ -785,9 +785,9 @@ Iterator* TitanDBImpl::NewIteratorImpl(
   }
 
   std::unique_ptr<ArenaWrappedDBIter> iter(db_impl_->NewIteratorImpl(
-      options, cfd, options.snapshot->GetSequenceNumber(),
-      nullptr /*read_callback*/, true /*expose_blob_index*/,
-      true /*allow_refresh*/));
+      options, cfd, cfd->GetReferencedSuperVersion(db_impl_),
+      options.snapshot->GetSequenceNumber(), nullptr /*read_callback*/,
+      true /*expose_blob_index*/, true /*allow_refresh*/));
   return new TitanDBIterator(options, storage.get(), snapshot, std::move(iter),
                              env_->GetSystemClock().get(), stats_.get(),
                              db_options_.info_log.get());
@@ -936,8 +936,8 @@ Status TitanDBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
                           file_meta->fd.GetPathId());
         if (props.count(fname) == 0) {
           std::shared_ptr<const TableProperties> table_properties;
-          Status s =
-              version->GetTableProperties(&table_properties, file_meta, &fname);
+          Status s = version->GetTableProperties(
+              ReadOptions(), &table_properties, file_meta, &fname);
           if (s.ok() && table_properties) {
             props.insert({fname, table_properties});
           } else {

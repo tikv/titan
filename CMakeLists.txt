@@ -5,11 +5,11 @@ enable_language(C)
 find_package(Git)
 
 if (NOT ROCKSDB_GIT_REPO)
-  set(ROCKSDB_GIT_REPO "https://github.com/tikv/rocksdb.git")
+  set(ROCKSDB_GIT_REPO "https://github.com/v01dstar/rocksdb.git")
 endif()
 
 if (NOT ROCKSDB_GIT_BRANCH)
-  set(ROCKSDB_GIT_BRANCH "6.29.tikv") # should at least or newer than commit dcf2f8d56092285381be2acbf8f04b8aeeb7ad79
+  set(ROCKSDB_GIT_BRANCH "8.10-tikv") # should at least or newer than commit dcf2f8d56092285381be2acbf8f04b8aeeb7ad79
 endif()
 
 if (NOT DEFINED ROCKSDB_DIR)
@@ -92,7 +92,7 @@ if (WITH_TITAN_TESTS OR WITH_TITAN_TOOLS)
   add_subdirectory(${ROCKSDB_DIR} rocksdb EXCLUDE_FROM_ALL)
   # Check if -latomic is required or not
   if (NOT MSVC)
-    set(CMAKE_REQUIRED_FLAGS "--std=c++11")
+    set(CMAKE_REQUIRED_FLAGS "--std=c++17")
     CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
 std::atomic<uint64_t> x(0);
@@ -111,7 +111,7 @@ endif()
 
 # Check if -latomic is required or not
 if (NOT MSVC)
-  set(CMAKE_REQUIRED_FLAGS "--std=c++11")
+  set(CMAKE_REQUIRED_FLAGS "--std=c++17")
   CHECK_CXX_SOURCE_COMPILES("
 #include <atomic>
 std::atomic<uint64_t> x(0);

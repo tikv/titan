@@ -3,7 +3,7 @@
 
 #include "db/db_impl/db_impl.h"
 #include "file/filename.h"
-#include "monitoring/statistics.h"
+#include "monitoring/statistics_impl.h"
 #include "options/cf_options.h"
 #include "port/port.h"
 #include "rocksdb/utilities/debug.h"
@@ -39,6 +39,7 @@ class TitanDBTest : public testing::Test {
     options_.min_blob_size = 32;
     options_.min_gc_batch_size = 1;
     options_.disable_background_gc = true;
+    options_.disable_auto_compactions = true;
     options_.blob_file_compression = CompressionType::kLZ4Compression;
     options_.statistics = CreateDBStatistics();
     DeleteDir(env_, options_.dirname);
@@ -2122,6 +2123,7 @@ TEST_F(TitanDBTest, OnlineChangeMinBlobSize) {
 }
 
 TEST_F(TitanDBTest, OnlineChangeCompressionType) {
+#ifdef LZ4
   const uint64_t kNumKeys = 100;
   std::map<std::string, std::string> data;
   Open();
@@ -2183,6 +2185,7 @@ TEST_F(TitanDBTest, OnlineChangeCompressionType) {
       ASSERT_GT(first_blob_file_size, pair.second.lock()->file_size());
     }
   }
+#endif
 }
 
 TEST_F(TitanDBTest, OnlineChangeBlobFileDiscardableRatio) {

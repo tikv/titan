@@ -56,9 +56,9 @@ Status BlobStorage::Get(const ReadOptions& options, const BlobIndex& index,
   if (blob_cache_ && options.fill_cache) {
     Cache::Handle* cache_handle = nullptr;
     auto cache_value = new OwnedSlice(std::move(blob));
-    blob_cache_->Insert(
-        cache_key, cache_value, cache_value->size() + sizeof(*cache_value),
-        &DeleteCacheValue<OwnedSlice>, &cache_handle, Cache::Priority::BOTTOM);
+    blob_cache_->Insert(cache_key, cache_value, &kBlobValueCacheItemHelper,
+                        cache_value->size() + sizeof(*cache_value),
+                        &cache_handle, Cache::Priority::BOTTOM);
     value->PinSlice(record->value, UnrefCacheHandle, blob_cache_.get(),
                     cache_handle);
   } else {

@@ -8,7 +8,7 @@
 
 #include "logging/log_buffer.h"
 #include "monitoring/histogram.h"
-#include "monitoring/statistics.h"
+#include "monitoring/statistics_impl.h"
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
 #include "util/string_util.h"
