@@ -139,11 +139,12 @@ void BlobFileMeta::EncodeTo(std::string* dst) const {
   PutVarint64(dst, file_size_);
   PutVarint64(dst, file_entries_);
   PutVarint32(dst, file_level_);
+  PutVarint64(dst, block_size_);
   PutLengthPrefixedSlice(dst, smallest_key_);
   PutLengthPrefixedSlice(dst, largest_key_);
 }
 
-Status BlobFileMeta::DecodeFromLegacy(Slice* src) {
+Status BlobFileMeta::DecodeFromV1(Slice* src) {
   if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_)) {
     return Status::Corruption("BlobFileMeta decode legacy failed");
   }
@@ -152,9 +153,29 @@ Status BlobFileMeta::DecodeFromLegacy(Slice* src) {
   return Status::OK();
 }
 
-Status BlobFileMeta::DecodeFrom(Slice* src) {
+Status BlobFileMeta::DecodeFromV2(Slice* src) {
   if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) ||
       !GetVarint64(src, &file_entries_) || !GetVarint32(src, &file_level_)) {
+    return Status::Corruption("BlobFileMeta decode failed");
+  }
+  Slice str;
+  if (GetLengthPrefixedSlice(src, &str)) {
+    smallest_key_.assign(str.data(), str.size());
+  } else {
+    return Status::Corruption("BlobSmallestKey Decode failed");
+  }
+  if (GetLengthPrefixedSlice(src, &str)) {
+    largest_key_.assign(str.data(), str.size());
+  } else {
+    return Status::Corruption("BlobLargestKey decode failed");
+  }
+  return Status::OK();
+}
+
+Status BlobFileMeta::DecodeFromV3(Slice* src) {
+  if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) ||
+      !GetVarint64(src, &file_entries_) || !GetVarint32(src, &file_level_) ||
+      !GetVarint64(src, &block_size_)) {
     return Status::Corruption("BlobFileMeta decode failed");
   }
   Slice str;
@@ -279,8 +300,11 @@ void BlobFileHeader::EncodeTo(std::string* dst) const {
   PutFixed32(dst, kHeaderMagicNumber);
   PutFixed32(dst, version);
 
-  if (version == BlobFileHeader::kVersion2) {
+  if (version >= BlobFileHeader::kVersion2) {
     PutFixed32(dst, flags);
+  }
+  if (version >= BlobFileHeader::kVersion3) {
+    PutFixed64(dst, block_size);
   }
 }
 
@@ -294,10 +318,15 @@ Status BlobFileHeader::DecodeFrom(Slice* src) {
       (version != kVersion1 && version != kVersion2)) {
     return Status::Corruption("Blob file header version missing or invalid.");
   }
-  if (version == BlobFileHeader::kVersion2) {
+  if (version >= BlobFileHeader::kVersion2) {
     // Check that no other flags are set
     if (!GetFixed32(src, &flags) || flags & ~kHasUncompressionDictionary) {
       return Status::Corruption("Blob file header flags missing or invalid.");
+    }
+  }
+  if (version >= BlobFileHeader::kVersion3) {
+    if (!GetFixed64(src, &block_size)) {
+      return Status::Corruption("Blob file header block size missing.");
     }
   }
   return Status::OK();

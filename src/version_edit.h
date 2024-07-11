@@ -18,6 +18,7 @@ enum Tag {
   kDeletedBlobFile = 12,  // Deprecated, leave here for backward compatibility
   kAddedBlobFileV2 = 13,  // Comparing to kAddedBlobFile, it newly includes
                           // smallest_key and largest_key of blob file
+  kAddedBlobFileV3 = 14,
 };
 
 class VersionEdit {

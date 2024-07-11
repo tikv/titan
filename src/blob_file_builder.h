@@ -123,6 +123,7 @@ class BlobFileBuilder {
   void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder);
   void FlushSampleRecords(OutContexts* out_ctx);
   void WriteEncoderData(BlobHandle* handle);
+  void FillBlockWithPad();
 
   TitanCFOptions cf_options_;
   WritableFileWriter* file_;
@@ -135,6 +136,8 @@ class BlobFileBuilder {
   std::vector<std::string> sample_records_;
   uint64_t sample_str_len_ = 0;
   std::unique_ptr<CompressionDict> compression_dict_;
+
+  uint64_t block_size_ = 0;
 
   OutContexts cached_contexts_;
 

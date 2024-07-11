@@ -33,19 +33,35 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
     return;
 #endif
   }
+  block_size_ = cf_options.enable_punch_hole_gc ? cf_options.block_size : 0;
   WriteHeader();
+}
+
+void BlobFileBuilder::FillBlockWithPad() {
+  if (block_size_ == 0) {
+    return;
+  }
+  size_t pad_size = block_size_ - (file_->GetFileSize() % block_size_);
+  if (pad_size == block_size_) {
+    return;
+  }
+  std::string pad(pad_size, 0);
+  file_->Append(pad);
 }
 
 void BlobFileBuilder::WriteHeader() {
   BlobFileHeader header;
   header.version = blob_file_version_;
   if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
-    assert(blob_file_version_ == BlobFileHeader::kVersion2);
+    assert(blob_file_version_ >= BlobFileHeader::kVersion2);
     header.flags |= BlobFileHeader::kHasUncompressionDictionary;
   }
   std::string buffer;
   header.EncodeTo(&buffer);
   status_ = file_->Append(buffer);
+  if (block_size_ > 0) {
+    FillBlockWithPad();
+  }
 }
 
 void BlobFileBuilder::Add(const BlobRecord& record,
@@ -148,6 +164,9 @@ void BlobFileBuilder::WriteEncoderData(BlobHandle* handle) {
   if (ok()) {
     status_ = file_->Append(encoder_.GetRecord());
     num_entries_++;
+    if (ok()) {
+      FillBlockWithPad();
+    }
   }
 }
 
@@ -190,7 +209,7 @@ Status BlobFileBuilder::Finish(OutContexts* out_ctx) {
   BlobFileFooter footer;
   // if has compression dictionary, encode it into meta blocks
   if (cf_options_.blob_file_compression_options.max_dict_bytes > 0) {
-    assert(blob_file_version_ == BlobFileHeader::kVersion2);
+    assert(blob_file_version_ >= BlobFileHeader::kVersion2);
     BlockHandle meta_index_handle;
     MetaIndexBuilder meta_index_builder;
     WriteCompressionDictBlock(&meta_index_builder);
