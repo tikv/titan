@@ -70,7 +70,7 @@ class TitanCompactionFilter final : public CompactionFilter {
     }
 
     BlobIndex blob_index;
-    Slice original_value(value.data());
+    Slice original_value(value);
     s = blob_index.DecodeFrom(&original_value);
     if (!s.ok()) {
       TITAN_LOG_ERROR(db_->db_options_.info_log,
