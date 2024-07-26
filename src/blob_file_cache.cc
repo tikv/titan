@@ -27,13 +27,13 @@ BlobFileCache::BlobFileCache(const TitanDBOptions& db_options,
 
 Status BlobFileCache::Get(const ReadOptions& options, uint64_t file_number,
                           const BlobHandle& handle, BlobRecord* record,
-                          OwnedSlice* buffer) {
+                          OwnedSlice* buffer, bool for_compaction) {
   Cache::Handle* cache_handle = nullptr;
   Status s = GetBlobFileReaderHandle(file_number, &cache_handle);
   if (!s.ok()) return s;
 
   auto reader = reinterpret_cast<BlobFileReader*>(cache_->Value(cache_handle));
-  s = reader->Get(options, handle, record, buffer);
+  s = reader->Get(options, handle, record, buffer, for_compaction);
   cache_->Release(cache_handle);
   return s;
 }

@@ -35,7 +35,8 @@ Status BlobStorage::TryGetBlobCache(const std::string& cache_key,
 }
 
 Status BlobStorage::Get(const ReadOptions& options, const BlobIndex& index,
-                        BlobRecord* record, PinnableSlice* value) {
+                        BlobRecord* record, PinnableSlice* value,
+                        bool for_compaction) {
   std::string cache_key;
 
   if (blob_cache_) {
@@ -48,7 +49,7 @@ Status BlobStorage::Get(const ReadOptions& options, const BlobIndex& index,
 
   OwnedSlice blob;
   Status s = file_cache_->Get(options, index.file_number, index.blob_handle,
-                              record, &blob);
+                              record, &blob, for_compaction);
   if (!s.ok()) {
     return s;
   }

@@ -88,7 +88,7 @@ class TitanCompactionFilter final : public CompactionFilter {
     BlobRecord record;
     PinnableSlice buffer;
     ReadOptions read_options;
-    s = blob_storage_->Get(read_options, blob_index, &record, &buffer);
+    s = blob_storage_->Get(read_options, blob_index, &record, &buffer, true);
 
     if (s.IsCorruption()) {
       // Could be cause by blob file beinged GC-ed, or real corruption.

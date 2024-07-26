@@ -130,13 +130,13 @@ BlobFileReader::BlobFileReader(const TitanCFOptions& options,
 
 Status BlobFileReader::Get(const ReadOptions& _options,
                            const BlobHandle& handle, BlobRecord* record,
-                           OwnedSlice* buffer) {
+                           OwnedSlice* buffer, bool for_compaction) {
   TEST_SYNC_POINT("BlobFileReader::Get");
   Slice blob;
   CacheAllocationPtr ubuf =
       AllocateBlock(handle.size, options_.memory_allocator());
   Status s = file_->Read(IOOptions(), handle.offset, handle.size, &blob,
-                         ubuf.get(), nullptr /*aligned_buf*/);
+                         ubuf.get(), nullptr /*aligned_buf*/, for_compaction);
   if (!s.ok()) {
     return s;
   }
