@@ -35,7 +35,7 @@ namespace titandb {
 //    | Fixed32 | Fixed32 |    char     |
 //    +---------+---------+-------------+
 //
-const uint64_t kBlobMaxHeaderSize = 12;
+const uint64_t kBlobMaxHeaderSize = 20;
 const uint64_t kRecordHeaderSize = 9;
 const uint64_t kBlobFooterSize = BlockHandle::kMaxEncodedLength + 8 + 4;
 

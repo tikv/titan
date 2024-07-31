@@ -7,8 +7,6 @@
 namespace rocksdb {
 namespace titandb {
 
-static const std::string kPad = std::string(4096, 0);
-
 BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
                                  const TitanCFOptions& cf_options,
                                  WritableFileWriter* file,
@@ -43,15 +41,17 @@ void BlobFileBuilder::FillBlockWithPad() {
   if (block_size_ == 0 || file_->GetFileSize() % block_size_ == 0) {
     return;
   }
+  static const std::string pad = std::string(4096, 0);
+
   size_t pad_size = block_size_ - (file_->GetFileSize() % block_size_);
-  while (pad_size > kPad.size()) {
-    status_ = file_->Append(kPad);
+  while (pad_size > pad.size()) {
+    status_ = file_->Append(pad);
     if (!ok()) {
       return;
     }
-    pad_size -= kPad.size();
+    pad_size -= pad.size();
   }
-  status_ = file_->Append(Slice(kPad.data(), pad_size));
+  status_ = file_->Append(Slice(pad.data(), pad_size));
 }
 
 void BlobFileBuilder::WriteHeader() {
@@ -61,6 +61,7 @@ void BlobFileBuilder::WriteHeader() {
     assert(blob_file_version_ >= BlobFileHeader::kVersion2);
     header.flags |= BlobFileHeader::kHasUncompressionDictionary;
   }
+  header.block_size = block_size_;
   std::string buffer;
   header.EncodeTo(&buffer);
   status_ = file_->Append(buffer);

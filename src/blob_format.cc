@@ -315,7 +315,7 @@ Status BlobFileHeader::DecodeFrom(Slice* src) {
         "Blob file header magic number missing or mismatched.");
   }
   if (!GetFixed32(src, &version) ||
-      (version != kVersion1 && version != kVersion2)) {
+      (version != kVersion1 && version != kVersion2 && version != kVersion3)) {
     return Status::Corruption("Blob file header version missing or invalid.");
   }
   if (version >= BlobFileHeader::kVersion2) {

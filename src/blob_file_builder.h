@@ -69,7 +69,7 @@ class BlobFileBuilder {
   // caller to sync and close the file after calling Finish().
   BlobFileBuilder(const TitanDBOptions& db_options,
                   const TitanCFOptions& cf_options, WritableFileWriter* file,
-                  uint32_t blob_file_version = BlobFileHeader::kVersion2);
+                  uint32_t blob_file_version = BlobFileHeader::kVersion3);
 
   // Tries to add the record to the file
   // Notice:
