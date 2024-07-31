@@ -21,11 +21,11 @@ BlobFileIterator::~BlobFileIterator() {}
 
 bool BlobFileIterator::Init() {
   Slice slice;
-  char header_buf[BlobFileHeader::kMaxEncodedLength];
+  char header_buf[BlobFileHeader::kV3EncodedLength];
   // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
   // is only used for GC, we always set for_compaction to true.
   status_ =
-      file_->Read(IOOptions(), 0, BlobFileHeader::kMaxEncodedLength, &slice,
+      file_->Read(IOOptions(), 0, BlobFileHeader::kV3EncodedLength, &slice,
                   header_buf, nullptr /*aligned_buf*/, true /*for_compaction*/);
   if (!status_.ok()) {
     return false;
@@ -74,13 +74,13 @@ bool BlobFileIterator::Init() {
 
   block_size_ = blob_file_header.block_size;
 
-  assert(end_of_blob_record_ > BlobFileHeader::kMinEncodedLength);
+  assert(end_of_blob_record_ > BlobFileHeader::kV1EncodedLength);
   init_ = true;
   return true;
 }
 
 uint64_t BlobFileIterator::AdjustOffsetToNextBlockHead() {
-  if (block_size_ == 0) return;
+  if (block_size_ == 0) return 0;
   uint64_t block_offset = iterate_offset_ % block_size_;
   if (block_offset != 0) {
     uint64_t shift = block_size_ - block_offset;

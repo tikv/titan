@@ -172,7 +172,7 @@ Status BlobFileMeta::DecodeFromV2(Slice* src) {
   return Status::OK();
 }
 
-Status BlobFileMeta::DecodeFromV3(Slice* src) {
+Status BlobFileMeta::DecodeFrom(Slice* src) {
   if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) ||
       !GetVarint64(src, &file_entries_) || !GetVarint32(src, &file_level_) ||
       !GetVarint64(src, &block_size_)) {

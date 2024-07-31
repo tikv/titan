@@ -7,6 +7,8 @@
 namespace rocksdb {
 namespace titandb {
 
+static const std::string kPad = std::string(4096, 0);
+
 BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
                                  const TitanCFOptions& cf_options,
                                  WritableFileWriter* file,
@@ -38,15 +40,18 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
 }
 
 void BlobFileBuilder::FillBlockWithPad() {
-  if (block_size_ == 0) {
+  if (block_size_ == 0 || file_->GetFileSize() % block_size_ == 0) {
     return;
   }
   size_t pad_size = block_size_ - (file_->GetFileSize() % block_size_);
-  if (pad_size == block_size_) {
-    return;
+  while (pad_size > kPad.size()) {
+    status_ = file_->Append(kPad);
+    if (!ok()) {
+      return;
+    }
+    pad_size -= kPad.size();
   }
-  std::string pad(pad_size, 0);
-  file_->Append(pad);
+  status_ = file_->Append(Slice(kPad.data(), pad_size));
 }
 
 void BlobFileBuilder::WriteHeader() {

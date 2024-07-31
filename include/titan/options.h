@@ -164,7 +164,7 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // The size of each block in blob file. 0 means not using block-based mode,
   // blob entries are stored continuously. While non-zero value means using
   // block-based mode, blob entries are stored in blocks, and each block stores
-  // exactkt one blob entry, if the last block is not full, it will be filled
+  // exactly one blob entry, if the last block is not full, it will be filled
   // with zeros. This is particularly useful when punch hole GC is enabled, as
   // it can punch hole on block granularity and blob files are still
   // self-explanatory after holes are created (imagine there is no alignment

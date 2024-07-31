@@ -227,8 +227,8 @@ class BlobFileMeta {
 
   BlobFileMeta(uint64_t _file_number, uint64_t _file_size,
                uint64_t _file_entries, uint32_t _file_level,
-               uint64_t _block_size, const std::string& _smallest_key,
-               const std::string& _largest_key)
+               const std::string& _smallest_key,
+               const std::string& _largest_key, uint64_t _block_size = 0)
       : file_number_(_file_number),
         file_size_(_file_size),
         file_entries_(_file_entries),
@@ -242,7 +242,7 @@ class BlobFileMeta {
   void EncodeTo(std::string* dst) const;
   Status DecodeFromV1(Slice* src);
   Status DecodeFromV2(Slice* src);
-  Status DecodeFromV3(Slice* src);
+  Status DecodeFrom(Slice* src);
 
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }
@@ -353,11 +353,16 @@ struct BlobFileHeader {
   }
 
   uint64_t size() const {
-    return version == BlobFileHeader::kVersion3
-               ? BlobFileHeader::kV3EncodedLength
-               : version == BlobFileHeader::kVersion2
-               ? ? BlobFileHeader::kV2EncodedLength
-                 : BlobFileHeader::kV1EncodedLength;
+    switch (version) {
+      case BlobFileHeader::kVersion3:
+        return BlobFileHeader::kV3EncodedLength;
+      case BlobFileHeader::kVersion2:
+        return BlobFileHeader::kV2EncodedLength;
+      case BlobFileHeader::kVersion1:
+        return BlobFileHeader::kV1EncodedLength;
+      default:
+        return 0;
+    }
   }
 
   void EncodeTo(std::string* dst) const;

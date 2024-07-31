@@ -51,9 +51,13 @@ class BlobFileIteratorTest : public testing::Test {
     }
   }
 
-  void NewBuilder() {
+  void NewBuilder(bool with_blocks = false) {
     TitanDBOptions db_options(titan_options_);
     TitanCFOptions cf_options(titan_options_);
+    if (with_blocks) {
+      cf_options.enable_punch_hole_gc = true;
+      cf_options.block_size = 4096;
+    }
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     {
@@ -257,6 +261,30 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
               contexts[i - 1]->new_blob_index.blob_handle);
   }
   ASSERT_EQ(i, kMaxKeyNum);
+}
+
+TEST_F(BlobFileIteratorTest, IteratorWithBlocks) {
+  NewBuilder(true);
+  const int n = 1000;
+  BlobFileBuilder::OutContexts contexts;
+  for (int i = 0; i < n; i++) {
+    AddKeyValue(GenKey(i), GenValue(i), contexts);
+  }
+
+  FinishBuilder(contexts);
+
+  NewBlobFileIterator();
+
+  blob_file_iterator_->SeekToFirst();
+  ASSERT_EQ(contexts.size(), n);
+  for (int i = 0; i < n; blob_file_iterator_->Next(), i++) {
+    ASSERT_OK(blob_file_iterator_->status());
+    ASSERT_EQ(blob_file_iterator_->Valid(), true);
+    ASSERT_EQ(GenKey(i), blob_file_iterator_->key());
+    ASSERT_EQ(GenValue(i), blob_file_iterator_->value());
+    BlobIndex blob_index = blob_file_iterator_->GetBlobIndex();
+    ASSERT_EQ(contexts[i]->new_blob_index.blob_handle, blob_index.blob_handle);
+  }
 }
 
 }  // namespace titandb
