@@ -13,7 +13,7 @@ void VersionEdit::EncodeTo(std::string* dst) const {
   PutVarint32Varint32(dst, kColumnFamilyID, column_family_id_);
 
   for (auto& file : added_files_) {
-    PutVarint32(dst, kAddedBlobFileV2);
+    PutVarint32(dst, kAddedBlobFileV3);
     file->EncodeTo(dst);
   }
   for (auto& file : deleted_files_) {
@@ -51,7 +51,7 @@ Status VersionEdit::DecodeFrom(Slice* src) {
       // for compatibility issue
       case kAddedBlobFile:
         blob_file = std::make_shared<BlobFileMeta>();
-        s = blob_file->DecodeFromLegacy(src);
+        s = blob_file->DecodeFromV1(src);
         if (s.ok()) {
           AddBlobFile(blob_file);
         } else {
@@ -59,6 +59,15 @@ Status VersionEdit::DecodeFrom(Slice* src) {
         }
         break;
       case kAddedBlobFileV2:
+        blob_file = std::make_shared<BlobFileMeta>();
+        s = blob_file->DecodeFromV2(src);
+        if (s.ok()) {
+          AddBlobFile(blob_file);
+        } else {
+          error = s.ToString().c_str();
+        }
+        break;
+      case kAddedBlobFileV3:
         blob_file = std::make_shared<BlobFileMeta>();
         s = blob_file->DecodeFrom(src);
         if (s.ok()) {
