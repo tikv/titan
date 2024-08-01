@@ -21,11 +21,11 @@ BlobFileIterator::~BlobFileIterator() {}
 
 bool BlobFileIterator::Init() {
   Slice slice;
-  char header_buf[BlobFileHeader::kMaxEncodedLength];
+  char header_buf[BlobFileHeader::kV3EncodedLength];
   // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
   // is only used for GC, we always set for_compaction to true.
   status_ =
-      file_->Read(IOOptions(), 0, BlobFileHeader::kMaxEncodedLength, &slice,
+      file_->Read(IOOptions(), 0, BlobFileHeader::kV3EncodedLength, &slice,
                   header_buf, nullptr /*aligned_buf*/, true /*for_compaction*/);
   if (!status_.ok()) {
     return false;
@@ -72,15 +72,31 @@ bool BlobFileIterator::Init() {
                             BlockBasedTable::kBlockTrailerSize);
   }
 
-  assert(end_of_blob_record_ > BlobFileHeader::kMinEncodedLength);
+  block_size_ = blob_file_header.block_size;
+
+  assert(end_of_blob_record_ > BlobFileHeader::kV1EncodedLength);
   init_ = true;
   return true;
+}
+
+uint64_t BlobFileIterator::AdjustOffsetToNextBlockHead() {
+  if (block_size_ == 0) return 0;
+  uint64_t block_offset = iterate_offset_ % block_size_;
+  if (block_offset != 0) {
+    uint64_t shift = block_size_ - block_offset;
+    iterate_offset_ += shift;
+    return shift;
+  }
+  return 0;
 }
 
 void BlobFileIterator::SeekToFirst() {
   if (!init_ && !Init()) return;
   status_ = Status::OK();
   iterate_offset_ = header_size_;
+  if (block_size_ != 0) {
+    AdjustOffsetToNextBlockHead();
+  }
   PrefetchAndGet();
 }
 
@@ -109,7 +125,7 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
   uint64_t total_length = 0;
   FixedSlice<kRecordHeaderSize> header_buffer;
   iterate_offset_ = header_size_;
-  for (; iterate_offset_ < offset; iterate_offset_ += total_length) {
+  while (iterate_offset_ < offset) {
     // With for_compaction=true, rate_limiter is enabled. Since
     // BlobFileIterator is only used for GC, we always set for_compaction to
     // true.
@@ -120,6 +136,10 @@ void BlobFileIterator::IterateForPrev(uint64_t offset) {
     status_ = decoder_.DecodeHeader(&header_buffer);
     if (!status_.ok()) return;
     total_length = kRecordHeaderSize + decoder_.GetRecordSize();
+    iterate_offset_ += total_length;
+    if (block_size_ != 0) {
+      total_length += AdjustOffsetToNextBlockHead();
+    }
   }
 
   if (iterate_offset_ > offset) iterate_offset_ -= total_length;
@@ -155,6 +175,7 @@ void BlobFileIterator::GetBlobRecord() {
   cur_record_offset_ = iterate_offset_;
   cur_record_size_ = kRecordHeaderSize + record_size;
   iterate_offset_ += cur_record_size_;
+  AdjustOffsetToNextBlockHead();
   valid_ = true;
 }
 
