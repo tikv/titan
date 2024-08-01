@@ -28,7 +28,8 @@ class BlobFileReader {
   // of the record is stored in the value slice underlying, so the value slice
   // must be valid when the record is used.
   Status Get(const ReadOptions& options, const BlobHandle& handle,
-             BlobRecord* record, OwnedSlice* buffer);
+             BlobRecord* record, OwnedSlice* buffer,
+             bool for_compaction = false);
 
  private:
   friend class BlobFilePrefetcher;

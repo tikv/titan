@@ -61,7 +61,8 @@ class BlobStorage {
   // buffer is used to store the record data, so the buffer must be
   // valid when the record is used.
   Status Get(const ReadOptions& options, const BlobIndex& index,
-             BlobRecord* record, PinnableSlice* value);
+             BlobRecord* record, PinnableSlice* value,
+             bool for_compaction = false);
 
   // Gets the blob record pointed by the blob index by blob cache.
   // The provided buffer is used to store the record data, so the buffer must be

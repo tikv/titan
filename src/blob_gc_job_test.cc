@@ -538,6 +538,10 @@ TEST_F(BlobGCJobTest, DeleteFilesInRange) {
   ASSERT_OK(db_->Delete(WriteOptions(), GenKey(8)));
   ASSERT_OK(db_->Delete(WriteOptions(), GenKey(9)));
   CompactAll();
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level1", &value));
+  ASSERT_EQ(value, "0");
+  ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level2", &value));
+  ASSERT_EQ(value, "0");
 
   ASSERT_TRUE(db_->GetProperty("rocksdb.num-files-at-level0", &value));
   ASSERT_EQ(value, "0");
