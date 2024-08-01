@@ -69,7 +69,7 @@ class BlobFileBuilder {
   // caller to sync and close the file after calling Finish().
   BlobFileBuilder(const TitanDBOptions& db_options,
                   const TitanCFOptions& cf_options, WritableFileWriter* file,
-                  uint32_t blob_file_version = BlobFileHeader::kVersion2);
+                  uint32_t blob_file_version = BlobFileHeader::kVersion3);
 
   // Tries to add the record to the file
   // Notice:
@@ -123,6 +123,7 @@ class BlobFileBuilder {
   void WriteCompressionDictBlock(MetaIndexBuilder* meta_index_builder);
   void FlushSampleRecords(OutContexts* out_ctx);
   void WriteEncoderData(BlobHandle* handle);
+  void FillBlockWithPad();
 
   TitanCFOptions cf_options_;
   WritableFileWriter* file_;
@@ -135,6 +136,8 @@ class BlobFileBuilder {
   std::vector<std::string> sample_records_;
   uint64_t sample_str_len_ = 0;
   std::unique_ptr<CompressionDict> compression_dict_;
+
+  uint64_t block_size_ = 0;
 
   OutContexts cached_contexts_;
 
