@@ -108,6 +108,8 @@ class BlobFileBuilder {
   const std::string& GetSmallestKey() { return smallest_key_; }
   const std::string& GetLargestKey() { return largest_key_; }
 
+  uint64_t GetBlockSize() { return block_size_; }
+
   uint64_t live_data_size() const { return live_data_size_; }
 
  private:

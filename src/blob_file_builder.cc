@@ -164,7 +164,12 @@ void BlobFileBuilder::FlushSampleRecords(OutContexts* out_ctx) {
 void BlobFileBuilder::WriteEncoderData(BlobHandle* handle) {
   handle->offset = file_->GetFileSize();
   handle->size = encoder_.GetEncodedSize();
-  live_data_size_ += handle->size;
+  if (block_size_ > 0) {
+    live_data_size_ +=
+        (handle->size + block_size_ - 1) / block_size_ * block_size_;
+  } else {
+    live_data_size_ += handle->size;
+  }
 
   status_ = file_->Append(encoder_.GetHeader());
   if (ok()) {

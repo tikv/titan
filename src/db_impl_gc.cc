@@ -6,6 +6,7 @@
 #include "blob_gc_picker.h"
 #include "db/version_set.h"
 #include "db_impl.h"
+#include "punch_hole_gc_job.h"
 #include "titan_logging.h"
 #include "util.h"
 
@@ -194,19 +195,24 @@ void TitanDBImpl::BackgroundCallGC() {
     }
     bg_gc_running_++;
 
-    TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeBackgroundGC");
-    if (!gc_queue_.empty()) {
-      uint32_t column_family_id = PopFirstFromGCQueue();
-      LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
-                           db_options_.info_log.get());
-      BackgroundGC(&log_buffer, column_family_id);
-      {
-        mutex_.Unlock();
-        log_buffer.FlushBufferToLog();
-        LogFlush(db_options_.info_log.get());
-        mutex_.Lock();
+    // Try running pending (waiting for the snapshot to be the oldest) punch
+    // hole GC first.
+    if (!MaybeRunPendingPunchHoleGC()) {
+      TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:BeforeBackgroundGC");
+      if (!gc_queue_.empty()) {
+        uint32_t column_family_id = PopFirstFromGCQueue();
+        LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
+                             db_options_.info_log.get());
+        BackgroundGC(&log_buffer, column_family_id);
+        {
+          mutex_.Unlock();
+          log_buffer.FlushBufferToLog();
+          LogFlush(db_options_.info_log.get());
+          mutex_.Lock();
+        }
       }
     }
+    TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:AfterGCRunning");
 
     bg_gc_running_--;
     bg_gc_scheduled_--;
@@ -223,6 +229,49 @@ void TitanDBImpl::BackgroundCallGC() {
     // that case, all DB variables will be deallocated and referencing them
     // will cause trouble.
   }
+}
+
+bool TitanDBImpl::MaybeRunPendingPunchHoleGC() {
+  mutex_.AssertHeld();
+  if (pending_punch_hole_gc_ == nullptr || punch_hole_gc_running_) {
+    return false;
+  }
+  if (blob_file_set_->IsColumnFamilyObsolete(pending_punch_hole_gc_->cf_id())) {
+    TITAN_LOG_INFO(db_options_.info_log, "GC skip dropped colum family [%s].",
+                   cf_info_[pending_punch_hole_gc_->cf_id()].name.c_str());
+    pending_punch_hole_gc_ = nullptr;
+    return false;
+  }
+  if (pending_punch_hole_gc_->snapshot()->GetSequenceNumber() ==
+      GetOldestSnapshotSequence()) {
+    TITAN_LOG_DEBUG(db_options_.info_log,
+                    "Titan start scheduled punch hole GC");
+    punch_hole_gc_running_ = true;
+    mutex_.Unlock();
+    Status s = pending_punch_hole_gc_->Run();
+    mutex_.Lock();
+    if (s.ok()) {
+      TITAN_LOG_DEBUG(db_options_.info_log,
+                      "Titan finish scheduled punch hole GC");
+      pending_punch_hole_gc_->Finish();
+    } else {
+      SetBGError(s);
+      TITAN_LOG_ERROR(db_options_.info_log,
+                      "Titan scheduled punch hole GC error: %s",
+                      s.ToString().c_str());
+    }
+    punch_hole_gc_running_ = false;
+    bool need_schedule_gc = pending_punch_hole_gc_->blob_gc()->trigger_next();
+    pending_punch_hole_gc_ = nullptr;
+    TEST_SYNC_POINT(
+        "TitanDBImpl::MaybeRunPendingPunchHoleGC:"
+        "AfterRunPendingPunchHoleGC");
+    if (need_schedule_gc) {
+      MaybeScheduleGC();
+    }
+    return true;
+  }
+  return false;
 }
 
 Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
@@ -246,22 +295,34 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     std::shared_ptr<BlobGCPicker> blob_gc_picker =
         std::make_shared<BasicBlobGCPicker>(db_options_, cf_options,
                                             stats_.get());
-    blob_gc = blob_gc_picker->PickBlobGC(blob_storage.get());
-
-    if (blob_gc) {
-      cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
-      assert(column_family_id == cfh->GetID());
-      blob_gc->SetColumnFamily(cfh.get());
-    }
+    blob_gc = blob_gc_picker->PickBlobGC(
+        blob_storage.get(),
+        /*allow_punch_hole=*/cf_options.enable_punch_hole_gc &&
+            pending_punch_hole_gc_ == nullptr);
   }
 
   Status s;
   // TODO(@DorianZheng) Make sure enough room for GC
-  if (UNLIKELY(!blob_gc)) {
+  if (UNLIKELY(blob_gc == nullptr)) {
     RecordTick(statistics(stats_.get()), TITAN_GC_NO_NEED, 1);
     // Nothing to do
     TITAN_LOG_BUFFER(log_buffer, "Titan GC nothing to do");
+    TEST_SYNC_POINT("TitanDBImpl::BackgroundGC:NothingToDo");
+    return s;
+  }
+  if (blob_gc->punch_hole_gc()) {
+    auto snapshot = db_impl_->GetSnapshot();
+    pending_punch_hole_gc_ = std::unique_ptr<PunchHoleGCJob>(new PunchHoleGCJob(
+        column_family_id, std::move(blob_gc), db_impl_, db_options_, env_,
+        env_options_, blob_manager_.get(), snapshot, &shuting_down_));
+    if (!MaybeRunPendingPunchHoleGC()) {
+      MaybeScheduleGC();
+    }
   } else {
+    cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
+    assert(column_family_id == cfh->GetID());
+    blob_gc->SetColumnFamily(cfh.get());
+
     StopWatch gc_sw(env_->GetSystemClock().get(), statistics(stats_.get()),
                     TITAN_GC_MICROS);
     BlobGCJob blob_gc_job(blob_gc.get(), db_, &mutex_, db_options_, env_,

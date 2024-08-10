@@ -45,7 +45,8 @@ TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
       skip_value_in_compaction_filter(
           immutable_opts.skip_value_in_compaction_filter),
       block_size(immutable_opts.block_size),
-      enable_punch_hole_gc(immutable_opts.enable_punch_hole_gc) {}
+      enable_punch_hole_gc(immutable_opts.enable_punch_hole_gc),
+      punch_hole_threshold(mutable_opts.punch_hole_threshold) {}
 
 void TitanCFOptions::Dump(Logger* logger) const {
   TITAN_LOG_HEADER(logger,
@@ -90,6 +91,14 @@ void TitanCFOptions::Dump(Logger* logger) const {
   TITAN_LOG_HEADER(logger,
                    "TitanCFOptions.merge_small_file_threshold   : %" PRIu64,
                    merge_small_file_threshold);
+  TITAN_LOG_HEADER(logger,
+                   "TtitanCFOptions.block_size                  : %" PRIu64,
+                   block_size);
+  TITAN_LOG_HEADER(logger, "TitanCFOptions.enable_punch_hole_gc          : %d",
+                   enable_punch_hole_gc);
+  TITAN_LOG_HEADER(logger,
+                   "TitanCFOptions.punch_hole_threshold         : %" PRIu64,
+                   punch_hole_threshold);
   std::string blob_run_mode_str = "unknown";
   if (blob_run_mode_to_string.count(blob_run_mode) > 0) {
     blob_run_mode_str = blob_run_mode_to_string.at(blob_run_mode);
@@ -104,6 +113,7 @@ void TitanCFOptions::UpdateMutableOptions(
   min_blob_size = new_options.min_blob_size;
   blob_file_compression = new_options.blob_file_compression;
   blob_file_discardable_ratio = new_options.blob_file_discardable_ratio;
+  punch_hole_threshold = new_options.punch_hole_threshold;
 }
 
 std::map<TitanBlobRunMode, std::string>
