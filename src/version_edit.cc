@@ -20,6 +20,10 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     // obsolete sequence is a inpersistent field, so no need to encode it.
     PutVarint32Varint64(dst, kDeletedBlobFile, file.first);
   }
+  for (auto& file : updated_files_) {
+    PutVarint32(dst, kUpdatedBlobFile);
+    file->EncodeTo(dst);
+  }
 }
 
 Status VersionEdit::DecodeFrom(Slice* src) {
@@ -83,6 +87,15 @@ Status VersionEdit::DecodeFrom(Slice* src) {
           error = "deleted blob file";
         }
         break;
+      case kUpdatedBlobFile:
+        blob_file = std::make_shared<BlobFileMeta>();
+        s = blob_file->DecodeFrom(src);
+        if (s.ok()) {
+          UpdateBlobFile(blob_file);
+        } else {
+          error = s.ToString().c_str();
+        }
+        break;
       default:
         error = "unknown tag";
         break;
@@ -132,6 +145,12 @@ void VersionEdit::Dump(bool with_keys) const {
     for (auto& file : deleted_files_) {
       fprintf(stdout, "file %" PRIu64 ", seq %" PRIu64 "\n", file.first,
               file.second);
+    }
+  }
+  if (!updated_files_.empty()) {
+    fprintf(stdout, "update files:\n");
+    for (auto& file : updated_files_) {
+      file->Dump(with_keys);
     }
   }
 }

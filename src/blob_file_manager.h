@@ -72,6 +72,15 @@ class BlobFileManager {
     (void)handles;
     return Status::OK();
   }
+
+  // Updates the metadata of the file. This is used to update the
+  // metadata of the file after the file is punched with holes.
+  virtual Status BatchUpdateFiles(
+      uint32_t cf_id, const std::vector<std::shared_ptr<BlobFileMeta>>& files) {
+    (void)cf_id;
+    (void)files;
+    return Status::OK();
+  }
 };
 
 }  // namespace titandb

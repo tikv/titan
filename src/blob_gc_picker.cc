@@ -18,7 +18,19 @@ BasicBlobGCPicker::BasicBlobGCPicker(TitanDBOptions db_options,
 
 BasicBlobGCPicker::~BasicBlobGCPicker() {}
 
-std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
+std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(BlobStorage* blob_storage,
+                                                      bool allow_punch_hole) {
+  auto regular_gc = PickRegularBlobGC(blob_storage);
+  if (regular_gc) {
+    return regular_gc;
+  }
+  if (allow_punch_hole) {
+    return PickPunchHoleGC(blob_storage);
+  }
+  return nullptr;
+}
+
+std::unique_ptr<BlobGC> BasicBlobGCPicker::PickRegularBlobGC(
     BlobStorage* blob_storage) {
   Status s;
   std::vector<std::shared_ptr<BlobFileMeta>> blob_files;
@@ -101,6 +113,47 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickBlobGC(
 
   return std::unique_ptr<BlobGC>(new BlobGC(
       std::move(blob_files), std::move(cf_options_), maybe_continue_next_time));
+}
+
+std::unique_ptr<BlobGC> BasicBlobGCPicker::PickPunchHoleGC(
+    BlobStorage* blob_storage) {
+  Status s;
+  std::vector<std::shared_ptr<BlobFileMeta>> blob_files;
+
+  uint64_t batch_size = 0;
+  uint64_t estimate_output_size = 0;
+  bool stop_picking = false;
+  bool maybe_continue_next_time = false;
+  uint64_t next_gc_size = 0;
+
+  for (auto& gc_score : blob_storage->punch_hole_score()) {
+    auto blob_file = blob_storage->FindFile(gc_score.file_number).lock();
+    if (!CheckBlobFile(blob_file.get())) {
+      // Skip this file id this file is being GCed
+      // or this file had been GCed
+      TITAN_LOG_INFO(db_options_.info_log,
+                     "Blob file %" PRIu64 " no need punch hole gc",
+                     blob_file->file_number());
+      continue;
+    }
+    if (!stop_picking) {
+      blob_files.emplace_back(blob_file);
+      batch_size += blob_file->file_size();
+      if (batch_size >= cf_options_.max_gc_batch_size) {
+        // Stop pick file for this gc, but still check file for whether need
+        // trigger gc after this
+        stop_picking = true;
+      }
+    } else {
+      // TODO: add a batch threshold for punch hole gc.
+      maybe_continue_next_time = true;
+      break;
+    }
+  }
+  if (blob_files.empty()) return nullptr;
+  return std::unique_ptr<BlobGC>(new BlobGC(
+      std::move(blob_files), std::move(cf_options_), maybe_continue_next_time,
+      /*punch_hole_gc=*/true));
 }
 
 bool BasicBlobGCPicker::CheckBlobFile(BlobFileMeta* blob_file) const {

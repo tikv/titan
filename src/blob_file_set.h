@@ -98,6 +98,22 @@ class BlobFileSet {
 
   bool IsOpened() { return opened_.load(std::memory_order_acquire); }
 
+  uint64_t GetBlockSize(uint32_t cf_id) {
+    MutexLock l(mutex_);
+    auto storage = GetBlobStorage(cf_id).lock();
+    if (storage != nullptr && storage->cf_options().enable_punch_hole_gc) {
+      return storage->cf_options().block_size;
+    }
+    return 0;
+  }
+
+  std::unordered_map<uint64_t, uint64_t> GetFileBlockSizes(uint32_t cf_id) {
+    MutexLock l(mutex_);
+    auto storage = GetBlobStorage(cf_id).lock();
+    return storage ? storage->GetFileBlockSizes()
+                   : std::unordered_map<uint64_t, uint64_t>();
+  }
+
  private:
   struct ManifestWriter;
 

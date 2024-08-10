@@ -55,6 +55,11 @@ class BlobStorage {
     return gc_score_;
   }
 
+  const std::vector<GCScore> punch_hole_score() {
+    MutexLock l(&mutex_);
+    return punch_hole_score_;
+  }
+
   Cache* blob_cache() { return blob_cache_.get(); }
 
   // Gets the blob record pointed by the blob index. The provided
@@ -123,6 +128,8 @@ class BlobStorage {
   // Add a new blob file to this blob storage.
   void AddBlobFile(std::shared_ptr<BlobFileMeta>& file);
 
+  void UpdateBlobFile(std::shared_ptr<BlobFileMeta>& file);
+
   // Gets all obsolete blob files whose obsolete_sequence is smaller than the
   // oldest_sequence. Note that the files returned would be erased from internal
   // structure, so for the next call, the files returned before wouldn't be
@@ -167,6 +174,15 @@ class BlobStorage {
     mutable_cf_options_ = options;
   }
 
+  std::unordered_map<uint64_t, uint64_t> GetFileBlockSizes() {
+    MutexLock l(&mutex_);
+    std::unordered_map<uint64_t, uint64_t> file_block_sizes;
+    for (auto& file : files_) {
+      file_block_sizes[file.first] = file.second->block_size();
+    }
+    return file_block_sizes;
+  }
+
  private:
   friend class BlobFileSet;
   friend class VersionTest;
@@ -194,9 +210,9 @@ class BlobStorage {
    public:
     // The default constructor is not supposed to be used.
     // It is only to make std::multimap can compile.
-    InternalComparator() : comparator_(nullptr){};
+    InternalComparator() : comparator_(nullptr) {};
     explicit InternalComparator(const Comparator* comparator)
-        : comparator_(comparator){};
+        : comparator_(comparator) {};
     bool operator()(const Slice& key1, const Slice& key2) const {
       assert(comparator_ != nullptr);
       return comparator_->Compare(key1, key2) < 0;
@@ -214,6 +230,7 @@ class BlobStorage {
   std::shared_ptr<BlobFileCache> file_cache_;
 
   std::vector<GCScore> gc_score_;
+  std::vector<GCScore> punch_hole_score_;
 
   std::list<std::pair<uint64_t, SequenceNumber>> obsolete_files_;
   // It is marked when the column family handle is destroyed, indicating the

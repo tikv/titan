@@ -144,6 +144,7 @@ void BlobFileMeta::EncodeTo(std::string* dst) const {
   PutVarint64(dst, block_size_);
   PutLengthPrefixedSlice(dst, smallest_key_);
   PutLengthPrefixedSlice(dst, largest_key_);
+  PutVarint64(dst, effective_file_size_);
 }
 
 Status BlobFileMeta::DecodeFromV1(Slice* src) {
@@ -191,6 +192,12 @@ Status BlobFileMeta::DecodeFrom(Slice* src) {
   } else {
     return Status::Corruption("BlobLargestKey decode failed");
   }
+  uint64_t effective_file_size;
+  if (!GetVarint64(src, &effective_file_size)) {
+    return Status::Corruption(
+        "BlobFileMeta hole_punchable_size_ decode failed");
+  }
+  effective_file_size_ = effective_file_size;
   return Status::OK();
 }
 

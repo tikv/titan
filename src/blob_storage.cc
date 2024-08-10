@@ -147,6 +147,37 @@ void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   blob_ranges_.emplace(std::make_pair(Slice(file->smallest_key()), file));
 }
 
+void BlobStorage::UpdateBlobFile(std::shared_ptr<BlobFileMeta>& file) {
+  MutexLock l(&mutex_);
+  // Update the file in files_ and blob_ranges_.
+  auto f_it = files_.find(file->file_number());
+  if (f_it != files_.end()) {
+    assert(f_it->second.get() == file.get());
+  } else {
+    TITAN_LOG_ERROR(db_options_.info_log,
+                    "Update blob file %" PRIu64
+                    " failed,  file not found in BlobStorage.",
+                    file->file_number());
+    files_.emplace(std::make_pair(file->file_number(), file));
+  }
+  bool found = false;
+  auto p = blob_ranges_.equal_range(file->smallest_key());
+  for (auto it = p.first; it != p.second; it++) {
+    if (it->second->file_number() == file->file_number()) {
+      assert(it->second.get() == file.get());
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    TITAN_LOG_ERROR(db_options_.info_log,
+                    "Update blob file %" PRIu64
+                    " failed, file not found in BlobStorage.",
+                    file->file_number());
+    blob_ranges_.emplace(std::make_pair(Slice(file->smallest_key()), file));
+  }
+}
+
 bool BlobStorage::MarkFileObsolete(uint64_t file_number,
                                    SequenceNumber obsolete_sequence) {
   MutexLock l(&mutex_);
@@ -182,8 +213,12 @@ bool BlobStorage::RemoveFile(uint64_t file_number) {
       break;
     }
   }
+  auto removed_size = file->second->file_size();
+  if (file->second->block_size() > 0) {
+    removed_size = file->second->effective_file_size();
+  }
   SubStats(stats_, cf_id_, TitanInternalStats::OBSOLETE_BLOB_FILE_SIZE,
-           file->second->file_size());
+           removed_size);
   SubStats(stats_, cf_id_, TitanInternalStats::NUM_OBSOLETE_BLOB_FILE, 1);
   files_.erase(file_number);
   file_cache_->Evict(file_number);
@@ -237,6 +272,7 @@ void BlobStorage::UpdateStats() {
   levels_file_count_.assign(cf_options_.num_levels, 0);
   uint64_t live_blob_file_size = 0, num_live_blob_file = 0;
   uint64_t obsolete_blob_file_size = 0, num_obsolete_blob_file = 0;
+  uint64_t pending_punch_hole_size = 0, effective_blob_file_size = 0;
   std::unordered_map<int, uint64_t> ratio_levels;
 
   // collect metrics
@@ -244,6 +280,9 @@ void BlobStorage::UpdateStats() {
     if (file.second->is_obsolete()) {
       num_obsolete_blob_file += 1;
       obsolete_blob_file_size += file.second->file_size();
+      if (file.second->block_size() > 0) {
+        obsolete_blob_file_size = file.second->effective_file_size();
+      }
       continue;
     }
     num_live_blob_file += 1;
@@ -252,6 +291,8 @@ void BlobStorage::UpdateStats() {
     // If the file is initialized yet, skip it
     if (file.second->file_state() != BlobFileMeta::FileState::kPendingInit) {
       live_blob_file_size += file.second->file_size();
+      pending_punch_hole_size += file.second->GetHolePunchableSize();
+      effective_blob_file_size += file.second->effective_file_size();
       ratio_levels[static_cast<int>(file.second->GetDiscardableRatioLevel())] +=
           1;
     }
@@ -271,6 +312,10 @@ void BlobStorage::UpdateStats() {
     SetStats(stats_, cf_id_, static_cast<TitanInternalStats::StatsType>(i),
              ratio_levels[i]);
   }
+  SetStats(stats_, cf_id_, TitanInternalStats::PENDING_PUNCH_HOLE_SIZE,
+           pending_punch_hole_size);
+  SetStats(stats_, cf_id_, TitanInternalStats::EFFECTIVE_BLOB_FILE_SIZE,
+           effective_blob_file_size);
 }
 void BlobStorage::ComputeGCScore() {
   UpdateStats();
@@ -280,29 +325,46 @@ void BlobStorage::ComputeGCScore() {
 
   MutexLock l(&mutex_);
   gc_score_.clear();
+  punch_hole_score_.clear();
 
   for (auto& file : files_) {
     if (file.second->is_obsolete()) {
       continue;
     }
 
-    double score;
+    double gc_score;
     if (file.second->file_size() < cf_options_.merge_small_file_threshold) {
       // for the small file or file with gc mark (usually the file that just
       // recovered) we want gc these file but more hope to gc other file with
       // more invalid data
-      score = std::max(cf_options_.blob_file_discardable_ratio,
-                       file.second->GetDiscardableRatio());
+      gc_score = std::max(cf_options_.blob_file_discardable_ratio,
+                          file.second->GetDiscardableRatio());
     } else {
-      score = file.second->GetDiscardableRatio();
+      gc_score = file.second->GetDiscardableRatio();
     }
-    gc_score_.emplace_back(GCScore{
-        .file_number = file.first,
-        .score = score,
-    });
+    if (gc_score >= cf_options_.blob_file_discardable_ratio) {
+      gc_score_.emplace_back(GCScore{
+          .file_number = file.first,
+          .score = gc_score,
+      });
+    } else {
+      if (cf_options_.enable_punch_hole_gc &&
+          file.second->GetHolePunchableSize() >
+              cf_options_.punch_hole_threshold) {
+        punch_hole_score_.emplace_back(GCScore{
+            .file_number = file.first,
+            .score = (double)file.second->GetHolePunchableSize() /
+                     file.second->file_size(),
+        });
+      }
+    }
   }
 
   std::sort(gc_score_.begin(), gc_score_.end(),
+            [](const GCScore& first, const GCScore& second) {
+              return first.score > second.score;
+            });
+  std::sort(punch_hole_score_.begin(), punch_hole_score_.end(),
             [](const GCScore& first, const GCScore& second) {
               return first.score > second.score;
             });
