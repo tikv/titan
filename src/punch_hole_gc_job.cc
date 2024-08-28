@@ -24,8 +24,6 @@ Status PunchHoleGCJob::Run() {
   return Status::OK();
 }
 
-Status PunchHoleGCJob::Finish() { return UpdateBlobFilesMeta(); }
-
 Status PunchHoleGCJob::HolePunchBlobFiles() {
   for (const auto& file : blob_gc_->inputs()) {
     if (IsShutingDown()) {
@@ -139,8 +137,7 @@ Status PunchHoleGCJob::WhetherToPunchHole(const Slice& key,
   return Status::OK();
 }
 
-Status PunchHoleGCJob::UpdateBlobFilesMeta() {
-  std::vector<std::shared_ptr<BlobFileMeta>> hole_punched_files;
+void PunchHoleGCJob::UpdateBlobFilesMeta() {
   for (auto& file : blob_gc_->inputs()) {
     if (file->is_obsolete()) {
       continue;
@@ -150,12 +147,7 @@ Status PunchHoleGCJob::UpdateBlobFilesMeta() {
       continue;
     }
     file->set_effective_file_size(it->second);
-    hole_punched_files.emplace_back(file);
   }
-  if (!hole_punched_files.empty()) {
-    return blob_file_manager_->BatchUpdateFiles(cf_id_, hole_punched_files);
-  }
-  return Status::OK();
 }
 
 Status PunchHoleGCJob::Cleanup() {

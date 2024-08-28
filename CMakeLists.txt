@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.27)
 project(titan)
 enable_language(CXX)
 enable_language(C)
@@ -145,6 +145,7 @@ if (WITH_TITAN_TESTS AND (CMAKE_BUILD_TYPE STREQUAL "Debug"))
         blob_gc_job_test
         blob_gc_picker_test
         gc_stats_test
+        punch_hole_gc_test
         table_builder_test
         thread_safety_test
         titan_db_test

@@ -16,15 +16,13 @@ class PunchHoleGCJob {
   PunchHoleGCJob(uint32_t cf_id, std::unique_ptr<BlobGC> blob_gc,
                  DBImpl* base_db_impl, const TitanDBOptions& db_options,
                  Env* env, const EnvOptions& env_options,
-                 BlobFileManager* blob_file_manager, const Snapshot* snapshot,
-                 std::atomic_bool* shuting_down)
+                 const Snapshot* snapshot, std::atomic_bool* shuting_down)
       : cf_id_(cf_id),
         blob_gc_(std::move(blob_gc)),
         base_db_impl_(base_db_impl),
         db_options_(db_options),
         env_(env),
         env_options_(env_options),
-        blob_file_manager_(blob_file_manager),
         snapshot_(snapshot),
         shuting_down_(shuting_down) {}
   PunchHoleGCJob(const PunchHoleGCJob&) = delete;
@@ -32,8 +30,8 @@ class PunchHoleGCJob {
   ~PunchHoleGCJob() { Cleanup(); };
 
   Status Run();
-  // REQUIRE: mutex held
-  Status Finish();
+  // REQUIRE: db mutex held
+  void Finish() { UpdateBlobFilesMeta(); };
 
   uint32_t cf_id() const { return cf_id_; }
   const Snapshot* snapshot() const { return snapshot_; }
@@ -46,7 +44,6 @@ class PunchHoleGCJob {
   TitanDBOptions db_options_;
   Env* env_;
   EnvOptions env_options_;
-  BlobFileManager* blob_file_manager_;
   const Snapshot* snapshot_;
 
   std::atomic_bool* shuting_down_{nullptr};
@@ -62,7 +59,8 @@ class PunchHoleGCJob {
   bool IsShutingDown() {
     return (shuting_down_ && shuting_down_->load(std::memory_order_acquire));
   }
-  Status UpdateBlobFilesMeta();
+  // REQUIRE: db mutex held
+  void UpdateBlobFilesMeta();
   Status Cleanup();
 };
 }  // namespace titandb

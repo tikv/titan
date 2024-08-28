@@ -122,23 +122,6 @@ class TitanDBImpl::FileManager : public BlobFileManager {
     return s;
   }
 
-  Status BatchUpdateFiles(
-      uint32_t cf_id,
-      const std::vector<std::shared_ptr<BlobFileMeta>>& files) override {
-    db_->mutex_.AssertHeld();
-    Status s;
-    VersionEdit edit;
-    edit.SetColumnFamilyID(cf_id);
-    for (auto& file : files) {
-      edit.UpdateBlobFile(file);
-    }
-    s = db_->blob_file_set_->LogAndApply(edit);
-    if (!s.ok()) {
-      db_->SetBGError(s);
-    }
-    return s;
-  }
-
  private:
   class FileHandle : public BlobFileHandle {
    public:

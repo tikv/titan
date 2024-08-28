@@ -43,10 +43,6 @@ class EditCollector {
       status_ = collector.DeleteFile(file.first, file.second);
       if (!status_.ok()) return status_;
     }
-    for (auto& file : edit.updated_files_) {
-      status_ = collector.UpdateFile(file);
-      if (!status_.ok()) return status_;
-    }
 
     if (edit.has_next_file_number_) {
       if (edit.next_file_number_ < next_file_number_) {
@@ -168,20 +164,6 @@ class EditCollector {
       return Status::OK();
     }
 
-    Status UpdateFile(const std::shared_ptr<BlobFileMeta>& file) {
-      auto number = file->file_number();
-      if (deleted_files_.count(number) > 0) {
-        TITAN_LOG_ERROR(info_log_,
-                        "blob file %" PRIu64 " has been deleted before\n",
-                        number);
-        if (paranoid_check_) {
-          return Status::Corruption("Blob file " + ToString(number) +
-                                    " has been deleted before");
-        }
-      }
-      return Status::OK();
-    }
-
     Status Seal(BlobStorage* storage) {
       for (auto& file : added_files_) {
         auto number = file.first;
@@ -227,26 +209,6 @@ class EditCollector {
         }
       }
 
-      for (auto& file : updated_files_) {
-        auto number = file.first;
-        auto blob = storage->FindFile(number).lock();
-        if (!blob) {
-          TITAN_LOG_ERROR(storage->db_options().info_log,
-                          "blob file %" PRIu64 " doesn't exist before\n",
-                          number);
-          return Status::Corruption("Blob file " + ToString(number) +
-                                    " doesn't exist before");
-        } else if (blob->is_obsolete()) {
-          TITAN_LOG_ERROR(storage->db_options().info_log,
-                          "blob file %" PRIu64 " has been deleted already\n",
-                          number);
-          if (paranoid_check_) {
-            return Status::Corruption("Blob file " + ToString(number) +
-                                      " has been deleted already");
-          }
-        }
-      }
-
       return Status::OK();
     }
 
@@ -259,20 +221,10 @@ class EditCollector {
         storage->AddBlobFile(file.second);
       }
 
-      for (auto& file : updated_files_) {
-        if (deleted_files_.count(file.first) > 0) {
-          continue;
-        }
-        storage->UpdateBlobFile(file.second);
-      }
-
       for (auto& file : deleted_files_) {
         auto number = file.first;
         // just skip paired added and deleted files
         if (added_files_.count(number) > 0) {
-          continue;
-        }
-        if (updated_files_.count(number) > 0) {
           continue;
         }
         if (!storage->MarkFileObsolete(number, file.second)) {
@@ -297,11 +249,6 @@ class EditCollector {
           added_files_.at(file)->Dump(with_keys);
         }
       }
-      for (auto& file : updated_files_) {
-        if (deleted_files_.count(file.first) == 0) {
-          file.second->Dump(with_keys);
-        }
-      }
       bool has_additional_deletion = false;
       for (auto& file : deleted_files_) {
         if (added_files_.count(file.first) == 0) {
@@ -320,7 +267,6 @@ class EditCollector {
     Logger* info_log_{nullptr};
     std::unordered_map<uint64_t, std::shared_ptr<BlobFileMeta>> added_files_;
     std::unordered_map<uint64_t, SequenceNumber> deleted_files_;
-    std::unordered_map<uint64_t, std::shared_ptr<BlobFileMeta>> updated_files_;
   };
 
   Status status_{Status::OK()};

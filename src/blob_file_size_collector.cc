@@ -63,7 +63,7 @@ Status BlobFileSizeCollector::AddUserKey(const Slice& /* key */,
   }
 
   auto size = index.blob_handle.size;
-  if (default_block_size_ > 0 && !file_block_sizes_.empty()) {
+  if (default_block_size_ > 0 || !file_block_sizes_.empty()) {
     // If the blob file cannot be found in the block size map, it must be a
     // newly created file that has not been added blob_file_set, in this case,
     // we know the block size of the file is default_block_size_.
@@ -79,7 +79,7 @@ Status BlobFileSizeCollector::AddUserKey(const Slice& /* key */,
     }
     if (block_size > 0) {
       // Align blob size with block size.
-      size = (size + block_size - 1) / block_size * block_size;
+      size = Roundup(size, block_size);
     }
   }
 

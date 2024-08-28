@@ -97,6 +97,8 @@ class BlobStorage {
     }
   }
 
+  Status InitPunchHoleGCOnStart();
+
   // Must call before TitanDBImpl initialized.
   void InitializeAllFiles() {
     MutexLock l(&mutex_);
@@ -126,8 +128,6 @@ class BlobStorage {
 
   // Add a new blob file to this blob storage.
   void AddBlobFile(std::shared_ptr<BlobFileMeta>& file);
-
-  void UpdateBlobFile(std::shared_ptr<BlobFileMeta>& file);
 
   // Gets all obsolete blob files whose obsolete_sequence is smaller than the
   // oldest_sequence. Note that the files returned would be erased from internal

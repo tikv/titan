@@ -256,6 +256,8 @@ class BlobFileMeta {
   void set_live_data_size(int64_t size) { live_data_size_ = size; }
   // This should be called with db mutex held.
   void set_effective_file_size(int64_t size) { effective_file_size_ = size; }
+  void set_disk_uage(int64_t size) { disk_usage_ = size; }
+
   uint64_t file_entries() const { return file_entries_; }
   FileState file_state() const { return state_; }
   bool is_obsolete() const { return state_ == FileState::kObsolete; }
@@ -327,7 +329,7 @@ class BlobFileMeta {
   std::atomic<int64_t> live_data_size_{0};
   // This is different from `file_size_`, as `file_size_` is the original size
   // of the file, and does not consider space reclaimed by punch hole GC.
-  std::atomic<int64_t> disk_usage_{0};
+  int64_t disk_usage_{0};
   std::atomic<FileState> state_{FileState::kNone};
 };
 
