@@ -20,7 +20,6 @@ enum Tag {
                           // smallest_key and largest_key of blob file
   kAddedBlobFileV3 = 14,  // Comparing to kAddedBlobFileV2, it newly includes
                           // block_size of blob file
-  kUpdatedBlobFile = 15,  // Update blob file meta, e.g. hole punchable size
 };
 
 class VersionEdit {
@@ -38,10 +37,6 @@ class VersionEdit {
 
   void DeleteBlobFile(uint64_t file_number, SequenceNumber obsolete_sequence) {
     deleted_files_.emplace_back(std::make_pair(file_number, obsolete_sequence));
-  }
-
-  void UpdateBlobFile(std::shared_ptr<BlobFileMeta> file) {
-    updated_files_.push_back(file);
   }
 
   void EncodeTo(std::string* dst) const;
@@ -62,7 +57,6 @@ class VersionEdit {
 
   std::vector<std::shared_ptr<BlobFileMeta>> added_files_;
   std::vector<std::pair<uint64_t, SequenceNumber>> deleted_files_;
-  std::vector<std::shared_ptr<BlobFileMeta>> updated_files_;
 };
 
 }  // namespace titandb

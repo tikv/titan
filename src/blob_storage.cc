@@ -1,5 +1,7 @@
 #include "blob_storage.h"
 
+#include <sys/stat.h>
+
 #include "blob_file_set.h"
 #include "titan_logging.h"
 
@@ -122,6 +124,31 @@ Status BlobStorage::GetBlobFilesInRanges(
   return Status::OK();
 }
 
+Status BlobStorage::InitPunchHoleGCOnStart() {
+  MutexLock l(&mutex_);
+  for (auto& file : files_) {
+    assert(file.second->file_state() == BlobFileMeta::FileState::kPendingInit);
+    struct stat file_stat;
+    if (stat(BlobFileName(db_options_.dirname, file.second->file_number())
+                 .c_str(),
+             &file_stat) != 0) {
+      return Status::IOError("stat failed when init effective file size");
+    }
+    // st_blocks is the number of blocks allocated in 512B units.
+    int64_t physical_size = file_stat.st_blocks * 512;
+    file.second->set_disk_uage(physical_size);
+    // This is a over-approximation of the effective file size, because the
+    // effective size of the file must be equal or smaller than the physical
+    // size. They are equal only when the file's block size matches the file
+    // system's block size, otherwise the real effective size is usually
+    // smaller, considering the existance of fragmentation. But it's fine to use
+    // the physical size as the initial value of the effective size, because the
+    // effective size will be updated after the first GC.
+    file.second->set_effective_file_size(physical_size);
+  }
+  return Status::OK();
+}
+
 std::weak_ptr<BlobFileMeta> BlobStorage::FindFile(uint64_t file_number) const {
   MutexLock l(&mutex_);
   auto it = files_.find(file_number);
@@ -145,37 +172,6 @@ void BlobStorage::AddBlobFile(std::shared_ptr<BlobFileMeta>& file) {
   MutexLock l(&mutex_);
   files_.emplace(std::make_pair(file->file_number(), file));
   blob_ranges_.emplace(std::make_pair(Slice(file->smallest_key()), file));
-}
-
-void BlobStorage::UpdateBlobFile(std::shared_ptr<BlobFileMeta>& file) {
-  MutexLock l(&mutex_);
-  // Update the file in files_ and blob_ranges_.
-  auto f_it = files_.find(file->file_number());
-  if (f_it != files_.end()) {
-    assert(f_it->second.get() == file.get());
-  } else {
-    TITAN_LOG_ERROR(db_options_.info_log,
-                    "Update blob file %" PRIu64
-                    " failed,  file not found in BlobStorage.",
-                    file->file_number());
-    files_.emplace(std::make_pair(file->file_number(), file));
-  }
-  bool found = false;
-  auto p = blob_ranges_.equal_range(file->smallest_key());
-  for (auto it = p.first; it != p.second; it++) {
-    if (it->second->file_number() == file->file_number()) {
-      assert(it->second.get() == file.get());
-      found = true;
-      break;
-    }
-  }
-  if (!found) {
-    TITAN_LOG_ERROR(db_options_.info_log,
-                    "Update blob file %" PRIu64
-                    " failed, file not found in BlobStorage.",
-                    file->file_number());
-    blob_ranges_.emplace(std::make_pair(Slice(file->smallest_key()), file));
-  }
 }
 
 bool BlobStorage::MarkFileObsolete(uint64_t file_number,

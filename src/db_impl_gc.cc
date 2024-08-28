@@ -136,6 +136,7 @@ Status TitanDBImpl::AsyncInitializeGC(
           file->UpdateLiveDataSize(file_size.second);
         }
       }
+      blob_storage->InitPunchHoleGCOnStart();
       blob_storage->InitializeAllFiles();
       TITAN_LOG_INFO(db_options_.info_log,
                      "Titan finish async GC initialization on cf [%s]",
@@ -314,7 +315,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
     auto snapshot = db_impl_->GetSnapshot();
     pending_punch_hole_gc_ = std::unique_ptr<PunchHoleGCJob>(new PunchHoleGCJob(
         column_family_id, std::move(blob_gc), db_impl_, db_options_, env_,
-        env_options_, blob_manager_.get(), snapshot, &shuting_down_));
+        env_options_, snapshot, &shuting_down_));
     if (!MaybeRunPendingPunchHoleGC()) {
       MaybeScheduleGC();
     }

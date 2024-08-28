@@ -35,6 +35,8 @@ class BlobFileIterator {
   Slice value() const;
   Status status() const { return status_; }
   uint64_t header_size() const { return header_size_; }
+  // Returns the size of the "footer", this includes the meta blocks.
+  uint64_t footer_size() const { return file_size_ - end_of_blob_record_; }
 
   void IterateForPrev(uint64_t);
 
@@ -77,8 +79,8 @@ class BlobFileIterator {
   uint64_t readahead_size_{kMinReadaheadSize};
 
   void PrefetchAndGet();
-  void GetBlobRecord();
-  uint64_t AdjustOffsetToNextBlockHead();
+  // Returns false if the record is invalid (punch-hole).
+  bool GetBlobRecord();
 };
 
 class BlobFileMergeIterator {
@@ -106,9 +108,9 @@ class BlobFileMergeIterator {
    public:
     // The default constructor is not supposed to be used.
     // It is only to make std::priority_queue can compile.
-    BlobFileIterComparator() : comparator_(nullptr){};
+    BlobFileIterComparator() : comparator_(nullptr) {};
     explicit BlobFileIterComparator(const Comparator* comparator)
-        : comparator_(comparator){};
+        : comparator_(comparator) {};
     // Smaller value get Higher priority
     bool operator()(const BlobFileIterator* iter1,
                     const BlobFileIterator* iter2) {
