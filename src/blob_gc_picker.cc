@@ -38,7 +38,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickRegularBlobGC(
   uint64_t batch_size = 0;
   uint64_t estimate_output_size = 0;
   bool stop_picking = false;
-  bool maybe_continue_next_time = false;
+  bool need_trigger_next = false;
   uint64_t next_gc_size = 0;
   bool in_fallback = cf_options_.blob_run_mode == TitanBlobRunMode::kFallback;
 
@@ -71,14 +71,14 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickRegularBlobGC(
       estimate_output_size += blob_file->live_data_size();
       if (batch_size >= cf_options_.max_gc_batch_size ||
           estimate_output_size >= cf_options_.blob_file_target_size) {
-        // Stop pick file for this gc, but still check file for whether need
-        // trigger gc after this
+        // Stop picking file for this gc, but still check file for whether
+        // another round of gc is needed.
         stop_picking = true;
       }
     } else {
       next_gc_size += blob_file->file_size();
       if (next_gc_size > cf_options_.min_gc_batch_size || in_fallback) {
-        maybe_continue_next_time = true;
+        need_trigger_next = true;
         RecordTick(statistics(stats_), TITAN_GC_REMAIN, 1);
         TITAN_LOG_INFO(db_options_.info_log,
                        "remain more than %" PRIu64
@@ -112,7 +112,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickRegularBlobGC(
   }
 
   return std::unique_ptr<BlobGC>(new BlobGC(
-      std::move(blob_files), std::move(cf_options_), maybe_continue_next_time));
+      std::move(blob_files), std::move(cf_options_), need_trigger_next));
 }
 
 std::unique_ptr<BlobGC> BasicBlobGCPicker::PickPunchHoleGC(
@@ -123,7 +123,7 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickPunchHoleGC(
   uint64_t batch_size = 0;
   uint64_t estimate_output_size = 0;
   bool stop_picking = false;
-  bool maybe_continue_next_time = false;
+  bool need_trigger_next = false;
   uint64_t next_gc_size = 0;
 
   for (auto& gc_score : blob_storage->punch_hole_score()) {
@@ -146,13 +146,13 @@ std::unique_ptr<BlobGC> BasicBlobGCPicker::PickPunchHoleGC(
       }
     } else {
       // TODO: add a batch threshold for punch hole gc.
-      maybe_continue_next_time = true;
+      need_trigger_next = true;
       break;
     }
   }
   if (blob_files.empty()) return nullptr;
   return std::unique_ptr<BlobGC>(new BlobGC(
-      std::move(blob_files), std::move(cf_options_), maybe_continue_next_time,
+      std::move(blob_files), std::move(cf_options_), need_trigger_next,
       /*punch_hole_gc=*/true));
 }
 

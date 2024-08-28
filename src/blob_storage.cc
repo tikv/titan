@@ -127,7 +127,6 @@ Status BlobStorage::GetBlobFilesInRanges(
 Status BlobStorage::InitPunchHoleGCOnStart() {
   MutexLock l(&mutex_);
   for (auto& file : files_) {
-    assert(file.second->file_state() == BlobFileMeta::FileState::kPendingInit);
     struct stat file_stat;
     if (stat(BlobFileName(db_options_.dirname, file.second->file_number())
                  .c_str(),
@@ -268,7 +267,7 @@ void BlobStorage::UpdateStats() {
   levels_file_count_.assign(cf_options_.num_levels, 0);
   uint64_t live_blob_file_size = 0, num_live_blob_file = 0;
   uint64_t obsolete_blob_file_size = 0, num_obsolete_blob_file = 0;
-  uint64_t pending_punch_hole_size = 0, effective_blob_file_size = 0;
+  uint64_t pending_punch_hole_size = 0;
   std::unordered_map<int, uint64_t> ratio_levels;
 
   // collect metrics
@@ -288,7 +287,6 @@ void BlobStorage::UpdateStats() {
     if (file.second->file_state() != BlobFileMeta::FileState::kPendingInit) {
       live_blob_file_size += file.second->file_size();
       pending_punch_hole_size += file.second->GetHolePunchableSize();
-      effective_blob_file_size += file.second->effective_file_size();
       ratio_levels[static_cast<int>(file.second->GetDiscardableRatioLevel())] +=
           1;
     }
@@ -310,8 +308,6 @@ void BlobStorage::UpdateStats() {
   }
   SetStats(stats_, cf_id_, TitanInternalStats::PENDING_PUNCH_HOLE_SIZE,
            pending_punch_hole_size);
-  SetStats(stats_, cf_id_, TitanInternalStats::EFFECTIVE_BLOB_FILE_SIZE,
-           effective_blob_file_size);
 }
 void BlobStorage::ComputeGCScore() {
   UpdateStats();
@@ -344,7 +340,7 @@ void BlobStorage::ComputeGCScore() {
           .score = gc_score,
       });
     } else {
-      if (cf_options_.enable_punch_hole_gc &&
+      if (cf_options_.punch_hole_threshold > 0 &&
           file.second->GetHolePunchableSize() >
               cf_options_.punch_hole_threshold) {
         punch_hole_score_.emplace_back(GCScore{

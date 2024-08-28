@@ -49,6 +49,7 @@ class PunchHoleGCJob {
   std::atomic_bool* shuting_down_{nullptr};
 
   std::unordered_map<uint64_t, uint64_t> effective_file_size_map_;
+  std::unordered_map<uint64_t, int64_t> disk_usage_map_;
 
   // TODO: Add more stats
 
