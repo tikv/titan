@@ -101,7 +101,7 @@ class BlobFileSet {
   uint64_t GetBlockSize(uint32_t cf_id) {
     MutexLock l(mutex_);
     auto storage = GetBlobStorage(cf_id).lock();
-    if (storage != nullptr && storage->cf_options().enable_punch_hole_gc) {
+    if (storage != nullptr && storage->cf_options().punch_hole_threshold > 0) {
       return storage->cf_options().block_size;
     }
     return 0;

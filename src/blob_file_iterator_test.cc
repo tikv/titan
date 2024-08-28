@@ -55,7 +55,7 @@ class BlobFileIteratorTest : public testing::Test {
     TitanDBOptions db_options(titan_options_);
     TitanCFOptions cf_options(titan_options_);
     if (with_blocks) {
-      cf_options.enable_punch_hole_gc = true;
+      cf_options.punch_hole_threshold = 4096;
       cf_options.block_size = 4096;
     }
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
@@ -194,8 +194,7 @@ TEST_F(BlobFileIteratorTest, IterateForPrev) {
   blob_index = blob_file_iterator_->GetBlobIndex();
   ASSERT_EQ(blob_handle, blob_index.blob_handle);
 
-  while ((idx = Random::GetTLSInstance()->Uniform(n)) == 0)
-    ;
+  while ((idx = Random::GetTLSInstance()->Uniform(n)) == 0);
   blob_handle = contexts[idx]->new_blob_index.blob_handle;
   blob_file_iterator_->IterateForPrev(blob_handle.offset - kRecordHeaderSize -
                                       1);

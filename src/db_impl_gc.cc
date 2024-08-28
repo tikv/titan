@@ -298,7 +298,7 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
                                             stats_.get());
     blob_gc = blob_gc_picker->PickBlobGC(
         blob_storage.get(),
-        /*allow_punch_hole=*/cf_options.enable_punch_hole_gc &&
+        /*allow_punch_hole=*/cf_options.punch_hole_threshold > 0 &&
             pending_punch_hole_gc_ == nullptr);
   }
 

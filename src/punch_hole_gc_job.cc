@@ -1,6 +1,7 @@
 #include "punch_hole_gc_job.h"
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "db/db_impl/db_impl.h"
@@ -44,14 +45,14 @@ Status PunchHoleGCJob::HolePunchBlobFiles() {
 Status PunchHoleGCJob::HolePunchSingleBlobFile(
     std::shared_ptr<BlobFileMeta> file) {
   Status s;
-  auto fd = open(BlobFileName(db_options_.dirname, file->file_number()).c_str(),
-                 O_WRONLY);
   std::unique_ptr<RandomAccessFileReader> file_reader;
   s = NewBlobFileReader(file->file_number(), 0, db_options_, env_options_, env_,
                         &file_reader);
   if (!s.ok()) {
     return s;
   }
+  auto fd = open(BlobFileName(db_options_.dirname, file->file_number()).c_str(),
+                 O_WRONLY);
   uint64_t effective_file_size = 0;
   uint64_t aligned_data_size = 0;
   std::unique_ptr<BlobFileIterator> iter(
@@ -74,8 +75,7 @@ Status PunchHoleGCJob::HolePunchSingleBlobFile(
       return s;
     }
 
-    aligned_data_size = (blob_index.blob_handle.size + block_size - 1) /
-                        block_size * block_size;
+    aligned_data_size = Roundup(blob_index.blob_handle.size, block_size);
 
     if (!discardable) {
       effective_file_size += aligned_data_size;
@@ -97,6 +97,12 @@ Status PunchHoleGCJob::HolePunchSingleBlobFile(
   if (!iter->status().ok()) {
     return iter->status();
   }
+  struct stat st;
+  if (fstat(fd, &st) != 0) {
+    // Do nothing, so far, this is only for stats.
+  }
+  close(fd);
+  disk_usage_map_[file->file_number()] = st.st_blocks * 512;
   effective_file_size_map_[file->file_number()] = effective_file_size;
   return Status::OK();
 }
@@ -147,6 +153,7 @@ void PunchHoleGCJob::UpdateBlobFilesMeta() {
       continue;
     }
     file->set_effective_file_size(it->second);
+    file->set_disk_uage(disk_usage_map_[file->file_number()]);
   }
 }
 

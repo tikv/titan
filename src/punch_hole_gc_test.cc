@@ -117,7 +117,6 @@ TEST_F(PunchHoleGCTest, PunchHole) {
   rocksdb::SyncPoint::GetInstance()->EnableProcessing();
 
   DisableMergeSmall();
-  options_.enable_punch_hole_gc = true;
   options_.disable_background_gc = false;
   options_.disable_auto_compactions = false;
   options_.punch_hole_threshold = 4096;
@@ -181,9 +180,9 @@ TEST_F(PunchHoleGCTest, PunchHole) {
       ASSERT_EQ(value, values[i]);
     }
   }
-  options_.enable_punch_hole_gc = false;
   options_.disable_background_gc = true;
   options_.disable_auto_compactions = true;
+  options_.punch_hole_threshold = 0;
 }
 
 }  // namespace titandb

@@ -281,7 +281,6 @@ class BlobFileMeta {
                 (file_size_ - kBlobMaxHeaderSize - kBlobFooterSize));
   }
   TitanInternalStats::StatsType GetDiscardableRatioLevel() const;
-  // This should be called with db mutex held.
   uint64_t GetHolePunchableSize() const {
     return effective_file_size_ - live_data_size_;
   }
@@ -301,18 +300,6 @@ class BlobFileMeta {
   std::string smallest_key_;
   std::string largest_key_;
 
-  // The effective size of current file. This is different from `file_size_`, as
-  // `file_size_` is the original size of the file, and does not consider space
-  // reclaimed by punch hole GC.
-  // We can't use file system's `st_blocks` to get the logical size, because
-  // the file system's block size may be different from Titan's block size.
-  // This is used to calculate the size of the punchable hole. i.e.
-  // effective_file_size_ - live_data_size_.
-  // This might be bigger than the actual size of the file, when Titan crashes
-  // before updating the `effective_file_size_` during punch hole GC. This is
-  // fine, as it will be corrected when the file is chose for GC next time.
-  int64_t effective_file_size_{0};
-
   // Not persistent field
 
   // Size of data with reference from SST files.
@@ -327,8 +314,17 @@ class BlobFileMeta {
   // `OnCompactionCompleted()` is called.
   // The size is aligned with block size, when punch hole GC is enabled.
   std::atomic<int64_t> live_data_size_{0};
-  // This is different from `file_size_`, as `file_size_` is the original size
-  // of the file, and does not consider space reclaimed by punch hole GC.
+  // This is used to calculate the size of the punchable hole. i.e.
+  // effective_file_size_ - live_data_size_.
+  // The effective size of current file. This is different from `file_size_`, as
+  // `file_size_` is the original size of the file, and does not consider space
+  // reclaimed by punch hole GC.
+  // This might be bigger than the actual effective size of the file, when Titan
+  // crashes or restarts. This is fine, as it will be corrected when the file is
+  // chose for GC next time.
+  int64_t effective_file_size_{0};
+  // Disk usage of the file, This is different from `effective_file_size_`, when
+  // block size does not align with file system block size.
   int64_t disk_usage_{0};
   std::atomic<FileState> state_{FileState::kNone};
 };

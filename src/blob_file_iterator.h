@@ -35,8 +35,6 @@ class BlobFileIterator {
   Slice value() const;
   Status status() const { return status_; }
   uint64_t header_size() const { return header_size_; }
-  // Returns the size of the "footer", this includes the meta blocks.
-  uint64_t footer_size() const { return file_size_ - end_of_blob_record_; }
 
   void IterateForPrev(uint64_t);
 
