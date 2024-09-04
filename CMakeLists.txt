@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.27)
+cmake_minimum_required(VERSION 3.0)
 project(titan)
 enable_language(CXX)
 enable_language(C)
