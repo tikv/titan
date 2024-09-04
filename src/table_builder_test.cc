@@ -149,6 +149,7 @@ class TableBuilderTest : public testing::Test {
     db_options_.dirname = tmpdir_;
     db_options_.statistics = nullptr;
     cf_options_.min_blob_size = kMinBlobSize;
+    env_->DeleteDir(tmpdir_);
     Open();
   }
 

@@ -104,6 +104,7 @@ class PunchHoleGCTest : public testing::Test {
 };
 
 TEST_F(PunchHoleGCTest, PunchHole) {
+#if defined(FALLOC_FL_PUNCH_HOLE)
   rocksdb::SyncPoint::GetInstance()->LoadDependency(
       {{"PunchHoleGCTest::PunchHole:AfterCompact",
         "TitanDBImpl::BackgroundCallGC:BeforeGCRunning"},
@@ -183,6 +184,7 @@ TEST_F(PunchHoleGCTest, PunchHole) {
   options_.disable_background_gc = true;
   options_.disable_auto_compactions = true;
   options_.punch_hole_threshold = 0;
+#endif
 }
 
 }  // namespace titandb
