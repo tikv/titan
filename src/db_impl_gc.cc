@@ -318,6 +318,8 @@ Status TitanDBImpl::BackgroundGC(LogBuffer* log_buffer,
         env_options_, snapshot, &shuting_down_));
     if (!MaybeRunPendingPunchHoleGC()) {
       MaybeScheduleGC();
+    } else {
+      TEST_SYNC_POINT("TitanDBImpl::BackgroundGC:RunPunchHoleGCRightAway");
     }
   } else {
     cfh = db_impl_->GetColumnFamilyHandleUnlocked(column_family_id);
