@@ -77,8 +77,8 @@ class BlobFileIterator {
   uint64_t readahead_size_{kMinReadaheadSize};
 
   void PrefetchAndGet();
-  void GetBlobRecord();
-  uint64_t AdjustOffsetToNextBlockHead();
+  // Returns false if the record is invalid (punch-hole).
+  bool GetBlobRecord();
 };
 
 class BlobFileMergeIterator {
@@ -106,9 +106,9 @@ class BlobFileMergeIterator {
    public:
     // The default constructor is not supposed to be used.
     // It is only to make std::priority_queue can compile.
-    BlobFileIterComparator() : comparator_(nullptr){};
+    BlobFileIterComparator() : comparator_(nullptr) {};
     explicit BlobFileIterComparator(const Comparator* comparator)
-        : comparator_(comparator){};
+        : comparator_(comparator) {};
     // Smaller value get Higher priority
     bool operator()(const BlobFileIterator* iter1,
                     const BlobFileIterator* iter2) {

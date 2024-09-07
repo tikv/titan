@@ -283,7 +283,7 @@ Status TitanDBImpl::OpenImpl(const std::vector<TitanCFDescriptor>& descs,
     // Disable compactions before blob file set is initialized.
     cf_opts.disable_auto_compactions = true;
     cf_opts.table_properties_collector_factories.emplace_back(
-        std::make_shared<BlobFileSizeCollectorFactory>());
+        std::make_shared<BlobFileSizeCollectorFactory>(blob_file_set_.get()));
     titan_table_factories.push_back(std::make_shared<TitanTableFactory>(
         db_options_, desc.options, blob_manager_, &mutex_, blob_file_set_.get(),
         stats_.get()));
@@ -459,7 +459,7 @@ Status TitanDBImpl::CreateColumnFamilies(
         stats_.get()));
     options.table_factory = titan_table_factory.back();
     options.table_properties_collector_factories.emplace_back(
-        std::make_shared<BlobFileSizeCollectorFactory>());
+        std::make_shared<BlobFileSizeCollectorFactory>(blob_file_set_.get()));
     if (options.compaction_filter != nullptr ||
         options.compaction_filter_factory != nullptr) {
       std::shared_ptr<TitanCompactionFilterFactory> titan_cf_factory =
@@ -818,6 +818,25 @@ void TitanDBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
   // We can record here whether the oldest snapshot is released.
   // If not, we can just skip the next round of purging obsolete files.
   db_->ReleaseSnapshot(snapshot);
+  {
+    MutexLock l(&mutex_);
+
+    if (pending_punch_hole_gc_ != nullptr && !punch_hole_gc_running_ &&
+        pending_punch_hole_gc_->snapshot()->GetSequenceNumber() <=
+            GetOldestSnapshotSequence() &&
+        bg_gc_scheduled_ < db_options_.max_background_gc) {
+      if (db_options_.disable_background_gc) return;
+
+      if (!initialized_.load(std::memory_order_acquire)) return;
+
+      if (shuting_down_.load(std::memory_order_acquire)) return;
+
+      TITAN_LOG_DEBUG(db_options_.info_log,
+                      "Titan schedule punch hole GC after releasing snapshot");
+      bg_gc_scheduled_++;
+      thread_pool_->SubmitJob(std::bind(&TitanDBImpl::BGWorkGC, this));
+    }
+  }
 }
 
 Status TitanDBImpl::DisableFileDeletions() {

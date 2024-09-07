@@ -56,5 +56,9 @@ Status SyncTitanManifest(TitanStats* stats,
   return file->Sync(db_options->use_fsync);
 }
 
+uint64_t Roundup(uint64_t offset, uint64_t align) {
+  return (offset + align - 1) / align * align;
+}
+
 }  // namespace titandb
 }  // namespace rocksdb
