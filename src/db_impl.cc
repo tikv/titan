@@ -820,6 +820,7 @@ void TitanDBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
   db_->ReleaseSnapshot(snapshot);
   {
     MutexLock l(&mutex_);
+
     if (pending_punch_hole_gc_ != nullptr && !punch_hole_gc_running_ &&
         pending_punch_hole_gc_->snapshot()->GetSequenceNumber() <=
             GetOldestSnapshotSequence() &&

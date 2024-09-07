@@ -403,7 +403,7 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
 
 void TitanDBImpl::TEST_WaitForBackgroundGC() {
   MutexLock l(&mutex_);
-  while (bg_gc_scheduled_ > 0) {
+  while (bg_gc_scheduled_ > 0 || bg_gc_running_ > 0) {
     bg_cv_.Wait();
   }
 }
