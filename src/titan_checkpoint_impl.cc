@@ -6,6 +6,7 @@
 #include "file/file_util.h"
 #include "file/filename.h"
 #include "port/port.h"
+#include "rocksdb/advanced_options.h"
 #include "rocksdb/transaction_log.h"
 #include "test_util/sync_point.h"
 #include "utilities/checkpoint/checkpoint_impl.h"
@@ -159,7 +160,8 @@ Status TitanCheckpointImpl::CreateCheckpoint(
           TITAN_LOG_INFO(titandb_options.info_log, "Copying %s", fname.c_str());
           return CopyFile(db_->GetFileSystem(), src_dirname + fname,
                           full_private_path + fname, size_limit_bytes,
-                          titandb_options.use_fsync);
+                          titandb_options.use_fsync, nullptr,
+                          Temperature::kUnknown);
         } /* copy_file_cb */,
         [&](const std::string& fname, const std::string& contents, FileType) {
           TITAN_LOG_INFO(titandb_options.info_log, "Creating %s",

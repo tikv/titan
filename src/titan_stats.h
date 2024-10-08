@@ -8,7 +8,7 @@
 
 #include "logging/log_buffer.h"
 #include "monitoring/histogram.h"
-#include "monitoring/statistics.h"
+#include "monitoring/statistics_impl.h"
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
 #include "util/string_util.h"
@@ -17,6 +17,10 @@
 #include "titan/statistics.h"
 
 namespace rocksdb {
+
+extern template class StatisticsImpl<titandb::TITAN_TICKER_ENUM_MAX,
+                                     titandb::TITAN_HISTOGRAM_ENUM_MAX>;
+
 namespace titandb {
 
 std::shared_ptr<Statistics> CreateDBStatistics();

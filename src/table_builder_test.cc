@@ -240,7 +240,7 @@ class TableBuilderTest : public testing::Test {
     uint64_t file_size = 0;
     ASSERT_OK(env_->GetFileSize(file->file_name(), &file_size));
     TableReaderOptions options(ioptions_, prefix_extractor_, env_options_,
-                               cf_ioptions_.internal_comparator);
+                               cf_ioptions_.internal_comparator, 0);
     options.cur_file_num = file_number;
     ASSERT_OK(table_factory_->NewTableReader(options, std::move(file),
                                              file_size, result));
@@ -261,7 +261,7 @@ class TableBuilderTest : public testing::Test {
         ioptions_, cf_moptions_, cf_ioptions_.internal_comparator, &collectors_,
         kNoCompression, compression_opts, 0 /*column_family_id*/,
         kDefaultColumnFamilyName, target_level, false,
-        TableFileCreationReason::kMisc, 0, 0, 0, "", "", 0, file_number);
+        TableFileCreationReason::kMisc, 0, 0, "", "", 0, file_number);
     result->reset(table_factory_->NewTableBuilder(options, file));
   }
 
@@ -333,7 +333,7 @@ TEST_F(TableBuilderTest, Basic) {
       ASSERT_EQ(ikey.type, kTypeValue);
       ASSERT_EQ(iter->value(), std::string(1, i));
     } else {
-      ASSERT_EQ(ikey.type, kTypeBlobIndex);
+      ASSERT_EQ(ikey.type, kTypeTitanBlobIndex);
       BlobIndex index;
       ASSERT_OK(DecodeInto(iter->value(), &index));
       ASSERT_EQ(index.file_number, kTestFileNumber);
@@ -395,7 +395,7 @@ TEST_F(TableBuilderTest, DictCompress) {
     ParsedInternalKey ikey;
     ASSERT_OK(ParseInternalKey(iter->key(), &ikey, false));
     ASSERT_EQ(ikey.user_key, key);
-    ASSERT_EQ(ikey.type, kTypeBlobIndex);
+    ASSERT_EQ(ikey.type, kTypeTitanBlobIndex);
     BlobIndex index;
     ASSERT_OK(DecodeInto(iter->value(), &index));
     ASSERT_EQ(index.file_number, kTestFileNumber);
@@ -479,7 +479,7 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
     } else if (i % 3 == 1) {
       value = std::string(kMinBlobSize, i);
     } else if (i % 3 == 2) {
-      ikey.Set(key, 1, kTypeBlobIndex);
+      ikey.Set(key, 1, kTypeTitanBlobIndex);
       BlobIndex blobIndex;
       // set different values in different fields
       blobIndex.file_number = i;
@@ -514,7 +514,7 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
       ASSERT_EQ(ikey.type, kTypeValue);
       ASSERT_EQ(iter->value(), std::string(1, i));
     } else if (i % 3 == 1) {
-      ASSERT_EQ(ikey.type, kTypeBlobIndex);
+      ASSERT_EQ(ikey.type, kTypeTitanBlobIndex);
       BlobIndex index;
       ASSERT_OK(DecodeInto(iter->value(), &index));
       ASSERT_EQ(index.file_number, kTestFileNumber);
@@ -524,7 +524,7 @@ TEST_F(TableBuilderTest, DictCompressDisorder) {
       ASSERT_EQ(record.key, key);
       ASSERT_EQ(record.value, std::string(kMinBlobSize, i));
     } else if (i % 3 == 2) {
-      ASSERT_EQ(ikey.type, kTypeBlobIndex);
+      ASSERT_EQ(ikey.type, kTypeTitanBlobIndex);
       BlobIndex index;
       // We do not have corresponding blob file in this test, so we only check
       // BlobIndex.
@@ -720,8 +720,8 @@ TEST_F(TableBuilderTest, LevelMerge) {
     ParsedInternalKey first_ikey, second_ikey;
     ASSERT_OK(ParseInternalKey(first_iter->key(), &first_ikey, false));
     ASSERT_OK(ParseInternalKey(second_iter->key(), &second_ikey, false));
-    ASSERT_EQ(first_ikey.type, kTypeBlobIndex);
-    ASSERT_EQ(second_ikey.type, kTypeBlobIndex);
+    ASSERT_EQ(first_ikey.type, kTypeTitanBlobIndex);
+    ASSERT_EQ(second_ikey.type, kTypeTitanBlobIndex);
     ASSERT_EQ(first_ikey.user_key, second_ikey.user_key);
 
     // Compare blob records
@@ -840,7 +840,7 @@ TEST_F(TableBuilderTest, LevelMergeWithDictCompressDisorder) {
 
     if (i % 2 == 0) {
       // key: 0, 2, 4, 6 ..98
-      ASSERT_EQ(second_ikey.type, kTypeBlobIndex);
+      ASSERT_EQ(second_ikey.type, kTypeTitanBlobIndex);
       std::string key(1, i);
 
       BlobIndex index;

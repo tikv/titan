@@ -312,8 +312,8 @@ void BlobGCJob::BatchWriteNewIndices(BlobFileBuilder::OutContexts& contexts,
     rewrite_batches_.emplace_back(
         std::make_pair(WriteBatch(), std::move(callback)));
     auto& wb = rewrite_batches_.back().first;
-    *s = WriteBatchInternal::PutBlobIndex(&wb, cfh->GetID(), ikey.user_key,
-                                          index_entry);
+    *s = WriteBatchInternal::PutTitanBlobIndex(&wb, cfh->GetID(), ikey.user_key,
+                                               index_entry);
     if (!s->ok()) break;
   }
 }

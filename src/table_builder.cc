@@ -6,7 +6,7 @@
 
 #include <cinttypes>
 
-#include "monitoring/statistics.h"
+#include "monitoring/statistics_impl.h"
 
 #include "titan_logging.h"
 
@@ -37,10 +37,10 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
   uint64_t prev_bytes_written = 0;
   SavePrevIOBytes(&prev_bytes_read, &prev_bytes_written);
 
-  if (ikey.type == kTypeBlobIndex &&
+  Slice copy = value;
+  if (ikey.type == kTypeTitanBlobIndex &&
       cf_options_.blob_run_mode == TitanBlobRunMode::kFallback) {
     // we ingest value from blob file
-    Slice copy = value;
     BlobIndex index;
     status_ = index.DecodeFrom(&copy);
     if (!ok()) {
@@ -71,17 +71,16 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     bool is_small_kv = value.size() < cf_options_.min_blob_size;
     if (is_small_kv) {
-      AddBase(key, ikey, value);
+      AddBase(key, ikey, copy);
     } else {
       // We write to blob file and insert index
-      AddBlob(ikey, value);
+      AddBlob(ikey, copy);
     }
-  } else if (ikey.type == kTypeBlobIndex && cf_options_.level_merge &&
+  } else if (ikey.type == kTypeTitanBlobIndex && cf_options_.level_merge &&
              target_level_ >= merge_level_ &&
              cf_options_.blob_run_mode == TitanBlobRunMode::kNormal) {
     // we merge value to new blob file
     BlobIndex index;
-    Slice copy = value;
     status_ = index.DecodeFrom(&copy);
     if (!ok()) {
       return;
@@ -108,11 +107,12 @@ void TitanTableBuilder::Add(const Slice& key, const Slice& value) {
                         index.file_number, get_status.ToString().c_str());
       }
     }
-    AddBase(key, ikey, value);
+    Slice another_copy = value;
+    AddBase(key, ikey, another_copy);
   } else {
-    // Mainly processing kTypeMerge and kTypeBlobIndex in both flushing and
+    // Mainly processing kTypeMerge and kTypeTitanBlobIndex in both flushing and
     // compaction.
-    AddBase(key, ikey, value);
+    AddBase(key, ikey, copy);
   }
 }
 
@@ -211,7 +211,7 @@ void TitanTableBuilder::AddBlobResultsToBase(
       std::string index_value;
       ctx->new_blob_index.EncodeTo(&index_value);
 
-      ikey.type = kTypeBlobIndex;
+      ikey.type = kTypeTitanBlobIndex;
       std::string index_key;
       AppendInternalKey(&index_key, ikey);
       base_builder_->Add(index_key, index_value);

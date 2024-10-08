@@ -4,7 +4,6 @@
 #include <map>
 #include <string>
 
-#include "monitoring/statistics.h"
 #include "monitoring/statistics_impl.h"
 
 #include "blob_file_set.h"
@@ -209,4 +208,6 @@ void TitanStats::InitializeCF(uint32_t cf_id,
 }
 
 }  // namespace titandb
+template class StatisticsImpl<titandb::TITAN_TICKER_ENUM_MAX,
+                              titandb::TITAN_HISTOGRAM_ENUM_MAX>;
 }  // namespace rocksdb

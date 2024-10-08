@@ -118,10 +118,6 @@ class TitanDBIterator : public Iterator {
     return record_.value;
   }
 
-  bool seqno(SequenceNumber *number) const override {
-    return iter_->seqno(number);
-  }
-
  private:
   Status GetBlobValue() const {
     assert(iter_->status().ok());
@@ -179,10 +175,9 @@ class TitanDBIterator : public Iterator {
     if (blob_cache && options_.fill_cache) {
       Cache::Handle *cache_handle = nullptr;
       auto cache_value = new OwnedSlice(std::move(blob));
-      blob_cache->Insert(cache_key, cache_value,
+      blob_cache->Insert(cache_key, cache_value, &kBlobValueCacheItemHelper,
                          cache_value->size() + sizeof(*cache_value),
-                         &DeleteCacheValue<OwnedSlice>, &cache_handle,
-                         Cache::Priority::BOTTOM);
+                         &cache_handle, Cache::Priority::BOTTOM);
       buffer_.PinSlice(*cache_value, UnrefCacheHandle, blob_cache,
                        cache_handle);
     } else {
