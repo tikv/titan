@@ -35,7 +35,7 @@ namespace titandb {
 //    | Fixed32 | Fixed32 |    char     |
 //    +---------+---------+-------------+
 //
-const uint64_t kBlobMaxHeaderSize = 20;
+const uint64_t kBlobMaxHeaderSize = 12;
 const uint64_t kRecordHeaderSize = 9;
 const uint64_t kBlobFooterSize = BlockHandle::kMaxEncodedLength + 8 + 4;
 
@@ -228,21 +228,19 @@ class BlobFileMeta {
   BlobFileMeta(uint64_t _file_number, uint64_t _file_size,
                uint64_t _file_entries, uint32_t _file_level,
                const std::string& _smallest_key,
-               const std::string& _largest_key, uint64_t _block_size = 0)
+               const std::string& _largest_key)
       : file_number_(_file_number),
         file_size_(_file_size),
         file_entries_(_file_entries),
         file_level_(_file_level),
-        block_size_(_block_size),
         smallest_key_(_smallest_key),
         largest_key_(_largest_key) {}
 
   friend bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs);
 
   void EncodeTo(std::string* dst) const;
-  Status DecodeFromV1(Slice* src);
-  Status DecodeFromV2(Slice* src);
   Status DecodeFrom(Slice* src);
+  Status DecodeFromLegacy(Slice* src);
 
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }
@@ -285,7 +283,6 @@ class BlobFileMeta {
   uint64_t file_entries_;
   // Target level of compaction/flush which generates this blob file
   uint32_t file_level_;
-  uint64_t block_size_{0};
   // Empty `smallest_key_` and `largest_key_` means smallest key is unknown,
   // and can only happen when the file is from legacy version.
   std::string smallest_key_;
@@ -330,22 +327,18 @@ struct BlobFileHeader {
   static const uint32_t kHeaderMagicNumber = 0x2be0a614ul;
   static const uint32_t kVersion1 = 1;
   static const uint32_t kVersion2 = 2;
-  static const uint32_t kVersion3 = 3;
 
-  static const uint64_t kV1EncodedLength = 4 + 4;
-  static const uint64_t kV2EncodedLength = 4 + 4 + 4;
-  static const uint64_t kV3EncodedLength = 4 + 4 + 4 + 8;
+  static const uint64_t kMinEncodedLength = 4 + 4;
+  static const uint64_t kMaxEncodedLength = 4 + 4 + 4;
 
   // Flags:
   static const uint32_t kHasUncompressionDictionary = 1 << 0;
 
-  uint32_t version = kVersion3;
+  uint32_t version = kVersion2;
   uint32_t flags = 0;
-  uint64_t block_size = 0;
 
   static Status ValidateVersion(uint32_t ver) {
-    if (ver != BlobFileHeader::kVersion1 && ver != BlobFileHeader::kVersion2 &&
-        ver != BlobFileHeader::kVersion3) {
+    if (ver != BlobFileHeader::kVersion1 && ver != BlobFileHeader::kVersion2) {
       return Status::InvalidArgument("unrecognized blob file version " +
                                      ToString(ver));
     }
@@ -353,16 +346,9 @@ struct BlobFileHeader {
   }
 
   uint64_t size() const {
-    switch (version) {
-      case BlobFileHeader::kVersion3:
-        return BlobFileHeader::kV3EncodedLength;
-      case BlobFileHeader::kVersion2:
-        return BlobFileHeader::kV2EncodedLength;
-      case BlobFileHeader::kVersion1:
-        return BlobFileHeader::kV1EncodedLength;
-      default:
-        return 0;
-    }
+    return version == BlobFileHeader::kVersion1
+               ? BlobFileHeader::kMinEncodedLength
+               : BlobFileHeader::kMaxEncodedLength;
   }
 
   void EncodeTo(std::string* dst) const;

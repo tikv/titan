@@ -51,13 +51,9 @@ class BlobFileIteratorTest : public testing::Test {
     }
   }
 
-  void NewBuilder(bool with_blocks = false) {
+  void NewBuilder() {
     TitanDBOptions db_options(titan_options_);
     TitanCFOptions cf_options(titan_options_);
-    if (with_blocks) {
-      cf_options.enable_punch_hole_gc = true;
-      cf_options.block_size = 4096;
-    }
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
 
     {
@@ -261,38 +257,6 @@ TEST_F(BlobFileIteratorTest, MergeIterator) {
               contexts[i - 1]->new_blob_index.blob_handle);
   }
   ASSERT_EQ(i, kMaxKeyNum);
-}
-
-TEST_F(BlobFileIteratorTest, IteratorWithBlocks) {
-  NewBuilder(true);
-  const int n = 1000;
-  BlobFileBuilder::OutContexts contexts;
-  for (int i = 0; i < n; i++) {
-    AddKeyValue(GenKey(i), GenValue(i), contexts);
-  }
-
-  FinishBuilder(contexts);
-  uint64_t file_size = 0;
-  ASSERT_OK(env_->GetFileSize(file_name_, &file_size));
-  // 1000 records, each record is more than 4096 bytes (including key and
-  // value), plus a header block and a footer block, so the total number of
-  // blocks should be 1000 * 2 + 2, with the last block not fully filled.
-  ASSERT_EQ(file_size / 4096, 1000 * 2 + 1);
-  // The last block is not fully filled.
-  ASSERT_NE(file_size % 4096, 0);
-
-  NewBlobFileIterator();
-
-  blob_file_iterator_->SeekToFirst();
-  ASSERT_EQ(contexts.size(), n);
-  for (int i = 0; i < n; blob_file_iterator_->Next(), i++) {
-    ASSERT_OK(blob_file_iterator_->status());
-    ASSERT_EQ(blob_file_iterator_->Valid(), true);
-    ASSERT_EQ(GenKey(i), blob_file_iterator_->key());
-    ASSERT_EQ(GenValue(i), blob_file_iterator_->value());
-    BlobIndex blob_index = blob_file_iterator_->GetBlobIndex();
-    ASSERT_EQ(contexts[i]->new_blob_index.blob_handle, blob_index.blob_handle);
-  }
 }
 
 }  // namespace titandb

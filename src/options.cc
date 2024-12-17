@@ -43,9 +43,7 @@ TitanCFOptions::TitanCFOptions(const ColumnFamilyOptions& cf_opts,
       merge_small_file_threshold(immutable_opts.merge_small_file_threshold),
       blob_run_mode(mutable_opts.blob_run_mode),
       skip_value_in_compaction_filter(
-          immutable_opts.skip_value_in_compaction_filter),
-      block_size(immutable_opts.block_size),
-      enable_punch_hole_gc(immutable_opts.enable_punch_hole_gc) {}
+          immutable_opts.skip_value_in_compaction_filter) {}
 
 void TitanCFOptions::Dump(Logger* logger) const {
   TITAN_LOG_HEADER(logger,
