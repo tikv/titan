@@ -161,18 +161,6 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // Default: false
   bool skip_value_in_compaction_filter{false};
 
-  // The size of each block in blob file. 0 means not using block-based mode,
-  // blob entries are stored continuously. While non-zero value means using
-  // block-based mode, blob entries are stored in blocks, and each block stores
-  // exactly one blob entry, if the last block is not full, it will be filled
-  // with zeros. This is particularly useful when punch hole GC is enabled, as
-  // it can punch hole on block granularity and blob files are still
-  // self-explanatory after holes are created (imagine there is no alignment
-  // requirement for blob entries and Titan has to distinguish between real
-  // data's 0s and 0s created by punch holes).
-  uint64_t block_size{4096};
-  bool enable_punch_hole_gc{false};
-
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
       : ColumnFamilyOptions(options) {}
@@ -217,9 +205,6 @@ struct ImmutableTitanCFOptions {
   bool level_merge;
 
   bool skip_value_in_compaction_filter;
-
-  uint64_t block_size;
-  bool enable_punch_hole_gc;
 };
 
 struct MutableTitanCFOptions {

@@ -70,7 +70,6 @@ class BlobFileIterator {
   uint64_t cur_record_offset_;
   uint64_t cur_record_size_;
   uint64_t header_size_;
-  uint64_t block_size_;
 
   uint64_t readahead_begin_offset_{0};
   uint64_t readahead_end_offset_{0};
@@ -78,7 +77,6 @@ class BlobFileIterator {
 
   void PrefetchAndGet();
   void GetBlobRecord();
-  uint64_t AdjustOffsetToNextBlockHead();
 };
 
 class BlobFileMergeIterator {
