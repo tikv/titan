@@ -412,8 +412,8 @@ Status TitanDBImpl::CloseImpl() {
 
   {
     MutexLock l(&mutex_);
-    // `bg_gc_scheduled_` should be 0 after `JoinAllThreads`, double check here.
-    while (bg_gc_scheduled_ > 0) {
+    // `bg_gc_running_` should be 0 after `JoinAllThreads`, double check here.
+    while (bg_gc_running_ > 0) {
       bg_cv_.Wait();
     }
   }
