@@ -17,8 +17,8 @@ namespace titandb {
 
 class BlobGCPicker {
  public:
-  BlobGCPicker() {};
-  virtual ~BlobGCPicker() {};
+  BlobGCPicker(){};
+  virtual ~BlobGCPicker(){};
 
   // Pick candidate blob files for a new gc.
   // Returns nullptr if there is no gc to be done.

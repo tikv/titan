@@ -210,9 +210,9 @@ class BlobStorage {
    public:
     // The default constructor is not supposed to be used.
     // It is only to make std::multimap can compile.
-    InternalComparator() : comparator_(nullptr) {};
+    InternalComparator() : comparator_(nullptr){};
     explicit InternalComparator(const Comparator* comparator)
-        : comparator_(comparator) {};
+        : comparator_(comparator){};
     bool operator()(const Slice& key1, const Slice& key2) const {
       assert(comparator_ != nullptr);
       return comparator_->Compare(key1, key2) < 0;
