@@ -194,7 +194,6 @@ void TitanDBImpl::BackgroundCallGC() {
     while (drop_cf_requests_ > 0) {
       bg_cv_.Wait();
     }
-    bg_gc_scheduled_--;
     bg_gc_running_++;
 
     // Try running pending (waiting for the snapshot to be the oldest) punch
@@ -217,6 +216,7 @@ void TitanDBImpl::BackgroundCallGC() {
     TEST_SYNC_POINT("TitanDBImpl::BackgroundCallGC:AfterGCRunning");
 
     bg_gc_running_--;
+    bg_gc_scheduled_--;
     MaybeScheduleGC();
     if (bg_gc_scheduled_ == 0 || bg_gc_running_ == 0) {
       // Signal DB destructor if bg_gc_scheduled_ drop to 0.
@@ -403,7 +403,7 @@ Status TitanDBImpl::TEST_StartGC(uint32_t column_family_id) {
 
 void TitanDBImpl::TEST_WaitForBackgroundGC() {
   MutexLock l(&mutex_);
-  while (bg_gc_scheduled_ > 0 || bg_gc_running_ > 0) {
+  while (bg_gc_scheduled_ > 0) {
     bg_cv_.Wait();
   }
 }

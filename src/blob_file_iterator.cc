@@ -189,10 +189,12 @@ void BlobFileIterator::PrefetchAndGet() {
     auto min_blob_size =
         iterate_offset_ + kRecordHeaderSize + titan_cf_options_.min_blob_size;
     if (readahead_end_offset_ <= min_blob_size) {
+      IOOptions io_options;
+      io_options.rate_limiter_priority = Env::IOPriority::IO_LOW;
       while (readahead_end_offset_ + readahead_size_ <= min_blob_size &&
              readahead_size_ < kMaxReadaheadSize)
         readahead_size_ <<= 1;
-      file_->Prefetch(readahead_end_offset_, readahead_size_);
+      file_->Prefetch(io_options, readahead_end_offset_, readahead_size_);
       readahead_end_offset_ += readahead_size_;
       readahead_size_ = std::min(kMaxReadaheadSize, readahead_size_ << 1);
     }
