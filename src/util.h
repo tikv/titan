@@ -82,5 +82,6 @@ Status SyncTitanManifest(TitanStats* stats,
                          const ImmutableDBOptions* db_options,
                          WritableFileWriter* file);
 
+uint64_t Roundup(uint64_t offset, uint64_t align);
 }  // namespace titandb
 }  // namespace rocksdb

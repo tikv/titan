@@ -24,7 +24,10 @@ class BlobGCPicker {
   // Returns nullptr if there is no gc to be done.
   // Otherwise returns a pointer to a heap-allocated object that
   // describes the gc.  Caller should delete the result.
-  virtual std::unique_ptr<BlobGC> PickBlobGC(BlobStorage* blob_storage) = 0;
+  // If allow_punch_hole is true, picker may return a punch hole gc.
+  // Otherwise, picker will only return a regular gc.
+  virtual std::unique_ptr<BlobGC> PickBlobGC(BlobStorage* blob_storage,
+                                             bool allow_punch_hole = false) = 0;
 };
 
 class BasicBlobGCPicker final : public BlobGCPicker {
@@ -32,9 +35,13 @@ class BasicBlobGCPicker final : public BlobGCPicker {
   BasicBlobGCPicker(TitanDBOptions, TitanCFOptions, TitanStats*);
   ~BasicBlobGCPicker();
 
-  std::unique_ptr<BlobGC> PickBlobGC(BlobStorage* blob_storage) override;
+  std::unique_ptr<BlobGC> PickBlobGC(BlobStorage* blob_storage,
+                                     bool allow_punch_hole = false) override;
 
  private:
+  std::unique_ptr<BlobGC> PickRegularBlobGC(BlobStorage* blob_storage);
+  std::unique_ptr<BlobGC> PickPunchHoleGC(BlobStorage* blob_storage);
+
   TitanDBOptions db_options_;
   TitanCFOptions cf_options_;
   TitanStats* stats_;
