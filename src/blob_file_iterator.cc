@@ -21,11 +21,11 @@ BlobFileIterator::~BlobFileIterator() {}
 
 bool BlobFileIterator::Init() {
   Slice slice;
-  char header_buf[BlobFileHeader::kMaxEncodedLength];
+  char header_buf[BlobFileHeader::kMaxEncodedLengthV3];
   // With for_compaction=true, rate_limiter is enabled. Since BlobFileIterator
   // is only used for GC, we always set for_compaction to true.
   status_ =
-      file_->Read(IOOptions(), 0, BlobFileHeader::kMaxEncodedLength, &slice,
+      file_->Read(IOOptions(), 0, BlobFileHeader::kMaxEncodedLengthV3, &slice,
                   header_buf, nullptr /*aligned_buf*/, true /*for_compaction*/);
   if (!status_.ok()) {
     return false;

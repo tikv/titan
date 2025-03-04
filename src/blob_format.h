@@ -241,6 +241,12 @@ class BlobFileMeta {
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
   Status DecodeFromLegacy(Slice* src);
+  // DecodeFromV3 is used only for decoding in TiDB 7.5.(6+) and 8.1.(3+)
+  // for backward compatibility issue introduced in TiDB 7.5.5.
+  // See https://github.com/tikv/tikv/issues/18263
+  Status DecodeFromV3(Slice* src);
+  // For test only
+  void EncodeToV3(std::string* dst) const;
 
   uint64_t file_number() const { return file_number_; }
   uint64_t file_size() const { return file_size_; }
@@ -327,9 +333,16 @@ struct BlobFileHeader {
   static const uint32_t kHeaderMagicNumber = 0x2be0a614ul;
   static const uint32_t kVersion1 = 1;
   static const uint32_t kVersion2 = 2;
+  // Do not use v3 for encoding, it is a temporary fix  used only for
+  // decoding in TiDB 7.5.(6+) and 8.1.(3+) for backward compatibility
+  // issue introduced in TiDB 7.5.5. See
+  // https://github.com/tikv/tikv/issues/18263
+  static const uint32_t kVersion3 = 3;
 
   static const uint64_t kMinEncodedLength = 4 + 4;
   static const uint64_t kMaxEncodedLength = 4 + 4 + 4;
+  // V3 has an additional field block_size
+  static const uint64_t kMaxEncodedLengthV3 = 4 + 4 + 4 + 8;
 
   // Flags:
   static const uint32_t kHasUncompressionDictionary = 1 << 0;
@@ -338,7 +351,7 @@ struct BlobFileHeader {
   uint32_t flags = 0;
 
   static Status ValidateVersion(uint32_t ver) {
-    if (ver != BlobFileHeader::kVersion1 && ver != BlobFileHeader::kVersion2) {
+    if (ver != kVersion1 && ver != kVersion2 && ver != kVersion3) {
       return Status::InvalidArgument("unrecognized blob file version " +
                                      ToString(ver));
     }
@@ -346,9 +359,17 @@ struct BlobFileHeader {
   }
 
   uint64_t size() const {
-    return version == BlobFileHeader::kVersion1
-               ? BlobFileHeader::kMinEncodedLength
-               : BlobFileHeader::kMaxEncodedLength;
+    switch (version) {
+      case kVersion1:
+        return kMinEncodedLength;
+      case kVersion2:
+        return kMaxEncodedLength;
+      case kVersion3:
+        return kMaxEncodedLengthV3;
+      default:
+        assert(false);
+        return 0;
+    }
   }
 
   void EncodeTo(std::string* dst) const;

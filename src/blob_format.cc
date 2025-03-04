@@ -171,6 +171,38 @@ Status BlobFileMeta::DecodeFrom(Slice* src) {
   return Status::OK();
 }
 
+Status BlobFileMeta::DecodeFromV3(Slice* src) {
+  // V3 has an additional field block_size
+  uint64_t _block_size = 0;
+  if (!GetVarint64(src, &file_number_) || !GetVarint64(src, &file_size_) ||
+      !GetVarint64(src, &file_entries_) || !GetVarint32(src, &file_level_) ||
+      !GetVarint64(src, &_block_size)) {
+    return Status::Corruption("BlobFileMeta decode failed");
+  }
+  Slice str;
+  if (GetLengthPrefixedSlice(src, &str)) {
+    smallest_key_.assign(str.data(), str.size());
+  } else {
+    return Status::Corruption("BlobSmallestKey Decode failed");
+  }
+  if (GetLengthPrefixedSlice(src, &str)) {
+    largest_key_.assign(str.data(), str.size());
+  } else {
+    return Status::Corruption("BlobLargestKey decode failed");
+  }
+  return Status::OK();
+}
+
+void BlobFileMeta::EncodeToV3(std::string* dst) const {
+  PutVarint64(dst, file_number_);
+  PutVarint64(dst, file_size_);
+  PutVarint64(dst, file_entries_);
+  PutVarint32(dst, file_level_);
+  PutVarint64(dst, 0);
+  PutLengthPrefixedSlice(dst, smallest_key_);
+  PutLengthPrefixedSlice(dst, largest_key_);
+}
+
 bool operator==(const BlobFileMeta& lhs, const BlobFileMeta& rhs) {
   return (lhs.file_number_ == rhs.file_number_ &&
           lhs.file_size_ == rhs.file_size_ &&
@@ -279,7 +311,7 @@ void BlobFileHeader::EncodeTo(std::string* dst) const {
   PutFixed32(dst, kHeaderMagicNumber);
   PutFixed32(dst, version);
 
-  if (version == BlobFileHeader::kVersion2) {
+  if (version == kVersion2) {
     PutFixed32(dst, flags);
   }
 }
@@ -291,13 +323,22 @@ Status BlobFileHeader::DecodeFrom(Slice* src) {
         "Blob file header magic number missing or mismatched.");
   }
   if (!GetFixed32(src, &version) ||
-      (version != kVersion1 && version != kVersion2)) {
+      (version != kVersion1 && version != kVersion2 && version != kVersion3)) {
     return Status::Corruption("Blob file header version missing or invalid.");
   }
-  if (version == BlobFileHeader::kVersion2) {
+  if (version == kVersion2) {
     // Check that no other flags are set
     if (!GetFixed32(src, &flags) || flags & ~kHasUncompressionDictionary) {
       return Status::Corruption("Blob file header flags missing or invalid.");
+    }
+  }
+  if (version == kVersion3) {
+    // It is a temporary fix used only for decoding
+    // in TiDB 7.5.(6+) and 8.1.(3+) for backward compatibility issue introduced
+    // in TiDB 7.5.5.
+    uint64_t _block_size = 0;
+    if (!GetFixed64(src, &_block_size)) {
+      return Status::Corruption("Blob file header block size missing.");
     }
   }
   return Status::OK();
