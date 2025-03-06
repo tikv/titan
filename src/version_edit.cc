@@ -67,6 +67,15 @@ Status VersionEdit::DecodeFrom(Slice* src) {
           error = s.ToString().c_str();
         }
         break;
+      case kAddedBlobFileV3:
+        blob_file = std::make_shared<BlobFileMeta>();
+        s = blob_file->DecodeFromV3(src);
+        if (s.ok()) {
+          AddBlobFile(blob_file);
+        } else {
+          error = s.ToString().c_str();
+        }
+        break;
       case kDeletedBlobFile:
         if (GetVarint64(src, &file_number)) {
           DeleteBlobFile(file_number, 0);

@@ -40,6 +40,21 @@ TEST(BlobFormatTest, BlobFileMeta) {
   CheckCodec(input);
 }
 
+TEST(BlobFormatTest, BlobFileMetaDecodeWithV3) {
+  BlobFileMeta input(2, 3, 0, 0, "0", "9");
+  std::string buffer;
+  input.EncodeToV3(&buffer);
+  BlobFileMeta output;
+  Slice src(buffer);
+  ASSERT_OK(output.DecodeFromV3(&src));
+  ASSERT_EQ(output.file_number(), 2);
+  ASSERT_EQ(output.file_size(), 3);
+  ASSERT_EQ(output.file_entries(), 0);
+  ASSERT_EQ(output.file_level(), 0);
+  ASSERT_EQ(output.smallest_key(), "0");
+  ASSERT_EQ(output.largest_key(), "9");
+}
+
 TEST(BlobFormatTest, BlobFileFooter) {
   BlobFileFooter input;
   CheckCodec(input);
