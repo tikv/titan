@@ -18,6 +18,15 @@ const uint64_t kMinBlobSize = 128;
 const uint64_t kTestFileNumber = 123;
 const uint64_t kTargetBlobFileSize = 4096;
 
+void DeleteDir(Env* env, const std::string& dirname) {
+  std::vector<std::string> filenames;
+  env->GetChildren(dirname, &filenames);
+  for (auto& fname : filenames) {
+    env->DeleteFile(dirname + "/" + fname);
+  }
+  env->DeleteDir(dirname);
+}
+
 class FileManager : public BlobFileManager {
  public:
   FileManager(const TitanDBOptions& db_options, BlobFileSet* blob_file_set)
@@ -149,6 +158,8 @@ class TableBuilderTest : public testing::Test {
     db_options_.dirname = tmpdir_;
     db_options_.statistics = nullptr;
     cf_options_.min_blob_size = kMinBlobSize;
+    DeleteDir(env_, tmpdir_);
+    env_->CreateDirIfMissing(tmpdir_);
     Open();
   }
 

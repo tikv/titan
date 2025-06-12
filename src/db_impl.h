@@ -7,6 +7,7 @@
 
 #include "blob_file_manager.h"
 #include "blob_file_set.h"
+#include "punch_hole_gc_job.h"
 #include "table_factory.h"
 #include "titan/db.h"
 #include "titan_stats.h"
@@ -224,6 +225,7 @@ class TitanDBImpl : public TitanDB {
   friend class FileManager;
   friend class BlobGCJobTest;
   friend class BaseDbListener;
+  friend class PunchHoleGCTest;
   friend class TitanDBTest;
   friend class TitanThreadSafetyTest;
   friend class TitanGCStatsTest;
@@ -287,6 +289,7 @@ class TitanDBImpl : public TitanDB {
 
   static void BGWorkGC(void* db);
   void BackgroundCallGC();
+  bool MaybeRunPendingPunchHoleGC();
   Status BackgroundGC(LogBuffer* log_buffer, uint32_t column_family_id);
 
   void PurgeObsoleteFiles();
@@ -381,6 +384,14 @@ class TitanDBImpl : public TitanDB {
   std::deque<uint32_t> gc_queue_;
 
   // REQUIRE: mutex_ held.
+  // This is not a queue, since punch hole GC is only runnable when its owned
+  // snapshot is the oldest one. So we can't really multi-thread it.
+  std::unique_ptr<PunchHoleGCJob> pending_punch_hole_gc_;
+  // REQUIRE: mutex_ held.
+  // Indicates whether the scheduled punch hole GC is running, in case multiple
+  // threads are trying to work on the same job at the same time.
+  bool punch_hole_gc_running_ = false;
+
   int bg_gc_scheduled_ = 0;
   // REQUIRE: mutex_ held.
   int bg_gc_running_ = 0;
