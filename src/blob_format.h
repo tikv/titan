@@ -135,16 +135,16 @@ class BlobDecoder {
 
 // Format of blob handle (not fixed size):
 //
-//    +----------+----------+------------+
-//    |  offset  |   size   |  raw_size  |
-//    +----------+----------+------------+
-//    | Varint64 | Varint64 |  Varint64  |
-//    +----------+----------+------------+
+//    +----------+----------+-----------------------+
+//    |  offset  |   size   |  raw_size (optional)  |
+//    +----------+----------+-----------------------+
+//    | Varint64 | Varint64 |      Varint64         |
+//    +----------+----------+-----------------------+
 //
 struct BlobHandle {
   uint64_t offset{0};
   uint64_t size{0};
-  uint64_t raw_size{0}; // Uncompressed data size
+  uint64_t raw_size{0};  // Uncompressed data size
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* src);
@@ -154,11 +154,12 @@ struct BlobHandle {
 
 // Format of blob index (not fixed size):
 //
-//    +------+-------------+---------------------------------------------------------+
-//    | type | file number |                    blob handle                          |
-//    +------+-------------+---------------------------------------------------------+
-//    | char |  Varint64   | Varint64(offsest) + Varint64(size) + Varint64(raw_size) |
-//    +------+-------------+---------------------------------------------------------+
+//    +------+-------------+---------------------------------------------------+
+//    | type | file number |                    blob handle                    |
+//    +------+-------------+---------------------------------------------------+
+//    | char |  Varint64   | Varint64(offsest) + Varint64(size)                |
+//    |      |             |                   + (optional) Varint64(raw_size) |
+//    +------+-------------+---------------------------------------------------+
 //
 // It is stored in LSM-Tree as the value of key, then Titan can use this blob
 // index to locate actual value from blob file.
