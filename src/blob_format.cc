@@ -42,11 +42,7 @@ void BlobEncoder::EncodeRecord(const BlobRecord& record) {
   EncodeSlice(record_buffer_);
 }
 
-// EncodeSlice compresses the record and prepares the header. The compressed
-// record is stored in `record_`.
 void BlobEncoder::EncodeSlice(const Slice& record) {
-  raw_size_ = record.size();  // record the uncompressed size
-
   compressed_buffer_.clear();
   CompressionType compression;
   record_ =
@@ -103,21 +99,11 @@ Status BlobDecoder::DecodeRecord(Slice* src, BlobRecord* record,
 void BlobHandle::EncodeTo(std::string* dst) const {
   PutVarint64(dst, offset);
   PutVarint64(dst, size);
-  PutVarint64(dst, raw_size);
 }
 
 Status BlobHandle::DecodeFrom(Slice* src) {
   if (!GetVarint64(src, &offset) || !GetVarint64(src, &size)) {
     return Status::Corruption("BlobHandle");
-  }
-
-  // Optional: raw_size (may not exist in older versions)
-  if (!src->empty()) {
-    if (!GetVarint64(src, &raw_size)) {
-      return Status::Corruption("BlobHandle (raw_size)");
-    }
-  } else {
-    raw_size = size;  // assume no compression
   }
   return Status::OK();
 }
@@ -134,7 +120,8 @@ void BlobIndex::EncodeTo(std::string* dst) const {
 
 Status BlobIndex::DecodeFrom(Slice* src) {
   unsigned char type;
-  if (!GetChar(src, &type) || !GetVarint64(src, &file_number)) {
+  if (!GetChar(src, &type) || type != kBlobRecord ||
+      !GetVarint64(src, &file_number)) {
     return Status::Corruption("BlobIndex");
   }
   Status s = blob_handle.DecodeFrom(src);
