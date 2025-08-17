@@ -77,8 +77,8 @@ class BlobFileIterator {
   uint64_t readahead_size_{kMinReadaheadSize};
 
   void PrefetchAndGet();
-  void GetBlobRecord();
-  uint64_t AdjustOffsetToNextBlockHead();
+  // Returns false if the record is invalid (punch-hole).
+  bool GetBlobRecord();
 };
 
 class BlobFileMergeIterator {

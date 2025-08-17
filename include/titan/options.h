@@ -172,7 +172,7 @@ struct TitanCFOptions : public ColumnFamilyOptions {
   // requirement for blob entries and Titan has to distinguish between real
   // data's 0s and 0s created by punch holes).
   uint64_t block_size{4096};
-  bool enable_punch_hole_gc{false};
+  uint64_t punch_hole_threshold{0};
 
   TitanCFOptions() = default;
   explicit TitanCFOptions(const ColumnFamilyOptions& options)
@@ -220,7 +220,6 @@ struct ImmutableTitanCFOptions {
   bool skip_value_in_compaction_filter;
 
   uint64_t block_size;
-  bool enable_punch_hole_gc;
 };
 
 struct MutableTitanCFOptions {
@@ -230,12 +229,14 @@ struct MutableTitanCFOptions {
       : blob_run_mode(opts.blob_run_mode),
         min_blob_size(opts.min_blob_size),
         blob_file_compression(opts.blob_file_compression),
-        blob_file_discardable_ratio(opts.blob_file_discardable_ratio) {}
+        blob_file_discardable_ratio(opts.blob_file_discardable_ratio),
+        punch_hole_threshold(opts.punch_hole_threshold) {}
 
   TitanBlobRunMode blob_run_mode;
   uint64_t min_blob_size;
   CompressionType blob_file_compression;
   double blob_file_discardable_ratio;
+  uint64_t punch_hole_threshold;
 };
 
 struct TitanOptions : public TitanDBOptions, public TitanCFOptions {

@@ -55,6 +55,11 @@ class BlobStorage {
     return gc_score_;
   }
 
+  const std::vector<GCScore> punch_hole_score() {
+    MutexLock l(&mutex_);
+    return punch_hole_score_;
+  }
+
   Cache* blob_cache() { return blob_cache_.get(); }
 
   // Gets the blob record pointed by the blob index. The provided
@@ -92,6 +97,8 @@ class BlobStorage {
       file.second->FileStateTransit(BlobFileMeta::FileEvent::kDbStart);
     }
   }
+
+  Status InitPunchHoleGCOnStart();
 
   // Must call before TitanDBImpl initialized.
   void InitializeAllFiles() {
@@ -167,6 +174,15 @@ class BlobStorage {
     mutable_cf_options_ = options;
   }
 
+  std::unordered_map<uint64_t, uint64_t> GetFileBlockSizes() {
+    MutexLock l(&mutex_);
+    std::unordered_map<uint64_t, uint64_t> file_block_sizes;
+    for (auto& file : files_) {
+      file_block_sizes[file.first] = file.second->block_size();
+    }
+    return file_block_sizes;
+  }
+
  private:
   friend class BlobFileSet;
   friend class VersionTest;
@@ -214,6 +230,7 @@ class BlobStorage {
   std::shared_ptr<BlobFileCache> file_cache_;
 
   std::vector<GCScore> gc_score_;
+  std::vector<GCScore> punch_hole_score_;
 
   std::list<std::pair<uint64_t, SequenceNumber>> obsolete_files_;
   // It is marked when the column family handle is destroyed, indicating the

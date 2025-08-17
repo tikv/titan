@@ -14,7 +14,8 @@ namespace titandb {
 class BlobGC {
  public:
   BlobGC(std::vector<std::shared_ptr<BlobFileMeta>>&& blob_files,
-         TitanCFOptions&& _titan_cf_options, bool need_trigger_next);
+         TitanCFOptions&& _titan_cf_options, bool need_trigger_next,
+         bool punch_hole_gc = false);
 
   // No copying allowed
   BlobGC(const BlobGC&) = delete;
@@ -40,6 +41,8 @@ class BlobGC {
 
   bool trigger_next() { return trigger_next_; }
 
+  bool punch_hole_gc() { return punch_hole_gc_; }
+
  private:
   std::vector<std::shared_ptr<BlobFileMeta>> inputs_;
   std::vector<BlobFileMeta*> outputs_;
@@ -47,6 +50,7 @@ class BlobGC {
   ColumnFamilyHandle* cfh_{nullptr};
   // Whether need to trigger gc after this gc or not
   const bool trigger_next_;
+  const bool punch_hole_gc_;
 };
 
 struct GCScore {

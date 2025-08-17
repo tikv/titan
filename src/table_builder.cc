@@ -239,8 +239,9 @@ void TitanTableBuilder::FinishBlobFile() {
           blob_handle_->GetNumber(), blob_handle_->GetFile()->GetFileSize(),
           blob_builder_->NumEntries(), target_level_,
           blob_builder_->GetSmallestKey(), blob_builder_->GetLargestKey(),
-          /*block_size=*/0);
+          blob_builder_->GetBlockSize());
       file->set_live_data_size(blob_builder_->live_data_size());
+      file->set_effective_file_size(blob_builder_->live_data_size());
       file->FileStateTransit(BlobFileMeta::FileEvent::kFlushOrCompactionOutput);
       finished_blobs_.push_back({file, std::move(blob_handle_)});
       // level merge is performed

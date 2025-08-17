@@ -55,7 +55,7 @@ class BlobFileIteratorTest : public testing::Test {
     TitanDBOptions db_options(titan_options_);
     TitanCFOptions cf_options(titan_options_);
     if (with_blocks) {
-      cf_options.enable_punch_hole_gc = true;
+      cf_options.punch_hole_threshold = 4096;
       cf_options.block_size = 4096;
     }
     BlobFileCache cache(db_options, cf_options, {NewLRUCache(128)}, nullptr);
