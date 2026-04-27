@@ -29,6 +29,7 @@ Status VersionEdit::DecodeFrom(Slice* src) {
   Status s;
 
   const char* error = nullptr;
+  std::string error_str;
   while (!error && !src->empty()) {
     if (!GetVarint32(src, &tag)) {
       error = "invalid tag";
@@ -55,7 +56,8 @@ Status VersionEdit::DecodeFrom(Slice* src) {
         if (s.ok()) {
           AddBlobFile(blob_file);
         } else {
-          error = s.ToString().c_str();
+          error_str = s.ToString();
+          error = error_str.c_str();
         }
         break;
       case kAddedBlobFileV2:
@@ -64,7 +66,8 @@ Status VersionEdit::DecodeFrom(Slice* src) {
         if (s.ok()) {
           AddBlobFile(blob_file);
         } else {
-          error = s.ToString().c_str();
+          error_str = s.ToString();
+          error = error_str.c_str();
         }
         break;
       case kAddedBlobFileV3:
@@ -73,7 +76,8 @@ Status VersionEdit::DecodeFrom(Slice* src) {
         if (s.ok()) {
           AddBlobFile(blob_file);
         } else {
-          error = s.ToString().c_str();
+          error_str = s.ToString();
+          error = error_str.c_str();
         }
         break;
       case kDeletedBlobFile:
