@@ -1,5 +1,7 @@
 #include "version_edit.h"
 
+#include <functional>
+
 #include "util/coding.h"
 
 namespace rocksdb {
@@ -25,11 +27,17 @@ void VersionEdit::EncodeTo(std::string* dst) const {
 Status VersionEdit::DecodeFrom(Slice* src) {
   uint32_t tag;
   uint64_t file_number;
-  std::shared_ptr<BlobFileMeta> blob_file;
   Status s;
 
+  auto decode_blob_file = [&](Status (BlobFileMeta::*decode)(Slice*)) -> Status {
+    auto f = std::make_shared<BlobFileMeta>();
+    Status ds = std::invoke(decode, *f, src);
+    if (!ds.ok()) return Status::Corruption("VersionEdit", ds.ToString());
+    AddBlobFile(f);
+    return Status::OK();
+  };
+
   const char* error = nullptr;
-  std::string error_str;
   while (!error && !src->empty()) {
     if (!GetVarint32(src, &tag)) {
       error = "invalid tag";
@@ -51,34 +59,16 @@ Status VersionEdit::DecodeFrom(Slice* src) {
         break;
       // for compatibility issue
       case kAddedBlobFile:
-        blob_file = std::make_shared<BlobFileMeta>();
-        s = blob_file->DecodeFromV1(src);
-        if (s.ok()) {
-          AddBlobFile(blob_file);
-        } else {
-          error_str = s.ToString();
-          error = error_str.c_str();
-        }
+        s = decode_blob_file(&BlobFileMeta::DecodeFromV1);
+        if (!s.ok()) return s;
         break;
       case kAddedBlobFileV2:
-        blob_file = std::make_shared<BlobFileMeta>();
-        s = blob_file->DecodeFromV2(src);
-        if (s.ok()) {
-          AddBlobFile(blob_file);
-        } else {
-          error_str = s.ToString();
-          error = error_str.c_str();
-        }
+        s = decode_blob_file(&BlobFileMeta::DecodeFromV2);
+        if (!s.ok()) return s;
         break;
       case kAddedBlobFileV3:
-        blob_file = std::make_shared<BlobFileMeta>();
-        s = blob_file->DecodeFrom(src);
-        if (s.ok()) {
-          AddBlobFile(blob_file);
-        } else {
-          error_str = s.ToString();
-          error = error_str.c_str();
-        }
+        s = decode_blob_file(&BlobFileMeta::DecodeFrom);
+        if (!s.ok()) return s;
         break;
       case kDeletedBlobFile:
         if (GetVarint64(src, &file_number)) {
