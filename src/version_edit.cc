@@ -29,7 +29,8 @@ Status VersionEdit::DecodeFrom(Slice* src) {
   uint64_t file_number;
   Status s;
 
-  auto decode_blob_file = [&](Status (BlobFileMeta::*decode)(Slice*)) -> Status {
+  auto decode_blob_file =
+      [&](Status (BlobFileMeta::*decode)(Slice*)) -> Status {
     auto f = std::make_shared<BlobFileMeta>();
     Status ds = std::invoke(decode, *f, src);
     if (!ds.ok()) return Status::Corruption("VersionEdit", ds.ToString());
