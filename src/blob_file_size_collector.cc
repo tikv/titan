@@ -7,8 +7,13 @@ namespace titandb {
 
 TablePropertiesCollector*
 BlobFileSizeCollectorFactory::CreateTablePropertiesCollector(
-    rocksdb::TablePropertiesCollectorFactory::Context /* context */) {
-  return new BlobFileSizeCollector();
+    rocksdb::TablePropertiesCollectorFactory::Context context) {
+  if (blob_file_set_ != nullptr) {
+    return new BlobFileSizeCollector(
+        blob_file_set_->GetBlockSize(context.column_family_id),
+        blob_file_set_->GetFileBlockSizes(context.column_family_id));
+  }
+  return new BlobFileSizeCollector(0, {});
 }
 
 const std::string BlobFileSizeCollector::kPropertiesName =
@@ -57,11 +62,32 @@ Status BlobFileSizeCollector::AddUserKey(const Slice& /* key */,
     return s;
   }
 
+  auto size = index.blob_handle.size;
+  if (default_block_size_ > 0 || !file_block_sizes_.empty()) {
+    // If the blob file cannot be found in the block size map, it must be a
+    // newly created file that has not been added blob_file_set, in this case,
+    // we know the block size of the file is default_block_size_.
+    // If the blob file can be found in the block size map, it implies we are
+    // moving the reference only, while keeping the blob at the original file,
+    // in this case, we should use the block size of the original file.
+    uint64_t block_size = default_block_size_;
+    if (!file_block_sizes_.empty()) {
+      auto iter = file_block_sizes_.find(index.file_number);
+      if (iter != file_block_sizes_.end()) {
+        block_size = iter->second;
+      }
+    }
+    if (block_size > 0) {
+      // Align blob size with block size.
+      size = Roundup(size, block_size);
+    }
+  }
+
   auto iter = blob_files_size_.find(index.file_number);
   if (iter == blob_files_size_.end()) {
-    blob_files_size_[index.file_number] = index.blob_handle.size;
+    blob_files_size_[index.file_number] = size;
   } else {
-    iter->second += index.blob_handle.size;
+    iter->second += size;
   }
 
   return Status::OK();

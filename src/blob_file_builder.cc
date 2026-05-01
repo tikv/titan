@@ -33,7 +33,7 @@ BlobFileBuilder::BlobFileBuilder(const TitanDBOptions& db_options,
     return;
 #endif
   }
-  block_size_ = cf_options.enable_punch_hole_gc ? cf_options.block_size : 0;
+  block_size_ = cf_options.punch_hole_threshold > 0 ? cf_options.block_size : 0;
   WriteHeader();
 }
 
@@ -164,7 +164,11 @@ void BlobFileBuilder::FlushSampleRecords(OutContexts* out_ctx) {
 void BlobFileBuilder::WriteEncoderData(BlobHandle* handle) {
   handle->offset = file_->GetFileSize();
   handle->size = encoder_.GetEncodedSize();
-  live_data_size_ += handle->size;
+  if (block_size_ > 0) {
+    live_data_size_ += Roundup(handle->size, block_size_);
+  } else {
+    live_data_size_ += handle->size;
+  }
 
   status_ = file_->Append(encoder_.GetHeader());
   if (ok()) {

@@ -1328,7 +1328,7 @@ TEST_F(TitanDBTest, GCAfterDropCF) {
   SyncPoint::GetInstance()->LoadDependency(
       {{"TitanDBTest::GCAfterDropCF:AfterDropCF",
         "TitanDBImpl::BackgroundCallGC:BeforeGCRunning"},
-       {"TitanDBImpl::BackgroundGC:Finish",
+       {"TitanDBImpl::BackgroundGC:NothingToDo",
         "TitanDBTest::GCAfterDropCF:WaitGC"}});
   SyncPoint::GetInstance()->SetCallBack(
       "TitanDBImpl::BackgroundGC:CFDropped",
